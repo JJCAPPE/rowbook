@@ -1,0 +1,25 @@
+{
+    "name": "rowbook",
+    "private": true,
+    "version": "0.1.0",
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ],
+    "scripts": {
+        "dev": "npm --workspace apps/web run dev",
+        "build": "npm --workspace apps/web run build",
+        "lint": "npm --workspace apps/web run lint",
+        "typecheck": "npm --workspace apps/web run typecheck",
+        "prisma:generate": "npm --workspace apps/web run prisma:generate",
+        "prisma:migrate": "npm --workspace apps/web run prisma:migrate",
+        "test": "node --test --experimental-strip-types",
+        "test:unit": "node --test --experimental-strip-types tests/unit/*.test.ts",
+        "test:integration": "node --test --experimental-strip-types tests/integration/*.test.ts",
+        "test:e2e": "node --test --experimental-strip-types tests/e2e/*.test.ts"
+    },
+    "devDependencies": {
+        "typescript": "^5.4.5"
+    },
+    "type": "module"
+}

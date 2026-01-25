@@ -1,0 +1,232 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ATHLETE
+  COACH
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ActivityType {
+  ERG
+  RUN
+  CYCLE
+  SWIM
+  OTHER
+}
+
+enum ValidationStatus {
+  NOT_CHECKED
+  PENDING
+  VERIFIED
+  REJECTED
+  EXTRACTION_INCOMPLETE
+}
+
+enum EntryStatus {
+  ACTIVE
+  LOCKED
+}
+
+enum WeeklyStatus {
+  MET
+  NOT_MET
+  EXEMPT
+}
+
+enum ProofExtractionStatus {
+  NOT_CHECKED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  passwordHash String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  athleteProfile    AthleteProfile?
+  trainingEntries   TrainingEntry[] @relation("EntryAthlete")
+  proofImages       ProofImage[]    @relation("ProofAthlete")
+  reviewedProofs    ProofImage[]    @relation("ProofReviewer")
+  sessions          Session[]
+  auditLogs         AuditLog[]      @relation("AuditActor")
+  exemptions        Exemption[]     @relation("ExemptionAthlete")
+  exemptionsCreated Exemption[]     @relation("ExemptionCreator")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  athletes          AthleteProfile[]
+  weeklyRequirements WeeklyRequirement[]
+  weeklyAggregates  WeeklyAggregate[]
+}
+
+model AthleteProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  teamId    String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@index([teamId])
+}
+
+model WeeklyRequirement {
+  id              String   @id @default(cuid())
+  teamId          String
+  weekStartAt     DateTime
+  weekEndAt       DateTime
+  requiredMinutes Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId, weekStartAt])
+}
+
+model Exemption {
+  id         String   @id @default(cuid())
+  athleteId  String
+  weekStartAt DateTime
+  reason     String?
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  athlete       User @relation("ExemptionAthlete", fields: [athleteId], references: [id])
+  createdByUser User @relation("ExemptionCreator", fields: [createdBy], references: [id])
+
+  @@unique([athleteId, weekStartAt])
+}
+
+model ProofImage {
+  id               String           @id @default(cuid())
+  athleteId        String
+  storagePath      String
+  uploadedAt       DateTime?
+  deleteAfter      DateTime
+  deletedAt        DateTime?
+  extractedFields  Json?
+  validationStatus ValidationStatus @default(NOT_CHECKED)
+  reviewedById     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  athlete          User               @relation("ProofAthlete", fields: [athleteId], references: [id])
+  reviewedBy       User?              @relation("ProofReviewer", fields: [reviewedById], references: [id])
+  trainingEntries  TrainingEntry[]
+  proofExtractionJob ProofExtractionJob?
+
+  @@index([athleteId, deleteAfter])
+}
+
+model TrainingEntry {
+  id               String           @id @default(cuid())
+  athleteId        String
+  activityType     ActivityType
+  date             DateTime
+  minutes          Int
+  distance         Float
+  avgHr            Int?
+  notes            String?
+  proofImageId     String
+  validationStatus ValidationStatus @default(NOT_CHECKED)
+  entryStatus      EntryStatus      @default(ACTIVE)
+  weekStartAt      DateTime
+  lockedAt         DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  athlete    User       @relation("EntryAthlete", fields: [athleteId], references: [id])
+  proofImage ProofImage @relation(fields: [proofImageId], references: [id])
+
+  @@index([athleteId, weekStartAt])
+}
+
+model WeeklyAggregate {
+  id           String       @id @default(cuid())
+  athleteId    String
+  teamId       String
+  weekStartAt  DateTime
+  weekEndAt    DateTime
+  totalMinutes Int
+  activityTypes ActivityType[]
+  hasHrData    Boolean
+  status       WeeklyStatus
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  athlete User @relation(fields: [athleteId], references: [id])
+  team    Team @relation(fields: [teamId], references: [id])
+
+  @@unique([athleteId, weekStartAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+model ProofExtractionJob {
+  id           String                @id @default(cuid())
+  proofImageId String                @unique
+  status       ProofExtractionStatus @default(NOT_CHECKED)
+  attempts     Int                   @default(0)
+  lockedAt     DateTime?
+  lastError    String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  proofImage ProofImage @relation(fields: [proofImageId], references: [id])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
