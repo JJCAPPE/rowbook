@@ -1,9 +1,12 @@
-import { ActivityType, WeeklyStatus, getWeekEndAt } from "@rowbook/shared";
+import { ActivityType, ValidationStatus, WeeklyStatus, getWeekEndAt } from "@rowbook/shared";
 import { listTeamAthletes } from "@/server/repositories/users";
 import { listEntriesByTeamWeek } from "@/server/repositories/training-entries";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
 import { listExemptionsByWeek } from "@/server/repositories/exemptions";
-import { listWeeklyAggregatesByTeamWeek, upsertWeeklyAggregate } from "@/server/repositories/weekly-aggregates";
+import {
+  listWeeklyAggregatesByTeamWeekWithAthlete,
+  upsertWeeklyAggregate,
+} from "@/server/repositories/weekly-aggregates";
 
 const computeAggregate = (entries: Array<{
   athleteId: string;
@@ -36,12 +39,19 @@ const computeAggregate = (entries: Array<{
 
 export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) => {
   const weekEndAt = getWeekEndAt(weekStartAt);
-  const [athletes, entries, requirement, exemptions] = await Promise.all([
+  const [athletes, entriesResult, requirement, exemptionsResult] = await Promise.all([
     listTeamAthletes(teamId),
     listEntriesByTeamWeek(teamId, weekStartAt),
     getWeeklyRequirement(teamId, weekStartAt),
     listExemptionsByWeek(weekStartAt, teamId),
   ]);
+  const entries = entriesResult as Array<{
+    athleteId: string;
+    activityType: ActivityType;
+    minutes: number;
+    avgHr: number | null;
+  }>;
+  const exemptions = exemptionsResult as Array<{ athleteId: string }>;
 
   const exemptionsSet = new Set(exemptions.map((exemption) => exemption.athleteId));
   const totals = computeAggregate(entries);
@@ -80,10 +90,66 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
 };
 
 export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) => {
-  const aggregates = await listWeeklyAggregatesByTeamWeek(teamId, weekStartAt);
+  const aggregates = await listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt);
   if (aggregates.length > 0) {
     return aggregates;
   }
 
-  return aggregateWeekForTeam(teamId, weekStartAt);
+  await aggregateWeekForTeam(teamId, weekStartAt);
+  return listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt);
+};
+
+export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
+  const [aggregatesResult, entriesResult, requirement] = await Promise.all([
+    getLeaderboardForWeek(teamId, weekStartAt),
+    listEntriesByTeamWeek(teamId, weekStartAt),
+    getWeeklyRequirement(teamId, weekStartAt),
+  ]);
+  const aggregates = aggregatesResult as Array<{
+    athleteId: string;
+    totalMinutes: number;
+    status: WeeklyStatus;
+    activityTypes: ActivityType[];
+    hasHrData: boolean;
+    athlete: { name: string | null; email: string };
+  }>;
+  const entries = entriesResult as Array<{
+    athleteId: string;
+    validationStatus: ValidationStatus;
+  }>;
+
+  const entriesByAthlete = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const athleteEntries = entriesByAthlete.get(entry.athleteId) ?? [];
+    athleteEntries.push(entry);
+    entriesByAthlete.set(entry.athleteId, athleteEntries);
+  }
+
+  const requiredMinutes = requirement?.requiredMinutes ?? 0;
+
+  return aggregates.map((aggregate) => {
+    const athleteEntries = entriesByAthlete.get(aggregate.athleteId) ?? [];
+    const missingProof = athleteEntries.some(
+      (entry) => entry.validationStatus !== "VERIFIED",
+    );
+    const missingMinutes =
+      requiredMinutes > 0 &&
+      aggregate.totalMinutes < requiredMinutes &&
+      aggregate.status !== "EXEMPT";
+
+    return {
+      id: aggregate.athleteId,
+      athleteId: aggregate.athleteId,
+      name:
+        "athlete" in aggregate
+          ? aggregate.athlete?.name ?? aggregate.athlete?.email ?? "Athlete"
+          : "Athlete",
+      totalMinutes: aggregate.totalMinutes,
+      status: aggregate.status,
+      activityTypes: aggregate.activityTypes,
+      hasHr: aggregate.hasHrData,
+      missingProof,
+      missingMinutes,
+    };
+  });
 };

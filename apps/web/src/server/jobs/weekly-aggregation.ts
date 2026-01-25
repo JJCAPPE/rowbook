@@ -28,11 +28,11 @@ const buildLeaderboardHtml = (teamName: string, rows: Array<{
 export const runWeeklyAggregation = async () => {
   const weekStartAt = getPreviousWeekStartAt(new Date());
   const teams = await listTeams();
-  const results = [];
+  const results: Array<{ teamId: string; aggregateCount: number }> = [];
 
   for (const team of teams) {
     const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
-    const recipients = await prisma.user.findMany({
+    const recipients: Array<{ email: string }> = await prisma.user.findMany({
       where: { status: "ACTIVE" },
       select: { email: true },
     });

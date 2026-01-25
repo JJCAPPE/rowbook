@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+
 import { env } from "@/server/env";
 
 type EmailPayload = {
@@ -8,6 +10,30 @@ type EmailPayload = {
 };
 
 export const sendEmail = async (payload: EmailPayload) => {
+  if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD) {
+    if (!env.EMAIL_FROM) {
+      throw new Error("EMAIL_FROM is required when using SMTP.");
+    }
+
+    const transport = nodemailer.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT ?? 587,
+      secure: env.SMTP_SECURE ?? false,
+      auth: {
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASSWORD,
+      },
+    });
+
+    return transport.sendMail({
+      from: env.EMAIL_FROM,
+      to: payload.to.join(","),
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
+  }
+
   if (env.RESEND_API_KEY) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",

@@ -19,6 +19,9 @@
         "test:e2e": "node --test --experimental-strip-types tests/e2e/*.test.ts"
     },
     "devDependencies": {
+        "@types/luxon": "^3.7.1",
+        "@types/nodemailer": "^7.0.5",
+        "next": "^14.2.4",
         "typescript": "^5.4.5"
     },
     "type": "module"

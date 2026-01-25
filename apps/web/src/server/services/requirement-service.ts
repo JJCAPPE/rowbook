@@ -1,6 +1,6 @@
 import { getWeekEndAt } from "@rowbook/shared";
 import { upsertWeeklyRequirement } from "@/server/repositories/weekly-requirements";
-import { upsertExemption } from "@/server/repositories/exemptions";
+import { deleteExemption, upsertExemption } from "@/server/repositories/exemptions";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 
 export const setWeeklyRequirement = async (
@@ -50,4 +50,22 @@ export const setExemption = async (
   });
 
   return exemption;
+};
+
+export const removeExemption = async (
+  actorId: string,
+  athleteId: string,
+  weekStartAt: Date,
+) => {
+  const exemption = await deleteExemption(athleteId, weekStartAt);
+
+  await createAuditLog({
+    actorId,
+    entityType: "EXEMPTION",
+    entityId: exemption.id,
+    action: "DELETE",
+    before: exemption,
+  });
+
+  return { success: true };
 };

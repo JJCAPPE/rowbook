@@ -1,60 +1,38 @@
 import { prisma } from "@/db/client";
-import { getSessionTokenFromRequest, getSessionExpiresAt, hashSessionToken, createSessionToken } from "@/server/auth/session";
-import { verifyPassword } from "@/server/auth/password";
+import type { ResponseHeaders } from "@/server/auth/headers";
+import { createSupabaseServerClientFromRequest } from "@/server/auth/supabase";
 
-export const loginWithPassword = async (email: string, password: string) => {
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || user.status !== "ACTIVE" || !user.passwordHash) {
+export const getSessionFromRequest = async (
+  req: Request,
+  responseHeaders: ResponseHeaders,
+) => {
+  const supabase = createSupabaseServerClientFromRequest(req, responseHeaders);
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
+
+  if (sessionError || !sessionData.session) {
     return null;
   }
 
-  const validPassword = await verifyPassword(password, user.passwordHash);
-  if (!validPassword) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user?.email) {
     return null;
   }
 
-  const token = createSessionToken();
-  const tokenHash = hashSessionToken(token);
-  const expiresAt = getSessionExpiresAt();
-
-  await prisma.session.create({
-    data: {
-      tokenHash,
-      userId: user.id,
-      expiresAt,
-    },
+  const dbUser = await prisma.user.findUnique({
+    where: { email: userData.user.email },
   });
 
+  if (!dbUser || dbUser.status !== "ACTIVE") {
+    return null;
+  }
+
+  const expiresAt = sessionData.session.expires_at
+    ? new Date(sessionData.session.expires_at * 1000)
+    : new Date();
+
   return {
-    user,
-    token,
+    user: dbUser,
     expiresAt,
-  };
-};
-
-export const getSessionFromRequest = async (req: Request) => {
-  const token = getSessionTokenFromRequest(req);
-  if (!token) {
-    return null;
-  }
-
-  const tokenHash = hashSessionToken(token);
-  const session = await prisma.session.findUnique({
-    where: { tokenHash },
-    include: { user: true },
-  });
-
-  if (!session) {
-    return null;
-  }
-
-  if (session.expiresAt <= new Date()) {
-    await prisma.session.delete({ where: { tokenHash } });
-    return null;
-  }
-
-  return {
-    user: session.user,
-    expiresAt: session.expiresAt,
   };
 };

@@ -1,3 +1,4 @@
+import { appendHeader, type ResponseHeaders } from "@/server/auth/headers";
 import { getSessionFromRequest } from "@/server/services/auth-service";
 
 export type SessionUser = {
@@ -16,7 +17,7 @@ export type SessionContext = {
 export type TRPCContext = {
   req: Request;
   session: SessionContext | null;
-  responseHeaders: Headers;
+  responseHeaders: ResponseHeaders;
   setCookie: (cookie: string) => void;
 };
 
@@ -35,14 +36,14 @@ const toSessionUser = (user: {
 });
 
 export const createTRPCContext = async ({ req }: { req: Request }) => {
-  const responseHeaders = new Headers();
-  const session = await getSessionFromRequest(req);
+  const responseHeaders: ResponseHeaders = {};
+  const session = await getSessionFromRequest(req, responseHeaders);
 
   return {
     req,
     responseHeaders,
     setCookie: (cookie: string) => {
-      responseHeaders.append("Set-Cookie", cookie);
+      appendHeader(responseHeaders, "Set-Cookie", cookie);
     },
     session: session
       ? {

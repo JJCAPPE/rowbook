@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
+import { Providers } from "./providers";
 
 export const metadata = {
   title: "Rowbook",
@@ -15,7 +16,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.variable}>{children}</body>
+      <body className={inter.variable}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

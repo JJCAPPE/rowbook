@@ -35,7 +35,7 @@ export const createProofUpload = async (
     validationStatus: "NOT_CHECKED",
   });
 
-  const upload = await createUploadUrl(storagePath, UPLOAD_URL_TTL_SECONDS);
+  const upload = await createUploadUrl(storagePath);
 
   return {
     proofImageId: proofImage.id,

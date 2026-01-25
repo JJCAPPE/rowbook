@@ -1,9 +1,13 @@
+"use client";
+
 import { PageHeader } from "@/components/layout/page-header";
 import { LeaderboardTable } from "@/components/leaderboard/leaderboard-table";
 import { Card } from "@/components/ui/card";
-import { leaderboardRows } from "@/lib/mock-data";
+import { trpc } from "@/lib/trpc";
 
 export default function AthleteLeaderboardPage() {
+  const { data, isLoading, error } = trpc.athlete.getLeaderboard.useQuery();
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -12,7 +16,13 @@ export default function AthleteLeaderboardPage() {
       />
 
       <Card>
-        <LeaderboardTable rows={leaderboardRows} />
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Loading leaderboard...</p>
+        ) : error ? (
+          <p className="text-sm text-rose-500">Unable to load leaderboard.</p>
+        ) : (
+          <LeaderboardTable rows={data?.leaderboard ?? []} />
+        )}
       </Card>
     </div>
   );

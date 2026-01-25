@@ -1,7 +1,7 @@
 import { prisma } from "@/db/client";
 
 export const getTeamTrends = async (teamId: string, limit = 12) => {
-  const grouped = await prisma.weeklyAggregate.groupBy({
+  const groupedResult = await prisma.weeklyAggregate.groupBy({
     by: ["weekStartAt", "weekEndAt"],
     where: { teamId },
     _sum: { totalMinutes: true },
@@ -9,6 +9,12 @@ export const getTeamTrends = async (teamId: string, limit = 12) => {
     orderBy: { weekStartAt: "desc" },
     take: limit,
   });
+  const grouped = groupedResult as Array<{
+    weekStartAt: Date;
+    weekEndAt: Date;
+    _sum: { totalMinutes: number | null };
+    _count: { athleteId: number };
+  }>;
 
   return grouped.map((row) => ({
     weekStartAt: row.weekStartAt,
@@ -19,11 +25,19 @@ export const getTeamTrends = async (teamId: string, limit = 12) => {
 };
 
 export const exportWeeklyCsv = async (teamId: string, weekStartAt: Date) => {
-  const aggregates = await prisma.weeklyAggregate.findMany({
+  const aggregatesResult = await prisma.weeklyAggregate.findMany({
     where: { teamId, weekStartAt },
     include: { athlete: true },
     orderBy: { totalMinutes: "desc" },
   });
+  const aggregates = aggregatesResult as Array<{
+    athleteId: string;
+    totalMinutes: number;
+    status: string;
+    weekStartAt: Date;
+    weekEndAt: Date;
+    athlete: { name: string | null };
+  }>;
 
   const header = [
     "athlete_id",

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
 
 const optionalNumber = z.preprocess(
   (value) => (value === "" || value === null ? undefined : value),
@@ -22,11 +23,11 @@ const schema = z.object({
   activityType: z.enum(ActivityTypeValues),
   date: z.string().min(1, "Select a date"),
   minutes: z.coerce.number().min(1, "Enter minutes"),
-  distanceKm: optionalNumber,
+  distanceKm: z.coerce.number().nonnegative().min(0.1, "Enter distance"),
   avgHr: optionalNumber,
   notes: z.string().max(280).optional(),
   proof: z
-    .custom<FileList>()
+    .custom<FileList | null>()
     .refine((files) => files && files.length > 0, "Proof image is required"),
 });
 
@@ -36,10 +37,10 @@ const defaultValues: FormValues = {
   activityType: "ERG",
   date: new Date().toISOString().slice(0, 10),
   minutes: 30,
-  distanceKm: undefined,
+  distanceKm: 5,
   avgHr: undefined,
   notes: "",
-  proof: undefined,
+  proof: null,
 };
 
 export const LogWorkoutForm = () => {
@@ -50,11 +51,18 @@ export const LogWorkoutForm = () => {
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues,
   });
+
+  const utils = trpc.useUtils();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { mutateAsync: createUploadUrl } = trpc.proof.createUploadUrl.useMutation();
+  const { mutateAsync: confirmUpload } = trpc.proof.confirmUpload.useMutation();
+  const { mutateAsync: createEntry } = trpc.athlete.createEntry.useMutation();
 
   const proof = watch("proof");
   const activityType = watch("activityType");
@@ -72,10 +80,64 @@ export const LogWorkoutForm = () => {
     return () => URL.revokeObjectURL(url);
   }, [proof]);
 
-  const onSubmit = async () => {
+  const onSubmit = async (values: FormValues) => {
     setSubmitted(false);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setSubmitted(true);
+    setSubmitError(null);
+
+    const file = values.proof?.[0];
+    if (!file) {
+      setSubmitError("Proof image is required.");
+      return;
+    }
+
+    try {
+      const upload = await createUploadUrl({
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
+      });
+
+      const uploadResponse = await fetch(upload.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload proof image.");
+      }
+
+      await confirmUpload({ proofImageId: upload.proofImageId });
+
+      await createEntry({
+        activityType: values.activityType,
+        date: new Date(values.date),
+        minutes: values.minutes,
+        distance: values.distanceKm,
+        avgHr: values.avgHr ?? null,
+        notes: values.notes?.trim() || undefined,
+        proofImageId: upload.proofImageId,
+      });
+
+      await Promise.all([
+        utils.athlete.getDashboard.invalidate(),
+        utils.athlete.getHistory.invalidate(),
+        utils.athlete.getWeekDetail.invalidate(),
+        utils.coach.getReviewQueue.invalidate(),
+        utils.coach.getTeamOverview.invalidate(),
+      ]);
+
+      reset(defaultValues);
+      setSubmitted(true);
+    } catch (error) {
+      if (error instanceof Error) {
+        setSubmitError(error.message);
+      } else {
+        setSubmitError("Unable to save entry. Please try again.");
+      }
+    }
   };
 
   return (
@@ -158,6 +220,11 @@ export const LogWorkoutForm = () => {
         <p className="text-xs text-slate-500">Entries lock every Sunday at 6:00 PM ET.</p>
       </div>
 
+      {submitError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {submitError}
+        </div>
+      ) : null}
       {submitted ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Workout saved. Status set to Not checked until proof review runs.

@@ -1,9 +1,9 @@
 import { supabaseAdmin, storageBucket } from "@/server/storage/supabase";
 
-export const createUploadUrl = async (path: string, expiresInSeconds: number) => {
+export const createUploadUrl = async (path: string, upsert = false) => {
   const { data, error } = await supabaseAdmin.storage
     .from(storageBucket)
-    .createSignedUploadUrl(path, expiresInSeconds);
+    .createSignedUploadUrl(path, { upsert });
 
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to create upload URL.");

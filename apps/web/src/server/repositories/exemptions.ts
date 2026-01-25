@@ -44,4 +44,15 @@ export const listExemptionsByWeek = (weekStartAt: Date, teamId?: string) =>
           }
         : {}),
     },
+    include: { athlete: true },
+  });
+
+export const deleteExemption = (athleteId: string, weekStartAt: Date) =>
+  prisma.exemption.delete({
+    where: {
+      athleteId_weekStartAt: {
+        athleteId,
+        weekStartAt,
+      },
+    },
   });

@@ -64,3 +64,20 @@ export const listEntriesByAthlete = (athleteId: string) =>
     where: { athleteId },
     orderBy: { date: "desc" },
   });
+
+export const listEntriesForReview = (
+  teamId: string,
+  weekStartAt: Date,
+  statuses: ValidationStatus[],
+) =>
+  prisma.trainingEntry.findMany({
+    where: {
+      weekStartAt,
+      validationStatus: { in: statuses },
+      athlete: {
+        athleteProfile: { teamId },
+      },
+    },
+    include: { athlete: true },
+    orderBy: { date: "desc" },
+  });

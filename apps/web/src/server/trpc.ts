@@ -11,7 +11,12 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   if (!ctx.session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  return next({ ctx });
+  return next({
+    ctx: {
+      ...ctx,
+      session: ctx.session,
+    },
+  });
 });
 
 const isCoach = t.middleware(({ ctx, next }) => {
@@ -21,7 +26,12 @@ const isCoach = t.middleware(({ ctx, next }) => {
   if (!isCoachRole(ctx.session.user.role)) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
-  return next({ ctx });
+  return next({
+    ctx: {
+      ...ctx,
+      session: ctx.session,
+    },
+  });
 });
 
 export const router = t.router;
