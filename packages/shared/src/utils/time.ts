@@ -38,17 +38,16 @@ export const toZonedDate = (
   timeZone = DEFAULT_TIMEZONE,
 ): Date => toDateTime(input, timeZone).toJSDate();
 
+export const toZonedDateTime = (
+  input: DateInput,
+  timeZone = DEFAULT_TIMEZONE,
+): DateTime => toDateTime(input, timeZone);
+
+export const nowInZone = (timeZone = DEFAULT_TIMEZONE): DateTime =>
+  DateTime.now().setZone(timeZone);
+
 export const formatInTimeZone = (
   input: DateInput,
   timeZone = DEFAULT_TIMEZONE,
   format = DEFAULT_TIME_FORMAT,
 ): string => toDateTime(input, timeZone).toFormat(format);
-import { DateTime } from "luxon";
-
-export const DEFAULT_TIMEZONE = "America/New_York";
-
-export const toZonedDateTime = (date: Date, timezone = DEFAULT_TIMEZONE) =>
-  DateTime.fromJSDate(date, { zone: timezone });
-
-export const nowInZone = (timezone = DEFAULT_TIMEZONE) =>
-  DateTime.now().setZone(timezone);
