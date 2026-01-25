@@ -6,7 +6,10 @@ export const DEFAULT_TIMEZONE = "America/New_York";
 
 export const DEFAULT_TIME_FORMAT = "yyyy-LL-dd'T'HH:mm:ssZZ";
 
-export const toDateTime = (input: DateInput, timeZone = DEFAULT_TIMEZONE): DateTime => {
+export const toDateTime = (
+  input: DateInput,
+  timeZone = DEFAULT_TIMEZONE,
+): DateTime => {
   if (DateTime.isDateTime(input)) {
     return input.setZone(timeZone, { keepLocalTime: false });
   }
@@ -27,10 +30,13 @@ export const toDateTime = (input: DateInput, timeZone = DEFAULT_TIMEZONE): DateT
   return DateTime.fromJSDate(new Date(input), { zone: timeZone });
 };
 
-export const toUtcDate = (input: DateInput): Date => toDateTime(input, "UTC").toJSDate();
+export const toUtcDate = (input: DateInput): Date =>
+  toDateTime(input, "UTC").toJSDate();
 
-export const toZonedDate = (input: DateInput, timeZone = DEFAULT_TIMEZONE): Date =>
-  toDateTime(input, timeZone).toJSDate();
+export const toZonedDate = (
+  input: DateInput,
+  timeZone = DEFAULT_TIMEZONE,
+): Date => toDateTime(input, timeZone).toJSDate();
 
 export const formatInTimeZone = (
   input: DateInput,
@@ -44,4 +50,5 @@ export const DEFAULT_TIMEZONE = "America/New_York";
 export const toZonedDateTime = (date: Date, timezone = DEFAULT_TIMEZONE) =>
   DateTime.fromJSDate(date, { zone: timezone });
 
-export const nowInZone = (timezone = DEFAULT_TIMEZONE) => DateTime.now().setZone(timezone);
+export const nowInZone = (timezone = DEFAULT_TIMEZONE) =>
+  DateTime.now().setZone(timezone);
