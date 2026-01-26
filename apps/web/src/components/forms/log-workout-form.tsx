@@ -55,9 +55,49 @@ const defaultValues: FormValues = {
   proof: null,
 };
 
+const uploadFileWithProgress = (
+  url: string,
+  file: File,
+  onProgress: (value: number) => void,
+) =>
+  new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", url);
+    request.setRequestHeader("Content-Type", file.type);
+
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total === 0) {
+        return;
+      }
+      const percent = Math.round((event.loaded / event.total) * 100);
+      onProgress(Math.min(Math.max(percent, 0), 100));
+    });
+
+    request.addEventListener("load", () => {
+      if (request.status >= 200 && request.status < 300) {
+        onProgress(100);
+        resolve();
+        return;
+      }
+      reject(new Error("Failed to upload proof image."));
+    });
+
+    request.addEventListener("error", () => {
+      reject(new Error("Failed to upload proof image."));
+    });
+
+    request.addEventListener("abort", () => {
+      reject(new Error("Upload cancelled."));
+    });
+
+    request.send(file);
+  });
+
 export const LogWorkoutForm = () => {
   const [submitted, setSubmitted] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const today = getTodayString();
   const {
     register,
@@ -96,6 +136,8 @@ export const LogWorkoutForm = () => {
   const onSubmit = async (values: FormValues) => {
     setSubmitted(false);
     setSubmitError(null);
+    setIsUploading(false);
+    setUploadProgress(0);
 
     const file = values.proof?.[0];
     if (!file) {
@@ -110,16 +152,12 @@ export const LogWorkoutForm = () => {
         mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
       });
 
-      const uploadResponse = await fetch(upload.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload proof image.");
+      setIsUploading(true);
+      setUploadProgress(0);
+      try {
+        await uploadFileWithProgress(upload.uploadUrl, file, setUploadProgress);
+      } finally {
+        setIsUploading(false);
       }
 
       await confirmUpload({ proofImageId: upload.proofImageId });
@@ -224,6 +262,20 @@ export const LogWorkoutForm = () => {
         ) : (
           <p className="text-xs text-default-500">Upload a photo or screenshot of your workout.</p>
         )}
+        {isUploading ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+              <span>Uploading proof</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
