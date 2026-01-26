@@ -20,3 +20,9 @@ export const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
   REJECTED: "Rejected",
   EXTRACTION_INCOMPLETE: "Valid (pending review)",
 };
+
+export const PENDING_PROOF_STATUSES = new Set<ValidationStatus>([
+  "NOT_CHECKED",
+  "PENDING",
+  "EXTRACTION_INCOMPLETE",
+]);

@@ -16,6 +16,7 @@ type LeaderboardRow = {
   activityTypes: ActivityType[];
   hasHr: boolean;
   missingProof?: boolean;
+  pendingProof?: boolean;
   missingMinutes?: boolean;
 };
 
@@ -32,11 +33,25 @@ const statusStyles: Record<WeeklyStatus, string> = {
 
 export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableProps) => {
   const [showExempt, setShowExempt] = useState(true);
+  const [showPendingReview, setShowPendingReview] = useState(false);
+  const [showMissingMinutes, setShowMissingMinutes] = useState(false);
 
-  const visibleRows = useMemo(
-    () => (showExempt ? rows : rows.filter((row) => row.status !== "EXEMPT")),
-    [rows, showExempt],
-  );
+  const visibleRows = useMemo(() => {
+    let filtered = showExempt ? rows : rows.filter((row) => row.status !== "EXEMPT");
+
+    if (showPendingReview || showMissingMinutes) {
+      filtered = filtered.filter((row) => {
+        const hasPendingReview = !!row.pendingProof;
+        const hasMissingMinutes = !!row.missingMinutes;
+        return (
+          (showPendingReview && hasPendingReview) ||
+          (showMissingMinutes && hasMissingMinutes)
+        );
+      });
+    }
+
+    return filtered;
+  }, [rows, showExempt, showPendingReview, showMissingMinutes]);
 
   return (
     <div className="space-y-4">
@@ -45,8 +60,18 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
           <FilterChip isActive={showExempt} onClick={() => setShowExempt((prev) => !prev)}>
             {showExempt ? "Hide exempt" : "Show exempt"}
           </FilterChip>
-          <FilterChip>Pending review</FilterChip>
-          <FilterChip>Missing minutes</FilterChip>
+          <FilterChip
+            isActive={showPendingReview}
+            onClick={() => setShowPendingReview((prev) => !prev)}
+          >
+            Pending review
+          </FilterChip>
+          <FilterChip
+            isActive={showMissingMinutes}
+            onClick={() => setShowMissingMinutes((prev) => !prev)}
+          >
+            Missing minutes
+          </FilterChip>
         </div>
       ) : null}
 

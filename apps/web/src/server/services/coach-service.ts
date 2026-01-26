@@ -1,4 +1,10 @@
-import { ActivityType, ValidationStatus, getWeekEndAt, getWeekRange } from "@rowbook/shared";
+import {
+  ActivityType,
+  PENDING_PROOF_STATUSES,
+  ValidationStatus,
+  getWeekEndAt,
+  getWeekRange,
+} from "@rowbook/shared";
 import type { TrainingEntry } from "@rowbook/shared";
 import { getDefaultTeam } from "@/server/repositories/teams";
 import { getTeamLeaderboard } from "@/server/services/weekly-service";
@@ -18,6 +24,7 @@ type TeamLeaderboardRow = {
   activityTypes: ActivityType[];
   hasHr: boolean;
   missingProof: boolean;
+  pendingProof: boolean;
   missingMinutes: boolean;
 };
 
@@ -33,12 +40,6 @@ type ReviewEntry = {
   validationStatus: ValidationStatus;
   athlete: { name: string | null; email: string };
 };
-
-const PENDING_PROOF_STATUSES = new Set<ValidationStatus>([
-  "NOT_CHECKED",
-  "PENDING",
-  "EXTRACTION_INCOMPLETE",
-]);
 
 const attachProofUrls = async <T extends { proofImageId: string }>(
   entries: T[],

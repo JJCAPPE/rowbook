@@ -1,4 +1,10 @@
-import { ActivityType, ValidationStatus, WeeklyStatus, getWeekEndAt } from "@rowbook/shared";
+import {
+  ActivityType,
+  PENDING_PROOF_STATUSES,
+  ValidationStatus,
+  WeeklyStatus,
+  getWeekEndAt,
+} from "@rowbook/shared";
 import { listTeamAthletes } from "@/server/repositories/users";
 import { listEntriesByTeamWeek } from "@/server/repositories/training-entries";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
@@ -135,6 +141,9 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     const missingProof = athleteEntries.some(
       (entry) => entry.validationStatus === "REJECTED",
     );
+    const pendingProof = athleteEntries.some((entry) =>
+      PENDING_PROOF_STATUSES.has(entry.validationStatus),
+    );
     const status: WeeklyStatus = exemptionsSet.has(aggregate.athleteId)
       ? "EXEMPT"
       : aggregate.totalMinutes >= requiredMinutes
@@ -154,6 +163,7 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
       activityTypes: aggregate.activityTypes,
       hasHr: aggregate.hasHrData,
       missingProof,
+      pendingProof,
       missingMinutes,
     };
   });
