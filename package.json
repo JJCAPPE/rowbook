@@ -13,6 +13,7 @@
         "typecheck": "npm --workspace apps/web run typecheck",
         "prisma:generate": "npm --workspace apps/web run prisma:generate",
         "prisma:migrate": "npm --workspace apps/web run prisma:migrate",
+        "postinstall": "npm --workspace apps/web run prisma:generate",
         "test": "node --test --experimental-strip-types",
         "test:unit": "node --test --experimental-strip-types tests/unit/*.test.ts",
         "test:integration": "node --test --experimental-strip-types tests/integration/*.test.ts",
@@ -21,7 +22,7 @@
     "devDependencies": {
         "@types/luxon": "^3.7.1",
         "@types/nodemailer": "^7.0.5",
-        "next": "^14.2.4",
+        "next": "^14.2.35",
         "typescript": "^5.4.5"
     },
     "type": "module"
