@@ -133,7 +133,7 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
   return aggregates.map((aggregate) => {
     const athleteEntries = entriesByAthlete.get(aggregate.athleteId) ?? [];
     const missingProof = athleteEntries.some(
-      (entry) => entry.validationStatus !== "VERIFIED",
+      (entry) => entry.validationStatus === "REJECTED",
     );
     const status: WeeklyStatus = exemptionsSet.has(aggregate.athleteId)
       ? "EXEMPT"

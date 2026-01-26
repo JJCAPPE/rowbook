@@ -19,9 +19,21 @@ const optionalNumber = z.preprocess(
   z.coerce.number().positive().optional(),
 );
 
+const getTodayString = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const schema = z.object({
   activityType: z.enum(ActivityTypeValues),
-  date: z.string().min(1, "Select a date"),
+  date: z
+    .string()
+    .min(1, "Select a date")
+    .refine((value) => !Number.isNaN(new Date(value).getTime()), "Select a valid date")
+    .refine((value) => value <= getTodayString(), "Date cannot be in the future"),
   minutes: z.coerce.number().min(1, "Enter minutes"),
   distanceKm: z.coerce.number().nonnegative().min(0.1, "Enter distance"),
   avgHr: optionalNumber,
@@ -35,7 +47,7 @@ type FormValues = z.infer<typeof schema>;
 
 const defaultValues: FormValues = {
   activityType: "ERG",
-  date: new Date().toISOString().slice(0, 10),
+  date: getTodayString(),
   minutes: 30,
   distanceKm: 5,
   avgHr: undefined,
@@ -46,6 +58,7 @@ const defaultValues: FormValues = {
 export const LogWorkoutForm = () => {
   const [submitted, setSubmitted] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const today = getTodayString();
   const {
     register,
     handleSubmit,
@@ -165,7 +178,7 @@ export const LogWorkoutForm = () => {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="date">Date</Label>
-          <Input id="date" type="date" {...register("date")} />
+          <Input id="date" type="date" max={today} {...register("date")} />
           {errors.date ? <p className="text-xs text-rose-500">{errors.date.message}</p> : null}
         </div>
         <div className="space-y-2">
@@ -227,7 +240,7 @@ export const LogWorkoutForm = () => {
       ) : null}
       {submitted ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          Workout saved. Status set to Not checked until proof review runs.
+          Workout saved. Counted toward totals while pending review.
         </div>
       ) : null}
     </form>

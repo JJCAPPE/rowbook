@@ -15,6 +15,7 @@ type AppShellProps = {
   navItems: NavItem[];
   weekOptions?: WeekOption[];
   activeWeekKey?: string;
+  onWeekChange?: (weekKey: string) => void;
   children: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export const AppShell = ({
   navItems,
   weekOptions,
   activeWeekKey,
+  onWeekChange,
   children,
 }: AppShellProps) => (
   <div className="min-h-screen bg-background">
@@ -35,6 +37,7 @@ export const AppShell = ({
           userName={userName}
           weekOptions={weekOptions}
           activeWeekKey={activeWeekKey}
+          onWeekChange={onWeekChange}
         />
         <main className={cn("flex-1 px-4 pb-24 pt-8 md:px-10 md:pb-12")}>
           {children}

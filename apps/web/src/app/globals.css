@@ -36,4 +36,13 @@
   .input-field:focus {
     @apply border-primary/70 ring-2 ring-primary/30;
   }
+
+  .input-field[type="date"] {
+    color-scheme: light;
+  }
+
+  .input-field[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.7;
+    filter: grayscale(1);
+  }
 }

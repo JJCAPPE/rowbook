@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,7 +24,19 @@ type ExemptionItem = {
 
 export default function CoachSettingsPage() {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.coach.getWeeklySettings.useQuery();
+  const searchParams = useSearchParams();
+  const weekStartParam = searchParams.get("weekStartAt");
+  const weekStartAt = useMemo(() => {
+    if (!weekStartParam) {
+      return undefined;
+    }
+    const parsed = new Date(weekStartParam);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [weekStartParam]);
+
+  const { data, isLoading, error } = trpc.coach.getWeeklySettings.useQuery(
+    weekStartAt ? { weekStartAt } : undefined,
+  );
   const athletes: AthleteOption[] = data?.athletes ?? [];
   const exemptions: ExemptionItem[] = data?.exemptions ?? [];
   const [requiredMinutes, setRequiredMinutes] = useState(0);

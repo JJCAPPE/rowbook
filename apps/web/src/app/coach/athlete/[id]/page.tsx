@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { ActivityMixChart } from "@/components/charts/activity-mix-chart";
 import { WeeklyTrendChart } from "@/components/charts/weekly-trend-chart";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
+import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -16,9 +19,11 @@ type CoachAthleteDetailPageProps = {
 };
 
 export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPageProps) {
+  const router = useRouter();
   const { data, isLoading, error } = trpc.coach.getAthleteDetail.useQuery({
     athleteId: params.id,
   });
+  const { data: overview } = trpc.coach.getTeamOverview.useQuery();
   const entries: Array<TrainingEntry & { proofUrl: string | null }> = data?.entries ?? [];
 
   const weeklyTrend = useMemo(() => {
@@ -35,12 +40,52 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
   }, [data?.history]);
 
   const activityMix = useMemo(() => data?.activityMix ?? [], [data?.activityMix]);
+  const athleteOptions = useMemo(() => {
+    const options = (overview?.leaderboard ?? []).map((row) => ({
+      id: row.athleteId,
+      name: row.name,
+    }));
+
+    if (data?.athlete && !options.some((option) => option.id === data.athlete.id)) {
+      options.push({ id: data.athlete.id, name: data.athlete.name });
+    }
+
+    return options.sort((a, b) => a.name.localeCompare(b.name));
+  }, [overview?.leaderboard, data?.athlete]);
+  const selectedAthleteId = data?.athlete?.id ?? params.id;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={data?.athlete?.name ?? "Athlete detail"}
         subtitle="Weekly trends and proof status."
+        actions={
+          <div className="min-w-[220px] space-y-2">
+            <Label htmlFor="coachAthleteSelect">Athlete</Label>
+            <Select
+              id="coachAthleteSelect"
+              value={selectedAthleteId}
+              onChange={(event) => {
+                const nextAthleteId = event.target.value;
+                if (nextAthleteId && nextAthleteId !== selectedAthleteId) {
+                  router.push(`/coach/athlete/${nextAthleteId}`);
+                }
+              }}
+              className="w-full"
+              disabled={!athleteOptions.length}
+            >
+              {athleteOptions.length ? (
+                athleteOptions.map((athlete) => (
+                  <option key={athlete.id} value={athlete.id}>
+                    {athlete.name}
+                  </option>
+                ))
+              ) : (
+                <option value={selectedAthleteId}>Loading athletes...</option>
+              )}
+            </Select>
+          </div>
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

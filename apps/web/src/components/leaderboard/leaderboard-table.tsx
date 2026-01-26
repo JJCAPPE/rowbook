@@ -45,7 +45,7 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
           <FilterChip isActive={showExempt} onClick={() => setShowExempt((prev) => !prev)}>
             {showExempt ? "Hide exempt" : "Show exempt"}
           </FilterChip>
-          <FilterChip>Missing proof</FilterChip>
+          <FilterChip>Pending review</FilterChip>
           <FilterChip>Missing minutes</FilterChip>
         </div>
       ) : null}

@@ -37,19 +37,21 @@ const computeTotals = (entries: Array<{ minutes: number; avgHr: number | null }>
   return { totalMinutes, hasHrData };
 };
 
-export const getAthleteDashboard = async (athleteId: string) => {
+export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date) => {
   const teamId = await getTeamIdForAthlete(athleteId);
   if (!teamId) {
     throw new Error("Athlete is not assigned to a team.");
   }
 
-  const { weekStartAt, weekEndAt } = getWeekRange(new Date());
+  const { weekStartAt: normalizedWeekStart, weekEndAt } = getWeekRange(
+    weekStartAt ?? new Date(),
+  );
 
   const [entries, requirement, exemption, aggregate] = await Promise.all([
-    listEntriesByAthleteWeek(athleteId, weekStartAt),
-    getWeeklyRequirement(teamId, weekStartAt),
-    getExemption(athleteId, weekStartAt),
-    getWeeklyAggregate(athleteId, weekStartAt),
+    listEntriesByAthleteWeek(athleteId, normalizedWeekStart),
+    getWeeklyRequirement(teamId, normalizedWeekStart),
+    getExemption(athleteId, normalizedWeekStart),
+    getWeeklyAggregate(athleteId, normalizedWeekStart),
   ]);
 
   const totals = aggregate ?? computeTotals(entries);
@@ -61,7 +63,7 @@ export const getAthleteDashboard = async (athleteId: string) => {
       : "NOT_MET";
 
   return {
-    weekStartAt,
+    weekStartAt: normalizedWeekStart,
     weekEndAt,
     requiredMinutes,
     totalMinutes: totals.totalMinutes,

@@ -7,6 +7,8 @@ import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatFullDate, formatMinutes, formatDistance } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 
 type ReviewEntry = {
   id: string;
@@ -24,7 +26,19 @@ type ReviewEntry = {
 
 export default function CoachReviewQueuePage() {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery();
+  const searchParams = useSearchParams();
+  const weekStartParam = searchParams.get("weekStartAt");
+  const weekStartAt = useMemo(() => {
+    if (!weekStartParam) {
+      return undefined;
+    }
+    const parsed = new Date(weekStartParam);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [weekStartParam]);
+
+  const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery(
+    weekStartAt ? { weekStartAt } : undefined,
+  );
   const entries: ReviewEntry[] = data?.entries ?? [];
   const { mutateAsync: overrideStatus, isLoading: isUpdating } =
     trpc.coach.overrideValidationStatus.useMutation({

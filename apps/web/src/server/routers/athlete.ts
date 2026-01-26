@@ -7,12 +7,14 @@ import { protectedProcedure, router } from "@/server/trpc";
 import { z } from "zod";
 
 export const athleteRouter = router({
-  getDashboard: protectedProcedure.query(async ({ ctx }) => {
-    if (!isAthleteRole(ctx.session.user.role)) {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
-    return getAthleteDashboard(ctx.session.user.id);
-  }),
+  getDashboard: protectedProcedure
+    .input(z.object({ weekStartAt: z.coerce.date().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      if (!isAthleteRole(ctx.session.user.role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return getAthleteDashboard(ctx.session.user.id, input?.weekStartAt);
+    }),
   getHistory: protectedProcedure.query(async ({ ctx }) => {
     if (!isAthleteRole(ctx.session.user.role)) {
       throw new TRPCError({ code: "FORBIDDEN" });

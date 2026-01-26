@@ -11,7 +11,7 @@ type InputProps = Omit<HeroInputProps, "classNames"> & {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, classNames, type, size, ...props }, ref) => {
-    if (type === "file") {
+    if (type === "file" || type === "date") {
       return (
         <input
           {...props}

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { Settings, ShieldCheck, Users, UserSquare } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { NavItem } from "@/components/layout/navigation";
@@ -12,6 +12,8 @@ import { buildWeekOptions } from "@/lib/week-options";
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { data: session, isLoading: isSessionLoading } = trpc.auth.getSession.useQuery();
   const isCoach = session?.user.role === "COACH" || session?.user.role === "ADMIN";
   const { data: overview } = trpc.coach.getTeamOverview.useQuery(undefined, {
@@ -21,6 +23,13 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
   const weekOptions = useMemo(() => buildWeekOptions(6), []);
   const userName = session?.user.name ?? session?.user.email ?? "Coach";
   const athleteId = overview?.leaderboard?.[0]?.athleteId;
+  const searchWeekKey = searchParams.get("weekStartAt");
+  const activeWeekKey = useMemo(() => {
+    if (searchWeekKey && weekOptions.some((option) => option.key === searchWeekKey)) {
+      return searchWeekKey;
+    }
+    return weekOptions[0]?.key;
+  }, [searchWeekKey, weekOptions]);
 
   useEffect(() => {
     if (!isSessionLoading && session && !isCoach) {
@@ -55,7 +64,12 @@ export default function CoachLayout({ children }: { children: ReactNode }) {
       userName={userName}
       navItems={navItems}
       weekOptions={weekOptions}
-      activeWeekKey={weekOptions[0]?.key}
+      activeWeekKey={activeWeekKey}
+      onWeekChange={(nextWeekKey) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("weekStartAt", nextWeekKey);
+        router.push(`${pathname}?${params.toString()}`);
+      }}
     >
       {children}
     </AppShell>

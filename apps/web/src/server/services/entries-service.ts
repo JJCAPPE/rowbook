@@ -6,9 +6,20 @@ import {
   listEntriesByAthleteWeek,
   updateTrainingEntry,
 } from "@/server/repositories/training-entries";
+import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { getProofImageById } from "@/server/repositories/proof-images";
 import { createProofExtractionJob } from "@/server/repositories/proof-extraction-jobs";
 import { createAuditLog } from "@/server/repositories/audit-logs";
+import { aggregateWeekForTeam } from "@/server/services/weekly-service";
+
+const syncTeamAggregatesForWeek = async (athleteId: string, weekStartAt: Date) => {
+  const teamId = await getTeamIdForAthlete(athleteId);
+  if (!teamId) {
+    return;
+  }
+
+  await aggregateWeekForTeam(teamId, weekStartAt);
+};
 
 export const createEntry = async (athleteId: string, input: {
   activityType: "ERG" | "RUN" | "CYCLE" | "SWIM" | "OTHER";
@@ -24,6 +35,9 @@ export const createEntry = async (athleteId: string, input: {
 
   if (!isWithinWeek(input.date, weekStartAt)) {
     throw new Error("Entry date must be within the active week.");
+  }
+  if (input.date.getTime() > now.getTime()) {
+    throw new Error("Entry date cannot be in the future.");
   }
 
   const proofImage = await getProofImageById(input.proofImageId);
@@ -58,6 +72,7 @@ export const createEntry = async (athleteId: string, input: {
     action: "CREATE",
     after: entry,
   });
+  await syncTeamAggregatesForWeek(athleteId, weekStartAt);
 
   return { entry, weekEndAt };
 };
@@ -82,8 +97,13 @@ export const updateEntry = async (athleteId: string, input: {
     throw new Error("Entry is locked.");
   }
 
-  if (input.date && !isWithinWeek(input.date, weekStartAt)) {
-    throw new Error("Entry date must be within the active week.");
+  if (input.date) {
+    if (!isWithinWeek(input.date, weekStartAt)) {
+      throw new Error("Entry date must be within the active week.");
+    }
+    if (input.date.getTime() > now.getTime()) {
+      throw new Error("Entry date cannot be in the future.");
+    }
   }
 
   const updated = await updateTrainingEntry(entry.id, {
@@ -103,6 +123,7 @@ export const updateEntry = async (athleteId: string, input: {
     before: entry,
     after: updated,
   });
+  await syncTeamAggregatesForWeek(athleteId, entry.weekStartAt);
 
   return { entry: updated, weekEndAt };
 };
@@ -127,6 +148,7 @@ export const deleteEntry = async (athleteId: string, entryId: string) => {
     action: "DELETE",
     before: entry,
   });
+  await syncTeamAggregatesForWeek(athleteId, entry.weekStartAt);
 
   return { success: true };
 };

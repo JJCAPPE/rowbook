@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
 import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
 
@@ -17,7 +18,19 @@ import { formatFullDate, formatMinutes, formatDistance, formatWeekRange } from "
 import { trpc } from "@/lib/trpc";
 
 export default function AthleteDashboardPage() {
-  const { data: dashboard, isLoading, error } = trpc.athlete.getDashboard.useQuery();
+  const searchParams = useSearchParams();
+  const weekStartParam = searchParams.get("weekStartAt");
+  const weekStartAt = useMemo(() => {
+    if (!weekStartParam) {
+      return undefined;
+    }
+    const parsed = new Date(weekStartParam);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [weekStartParam]);
+
+  const { data: dashboard, isLoading, error } = trpc.athlete.getDashboard.useQuery(
+    weekStartAt ? { weekStartAt } : undefined,
+  );
   const { data: history } = trpc.athlete.getHistory.useQuery();
 
   const entries: TrainingEntry[] = dashboard?.entries ?? [];
