@@ -1,19 +1,67 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
+import type { ActivityType } from "@rowbook/shared";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { ActivityIcon } from "@/components/ui/activity-icon";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
-import { formatWeekRange } from "@/lib/format";
+import { formatFullDate, formatMinutes, formatWeekRange } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { getWeekKey } from "@/lib/week-options";
-import type { WeeklyAggregate } from "@rowbook/shared";
+
+type HistoryFilter = "ALL" | ActivityType | "HR_PRESENT" | "MIN_30";
 
 export default function AthleteHistoryPage() {
-  const { data, isLoading, error } = trpc.athlete.getHistory.useQuery();
-  const history: WeeklyAggregate[] = data ?? [];
+  const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
+  const history = data ?? [];
+  const [activeFilter, setActiveFilter] = useState<HistoryFilter>("ALL");
+
+  const filteredHistory = useMemo(
+    () =>
+      history.flatMap((week) => {
+        if (activeFilter === "MIN_30" && week.totalMinutes < 30) {
+          return [];
+        }
+
+        if (activeFilter === "HR_PRESENT" && !week.hasHrData) {
+          return [];
+        }
+
+        if (
+          activeFilter !== "ALL" &&
+          activeFilter !== "MIN_30" &&
+          activeFilter !== "HR_PRESENT" &&
+          !week.activityTypes.includes(activeFilter)
+        ) {
+          return [];
+        }
+
+        const entries =
+          activeFilter === "ALL" || activeFilter === "MIN_30"
+            ? week.entries
+            : activeFilter === "HR_PRESENT"
+              ? week.entries.filter((entry) => entry.avgHr !== null && entry.avgHr !== undefined)
+              : week.entries.filter((entry) => entry.activityType === activeFilter);
+
+        if (!entries.length) {
+          return [];
+        }
+
+        return [
+          {
+            ...week,
+            entries,
+          },
+        ];
+      }),
+    [activeFilter, history],
+  );
 
   return (
     <div className="space-y-6">
@@ -23,43 +71,86 @@ export default function AthleteHistoryPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <FilterChip isActive>All</FilterChip>
-        <FilterChip>Erg</FilterChip>
-        <FilterChip>Run</FilterChip>
-        <FilterChip>HR present</FilterChip>
-        <FilterChip>Min 30</FilterChip>
+        <FilterChip isActive={activeFilter === "ALL"} onClick={() => setActiveFilter("ALL")}>
+          All
+        </FilterChip>
+        <FilterChip isActive={activeFilter === "ERG"} onClick={() => setActiveFilter("ERG")}>
+          Erg
+        </FilterChip>
+        <FilterChip isActive={activeFilter === "RUN"} onClick={() => setActiveFilter("RUN")}>
+          Run
+        </FilterChip>
+        <FilterChip
+          isActive={activeFilter === "HR_PRESENT"}
+          onClick={() => setActiveFilter("HR_PRESENT")}
+        >
+          HR present
+        </FilterChip>
+        <FilterChip isActive={activeFilter === "MIN_30"} onClick={() => setActiveFilter("MIN_30")}>
+          Min 30
+        </FilterChip>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         {isLoading ? (
           <Card className="text-sm text-default-500">Loading weekly history...</Card>
         ) : error ? (
           <Card className="text-sm text-rose-500">Unable to load history.</Card>
-        ) : history.length > 0 ? (
-          history.map((week) => {
+        ) : filteredHistory.length > 0 ? (
+          filteredHistory.map((week) => {
             const weekKey = getWeekKey(week.weekStartAt);
             return (
-              <Card key={weekKey} className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {formatWeekRange(week.weekStartAt, week.weekEndAt)}
-                  </p>
-                  <p className="text-xs text-default-500">{week.totalMinutes} total minutes</p>
+              <Card key={weekKey} className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider/40 pb-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatWeekRange(week.weekStartAt, week.weekEndAt)}
+                    </p>
+                    <p className="text-xs text-default-500">
+                      {week.totalMinutes} total minutes
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <WeeklyStatusBadge status={week.status} />
+                    <Link
+                      className="text-sm font-semibold text-primary"
+                      href={`/athlete?weekStartAt=${encodeURIComponent(weekKey)}`}
+                    >
+                      View week
+                    </Link>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <WeeklyStatusBadge status={week.status} />
-                  <Link
-                    className="text-sm font-semibold text-primary"
-                    href={`/athlete/week/${encodeURIComponent(weekKey)}`}
-                  >
-                    View week
-                  </Link>
+                <div className="grid gap-2">
+                  {week.entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full border border-divider/40 bg-content2/70 p-2">
+                          <ActivityIcon type={entry.activityType} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatMinutes(entry.minutes)}{" "}
+                            {ACTIVITY_TYPE_LABELS[entry.activityType]}
+                          </p>
+                          <p className="text-xs text-default-500">
+                            {formatFullDate(entry.date)}
+                          </p>
+                        </div>
+                      </div>
+                      <StatusBadge status={entry.validationStatus} />
+                    </div>
+                  ))}
                 </div>
               </Card>
             );
           })
         ) : (
-          <Card className="text-sm text-default-500">No weekly history yet.</Card>
+          <Card className="text-sm text-default-500">
+            {history.length > 0 ? "No weeks match this filter yet." : "No weekly history yet."}
+          </Card>
         )}
       </div>
     </div>

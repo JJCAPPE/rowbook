@@ -213,38 +213,6 @@ export const LogWorkoutForm = () => {
         ) : null}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="date">Date</Label>
-          <Input id="date" type="date" max={today} {...register("date")} />
-          {errors.date ? <p className="text-xs text-rose-500">{errors.date.message}</p> : null}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="minutes">Minutes</Label>
-          <Input id="minutes" type="number" min={1} {...register("minutes")} />
-          {errors.minutes ? (
-            <p className="text-xs text-rose-500">{errors.minutes.message}</p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="distanceKm">Distance (km)</Label>
-          <Input id="distanceKm" type="number" step="0.1" {...register("distanceKm")} />
-          {errors.distanceKm ? (
-            <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="avgHr">Average HR</Label>
-          <Input id="avgHr" type="number" min={30} max={220} {...register("avgHr")} />
-          {errors.avgHr ? <p className="text-xs text-rose-500">{errors.avgHr.message}</p> : null}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notes</Label>
-        <Textarea id="notes" placeholder="Optional notes" {...register("notes")} />
-      </div>
-
       <div className="space-y-3">
         <Label htmlFor="proof">Proof image</Label>
         <Input
@@ -276,6 +244,38 @@ export const LogWorkoutForm = () => {
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="date">Date</Label>
+          <Input id="date" type="date" max={today} {...register("date")} />
+          {errors.date ? <p className="text-xs text-rose-500">{errors.date.message}</p> : null}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="minutes">Minutes</Label>
+          <Input id="minutes" type="number" min={1} {...register("minutes")} />
+          {errors.minutes ? (
+            <p className="text-xs text-rose-500">{errors.minutes.message}</p>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="distanceKm">Distance (km)</Label>
+          <Input id="distanceKm" type="number" step="0.1" {...register("distanceKm")} />
+          {errors.distanceKm ? (
+            <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="avgHr">Average HR</Label>
+          <Input id="avgHr" type="number" min={30} max={220} {...register("avgHr")} />
+          {errors.avgHr ? <p className="text-xs text-rose-500">{errors.avgHr.message}</p> : null}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea id="notes" placeholder="Optional notes" {...register("notes")} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

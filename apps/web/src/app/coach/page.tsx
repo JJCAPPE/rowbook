@@ -41,7 +41,7 @@ export default function CoachOverviewPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatTile label="Met goal" value={`${data?.summary.met ?? 0}`} />
         <StatTile label="Not met" value={`${data?.summary.notMet ?? 0}`} />
         <StatTile label="Exempt" value={`${data?.summary.exempt ?? 0}`} />

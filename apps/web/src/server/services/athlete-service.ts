@@ -1,9 +1,9 @@
-import { WeeklyStatus, getWeekEndAt, getWeekRange } from "@rowbook/shared";
-import type { TrainingEntry } from "@rowbook/shared";
+import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange } from "@rowbook/shared";
+import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
-import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
-import { getExemption } from "@/server/repositories/exemptions";
+import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
+import { getWeeklyRequirement, listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
+import { getExemption, listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
 import { getWeeklyAggregate, listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard } from "@/server/services/weekly-service";
@@ -75,6 +75,87 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
 
 export const getAthleteHistory = async (athleteId: string) =>
   listWeeklyAggregatesByAthlete(athleteId);
+
+export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount = 8) => {
+  const teamId = await getTeamIdForAthlete(athleteId);
+  if (!teamId) {
+    throw new Error("Athlete is not assigned to a team.");
+  }
+
+  const { weekStartAt: currentWeekStart } = getWeekRange(new Date());
+  let earliestWeekStart = currentWeekStart;
+
+  for (let index = 1; index < weekCount; index += 1) {
+    earliestWeekStart = getPreviousWeekStartAt(earliestWeekStart);
+  }
+
+  const [entriesResult, requirementsResult, exemptionsResult] = await Promise.all([
+    listEntriesByAthleteSinceWeekStart(athleteId, earliestWeekStart),
+    listWeeklyRequirementsByTeamSince(teamId, earliestWeekStart),
+    listExemptionsByAthleteSince(athleteId, earliestWeekStart),
+  ]);
+
+  const entries = entriesResult as TrainingEntry[];
+  const requirementsByWeek = new Map(
+    requirementsResult.map((requirement) => [
+      requirement.weekStartAt.toISOString(),
+      requirement.requiredMinutes,
+    ]),
+  );
+  const exemptionsByWeek = new Set(
+    exemptionsResult.map((exemption) => exemption.weekStartAt.toISOString()),
+  );
+
+  const weeksByKey = new Map<string, { weekStartAt: Date; entries: TrainingEntry[] }>();
+
+  for (const entry of entries) {
+    const key = entry.weekStartAt.toISOString();
+    const current = weeksByKey.get(key);
+    if (current) {
+      current.entries.push(entry);
+    } else {
+      weeksByKey.set(key, { weekStartAt: entry.weekStartAt, entries: [entry] });
+    }
+  }
+
+  return Array.from(weeksByKey.values())
+    .map(({ weekStartAt, entries: weekEntries }) => {
+      const activityTypes = new Set<ActivityType>();
+      let totalMinutes = 0;
+      let hasHrData = false;
+
+      for (const entry of weekEntries) {
+        totalMinutes += entry.minutes;
+        activityTypes.add(entry.activityType);
+        if (entry.avgHr !== null && entry.avgHr !== undefined) {
+          hasHrData = true;
+        }
+      }
+
+      const weekKey = weekStartAt.toISOString();
+      const requiredMinutes = requirementsByWeek.get(weekKey) ?? 0;
+      const status: WeeklyStatus = exemptionsByWeek.has(weekKey)
+        ? "EXEMPT"
+        : totalMinutes >= requiredMinutes
+          ? "MET"
+          : "NOT_MET";
+
+      const sortedEntries = [...weekEntries].sort(
+        (a, b) => b.date.getTime() - a.date.getTime(),
+      );
+
+      return {
+        weekStartAt,
+        weekEndAt: getWeekEndAt(weekStartAt),
+        totalMinutes,
+        status,
+        hasHrData,
+        activityTypes: Array.from(activityTypes),
+        entries: sortedEntries,
+      };
+    })
+    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
+};
 
 export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date) => {
   const normalizedWeekStart = getWeekRange(weekStartAt).weekStartAt;

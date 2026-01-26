@@ -9,6 +9,7 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(value / max, 1);
   const offset = circumference - progress * circumference;
+  const ringColor = value >= max ? "hsl(var(--heroui-success))" : "hsl(var(--heroui-danger))";
 
   return (
     <div className="relative flex items-center justify-center">
@@ -25,7 +26,7 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="hsl(var(--heroui-primary))"
+          stroke={ringColor}
           strokeWidth="12"
           fill="transparent"
           strokeLinecap="round"

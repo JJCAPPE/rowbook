@@ -1,7 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { TrainingEntryInputSchema, TrainingEntryUpdateSchema } from "@rowbook/shared";
 import { isAthleteRole } from "@/server/auth/rbac";
-import { getAthleteDashboard, getAthleteHistory, getAthleteLeaderboard, getAthleteWeekDetail } from "@/server/services/athlete-service";
+import {
+  getAthleteDashboard,
+  getAthleteHistory,
+  getAthleteHistoryWithEntries,
+  getAthleteLeaderboard,
+  getAthleteWeekDetail,
+} from "@/server/services/athlete-service";
 import { createEntry, deleteEntry, updateEntry } from "@/server/services/entries-service";
 import { protectedProcedure, router } from "@/server/trpc";
 import { z } from "zod";
@@ -20,6 +26,12 @@ export const athleteRouter = router({
       throw new TRPCError({ code: "FORBIDDEN" });
     }
     return getAthleteHistory(ctx.session.user.id);
+  }),
+  getHistoryWithEntries: protectedProcedure.query(async ({ ctx }) => {
+    if (!isAthleteRole(ctx.session.user.role)) {
+      throw new TRPCError({ code: "FORBIDDEN" });
+    }
+    return getAthleteHistoryWithEntries(ctx.session.user.id);
   }),
   getLeaderboard: protectedProcedure
     .input(z.object({ weekStartAt: z.coerce.date().optional() }).optional())

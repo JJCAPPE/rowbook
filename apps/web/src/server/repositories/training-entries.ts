@@ -65,6 +65,17 @@ export const listEntriesByAthlete = (athleteId: string) =>
     orderBy: { date: "desc" },
   });
 
+export const listEntriesByAthleteSinceWeekStart = (athleteId: string, weekStartAt: Date) =>
+  prisma.trainingEntry.findMany({
+    where: {
+      athleteId,
+      weekStartAt: {
+        gte: weekStartAt,
+      },
+    },
+    orderBy: { date: "desc" },
+  });
+
 export const listEntriesForReview = (
   teamId: string,
   weekStartAt: Date,

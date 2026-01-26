@@ -29,3 +29,13 @@ export const getWeeklyRequirement = (teamId: string, weekStartAt: Date) =>
       },
     },
   });
+
+export const listWeeklyRequirementsByTeamSince = (teamId: string, weekStartAt: Date) =>
+  prisma.weeklyRequirement.findMany({
+    where: {
+      teamId,
+      weekStartAt: {
+        gte: weekStartAt,
+      },
+    },
+  });
