@@ -1,5 +1,6 @@
 import { prisma } from "@/db/client";
 import { ValidationStatus } from "@rowbook/shared";
+import { Prisma } from "@prisma/client";
 
 export const createProofImage = (data: {
   athleteId: string;
@@ -11,14 +12,7 @@ export const createProofImage = (data: {
     data,
   });
 
-export const updateProofImage = (id: string, data: Partial<{
-  uploadedAt: Date | null;
-  deleteAfter: Date;
-  deletedAt: Date | null;
-  extractedFields: Record<string, unknown> | null;
-  validationStatus: ValidationStatus;
-  reviewedById: string | null;
-}>) =>
+export const updateProofImage = (id: string, data: Prisma.ProofImageUncheckedUpdateInput) =>
   prisma.proofImage.update({
     where: { id },
     data,
