@@ -8,32 +8,32 @@
   }
 
   body {
-    @apply bg-slate-50 text-ink antialiased;
+    @apply bg-background text-foreground antialiased font-sans;
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl bg-surface shadow-card border border-slate-100;
+    @apply rounded-2xl border border-divider/40 bg-content1/80 shadow-card backdrop-blur;
   }
 
   .section-title {
-    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+    @apply text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-default-400;
   }
 
   .stat-value {
-    @apply text-3xl font-semibold text-ink;
+    @apply text-3xl font-semibold text-foreground font-display;
   }
 
   .stat-label {
-    @apply text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition;
+    @apply w-full rounded-xl border border-divider/50 bg-content2/70 px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-default-500;
   }
 
   .input-field:focus {
-    @apply border-primary ring-2 ring-blue-100;
+    @apply border-primary/70 ring-2 ring-primary/30;
   }
 }

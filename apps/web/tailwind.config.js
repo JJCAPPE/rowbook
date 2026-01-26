@@ -1,31 +1,76 @@
 const defaultTheme = require("tailwindcss/defaultTheme");
+const { heroui } = require("@heroui/react");
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./src/**/*.{ts,tsx}"],
+  content: [
+    "./src/**/*.{ts,tsx}",
+    "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+    "./node_modules/@heroui/react/node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+    "../../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+    "../../node_modules/@heroui/react/node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+  ],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        primary: "#2563eb",
-        secondary: "#14b8a6",
-        success: "#22c55e",
-        warning: "#f59e0b",
-        danger: "#ef4444",
-        neutral: "#64748b",
-        surface: "#ffffff",
-        muted: "#f1f5f9",
-        ink: "#0f172a",
+        ink: "hsl(var(--heroui-foreground) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", ...defaultTheme.fontFamily.sans],
+        display: ["var(--font-display)", ...defaultTheme.fontFamily.sans],
       },
       boxShadow: {
-        card: "0 10px 30px -18px rgba(15, 23, 42, 0.25)",
+        card: "0 18px 50px -30px rgba(0, 0, 0, 0.7)",
       },
       borderRadius: {
         xl: "1rem",
       },
+      keyframes: {
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translate3d(0, 12px, 0)" },
+          "100%": { opacity: "1", transform: "translate3d(0, 0, 0)" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        drift: {
+          "0%": { transform: "translate3d(0, 0, 0)" },
+          "50%": { transform: "translate3d(0, -6px, 0)" },
+          "100%": { transform: "translate3d(0, 0, 0)" },
+        },
+      },
+      animation: {
+        "fade-up": "fade-up 0.7s ease-out both",
+        "fade-in": "fade-in 0.5s ease-out both",
+        drift: "drift 7s ease-in-out infinite",
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    heroui({
+      defaultTheme: "light",
+      themes: {
+        dark: {
+          colors: {
+            primary: {
+              DEFAULT: "#FFFFFF",
+              foreground: "#000000",
+            },
+            focus: "#000000",
+          },
+        },
+        light: {
+          colors: {
+            primary: {
+              DEFAULT: "#000000",
+              foreground: "#FFFFFF",
+            },
+            focus: "#FFFFFF",
+          },
+        },
+      },
+    }),
+  ],
 };

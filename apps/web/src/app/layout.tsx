@@ -1,5 +1,5 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
+import { Manrope, Sora } from "next/font/google";
 import { Providers } from "./providers";
 
 export const metadata = {
@@ -7,7 +7,8 @@ export const metadata = {
   description: "Rowing team OYO minutes app",
 };
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
+const sora = Sora({ subsets: ["latin"], variable: "--font-display" });
 
 export default function RootLayout({
   children,
@@ -15,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.variable}>
+    <html lang="en" className="light" data-theme="light">
+      <body className={`${manrope.variable} ${sora.variable} bg-background text-foreground`}>
         <Providers>{children}</Providers>
       </body>
     </html>
