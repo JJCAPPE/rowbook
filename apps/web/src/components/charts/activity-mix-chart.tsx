@@ -22,11 +22,13 @@ export const ActivityMixChart = ({ data }: ActivityMixChartProps) => {
           <Tooltip
             contentStyle={{
               borderRadius: 12,
-              borderColor: "#e2e8f0",
+              backgroundColor: "hsl(var(--heroui-content1))",
+              borderColor: "hsl(var(--heroui-default-200))",
+              color: "hsl(var(--heroui-foreground))",
             }}
             formatter={(value: number) => [`${value} min`, "Minutes"]}
           />
-          <Bar dataKey="minutes" fill="#14b8a6" radius={[8, 8, 0, 0]} />
+          <Bar dataKey="minutes" fill="hsl(var(--heroui-secondary))" radius={[8, 8, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

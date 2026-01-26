@@ -24,7 +24,7 @@ export const WeekSelector = ({ weeks, value, onChange, className }: WeekSelector
   return (
     <select
       className={cn(
-        "rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700",
+        "input-field rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-default-500",
         className,
       )}
       {...selectProps}

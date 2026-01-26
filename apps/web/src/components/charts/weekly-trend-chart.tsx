@@ -22,14 +22,16 @@ export const WeeklyTrendChart = ({ data }: WeeklyTrendChartProps) => (
         <Tooltip
           contentStyle={{
             borderRadius: 12,
-            borderColor: "#e2e8f0",
+            backgroundColor: "hsl(var(--heroui-content1))",
+            borderColor: "hsl(var(--heroui-default-200))",
+            color: "hsl(var(--heroui-foreground))",
           }}
           formatter={(value: number) => [`${value} min`, "Minutes"]}
         />
         <Line
           type="monotone"
           dataKey="minutes"
-          stroke="#2563eb"
+          stroke="hsl(var(--heroui-primary))"
           strokeWidth={3}
           dot={false}
         />

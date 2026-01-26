@@ -18,5 +18,5 @@ type ActivityIconProps = {
 
 export const ActivityIcon = ({ type, className }: ActivityIconProps) => {
   const Icon = iconMap[type] ?? Sparkles;
-  return <Icon className={cn("h-4 w-4 text-slate-600", className)} aria-hidden />;
+  return <Icon className={cn("h-4 w-4", className)} aria-hidden />;
 };

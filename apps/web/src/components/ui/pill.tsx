@@ -1,21 +1,28 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonProps as HeroButtonProps } from "@heroui/react";
+import { Button as HeroButton } from "@heroui/react";
 
-import { cn } from "@/lib/utils";
-
-type PillProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type PillProps = Omit<HeroButtonProps, "color" | "variant" | "size"> & {
   isActive?: boolean;
 };
 
-export const Pill = ({ className, isActive, type = "button", ...props }: PillProps) => (
-  <button
-    type={type}
-    className={cn(
-      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
-      isActive
-        ? "border-primary bg-blue-50 text-primary"
-        : "border-slate-200 bg-white text-slate-600",
-      className,
-    )}
-    {...props}
-  />
-);
+export const Pill = ({ className, isActive, type = "button", ...props }: PillProps) => {
+  const color: HeroButtonProps["color"] = isActive ? "primary" : "default";
+
+  return (
+    <HeroButton
+      type={type}
+      size="sm"
+      radius="full"
+      color={color}
+      variant={isActive ? "solid" : "bordered"}
+      className={[
+        "gap-2 text-xs font-semibold tracking-tight",
+        isActive ? "text-white" : "text-default-500",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    />
+  );
+};

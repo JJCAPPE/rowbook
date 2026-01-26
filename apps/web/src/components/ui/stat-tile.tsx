@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type StatTileProps = {
@@ -8,9 +9,9 @@ type StatTileProps = {
 };
 
 export const StatTile = ({ label, value, helper, className }: StatTileProps) => (
-  <div className={cn("card p-4", className)}>
+  <Card className={cn("p-4", className)}>
     <p className="stat-label">{label}</p>
     <p className="stat-value">{value}</p>
-    {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
-  </div>
+    {helper ? <p className="mt-1 text-xs text-default-500">{helper}</p> : null}
+  </Card>
 );

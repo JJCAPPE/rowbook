@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type EmptyStateProps = {
@@ -16,13 +17,13 @@ export const EmptyState = ({
   onAction,
   className,
 }: EmptyStateProps) => (
-  <div className={cn("card flex flex-col items-start gap-2 p-6", className)}>
-    <h3 className="text-lg font-semibold text-ink">{title}</h3>
-    <p className="text-sm text-slate-600">{description}</p>
+  <Card className={cn("flex flex-col items-start gap-3", className)}>
+    <h3 className="font-display text-lg font-semibold text-foreground">{title}</h3>
+    <p className="text-sm text-default-500">{description}</p>
     {actionLabel ? (
       <Button type="button" variant="outline" size="sm" onClick={onAction}>
         {actionLabel}
       </Button>
     ) : null}
-  </div>
+  </Card>
 );

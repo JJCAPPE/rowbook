@@ -201,15 +201,15 @@ export const LogWorkoutForm = () => {
           type="file"
           accept="image/*"
           {...register("proof")}
-          className="file:mr-4 file:rounded-full file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+          className="file:mr-4 file:rounded-full file:border-0 file:bg-content2/70 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-default-500 hover:file:bg-content2"
         />
         {errors.proof ? <p className="text-xs text-rose-500">{errors.proof.message}</p> : null}
         {previewUrl ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="rounded-2xl border border-divider/40 bg-content2/70 p-3">
             <img src={previewUrl} alt="Proof preview" className="h-40 w-full rounded-lg object-cover" />
           </div>
         ) : (
-          <p className="text-xs text-slate-500">Upload a photo or screenshot of your workout.</p>
+          <p className="text-xs text-default-500">Upload a photo or screenshot of your workout.</p>
         )}
       </div>
 
@@ -217,7 +217,7 @@ export const LogWorkoutForm = () => {
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Saving..." : "Submit workout"}
         </Button>
-        <p className="text-xs text-slate-500">Entries lock every Sunday at 6:00 PM ET.</p>
+        <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
       </div>
 
       {submitError ? (

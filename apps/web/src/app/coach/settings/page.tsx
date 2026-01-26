@@ -77,7 +77,7 @@ export default function CoachSettingsPage() {
         <Card className="space-y-4">
           <div>
             <p className="section-title">Required minutes</p>
-            <p className="text-sm text-slate-500">Applies to all active athletes.</p>
+            <p className="text-sm text-default-500">Applies to all active athletes.</p>
           </div>
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 space-y-2">
@@ -85,7 +85,7 @@ export default function CoachSettingsPage() {
               <Input
                 id="requiredMinutes"
                 type="number"
-                value={requiredMinutes}
+                value={String(requiredMinutes)}
                 min={0}
                 onChange={(event) => setRequiredMinutes(Number(event.target.value))}
               />
@@ -111,9 +111,9 @@ export default function CoachSettingsPage() {
         <Card className="space-y-4">
           <div>
             <p className="section-title">Week boundary</p>
-            <p className="text-sm text-slate-500">Sunday at 6:00 PM ET.</p>
+            <p className="text-sm text-default-500">Sunday at 6:00 PM ET.</p>
           </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="rounded-2xl border border-divider/40 bg-content2/70 p-4 text-sm text-default-500">
             Entries after 6:00 PM roll into the next week and proof images are kept for
             7 days after the cutoff.
           </div>
@@ -124,7 +124,7 @@ export default function CoachSettingsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="section-title">Exemptions</p>
-            <p className="text-sm text-slate-500">Athletes excluded from weekly totals.</p>
+            <p className="text-sm text-default-500">Athletes excluded from weekly totals.</p>
           </div>
           <Button
             variant="outline"
@@ -145,7 +145,7 @@ export default function CoachSettingsPage() {
           </Button>
         </div>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading weekly settings...</p>
+          <p className="text-sm text-default-500">Loading weekly settings...</p>
         ) : error ? (
           <p className="text-sm text-rose-500">Unable to load settings.</p>
         ) : data ? (
@@ -157,7 +157,7 @@ export default function CoachSettingsPage() {
                   id="exemptionAthlete"
                   value={selectedAthlete}
                   onChange={(event) => setSelectedAthlete(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  className="input-field"
                 >
                   <option value="">Select athlete</option>
                   {athletes.map((athlete) => (
@@ -181,11 +181,11 @@ export default function CoachSettingsPage() {
                 exemptions.map((exemption) => (
                   <div
                     key={exemption.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
                   >
                     <div>
-                      <p className="text-sm font-semibold text-ink">{exemption.athleteName}</p>
-                      <p className="text-xs text-slate-500">{exemption.reason ?? "No reason"}</p>
+                      <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
+                      <p className="text-xs text-default-500">{exemption.reason ?? "No reason"}</p>
                     </div>
                     <Button
                       variant="ghost"
@@ -204,7 +204,7 @@ export default function CoachSettingsPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">No exemptions yet.</p>
+                <p className="text-sm text-default-500">No exemptions yet.</p>
               )}
             </div>
           </>

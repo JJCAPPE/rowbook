@@ -1,43 +1,45 @@
-import type { ButtonHTMLAttributes } from "react";
-
-import { cn } from "@/lib/utils";
+import type { ButtonProps as HeroButtonProps } from "@heroui/react";
+import { Button as HeroButton } from "@heroui/react";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
-const variantStyles: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:bg-blue-700",
-  secondary: "bg-ink text-white hover:bg-slate-900",
-  ghost: "bg-transparent text-ink hover:bg-slate-100",
-  outline: "border border-slate-200 text-ink hover:bg-slate-50",
+const variantMap: Record<
+  ButtonVariant,
+  {
+    color: HeroButtonProps["color"];
+    variant: HeroButtonProps["variant"];
+  }
+> = {
+  primary: { color: "primary", variant: "solid" },
+  secondary: { color: "secondary", variant: "solid" },
+  ghost: { color: "primary", variant: "light" },
+  outline: { color: "primary", variant: "bordered" },
 };
 
-const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
-  lg: "px-5 py-3 text-base",
-};
-
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = Omit<HeroButtonProps, "color" | "variant" | "size"> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  download?: boolean | string;
 };
 
 export const Button = ({
   className,
   variant = "primary",
   size = "md",
-  type = "button",
+  type,
   ...props
-}: ButtonProps) => (
-  <button
-    type={type}
-    className={cn(
-      "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
-      variantStyles[variant],
-      sizeStyles[size],
-      className,
-    )}
-    {...props}
-  />
-);
+}: ButtonProps) => {
+  const resolvedProps = props.as ? props : { ...props, type: type ?? "button" };
+  const needsContrast = variant === "primary" || variant === "secondary";
+
+  return (
+    <HeroButton
+      size={size}
+      color={variantMap[variant].color}
+      variant={variantMap[variant].variant}
+      className={[needsContrast ? "text-white" : null, className].filter(Boolean).join(" ")}
+      {...resolvedProps}
+    />
+  );
+};

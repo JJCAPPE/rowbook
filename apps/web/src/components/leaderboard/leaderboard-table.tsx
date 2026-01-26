@@ -25,9 +25,9 @@ type LeaderboardTableProps = {
 };
 
 const statusStyles: Record<WeeklyStatus, string> = {
-  MET: "border-emerald-200 bg-emerald-50/60",
-  NOT_MET: "border-rose-200 bg-rose-50/60",
-  EXEMPT: "border-slate-200 bg-slate-50",
+  MET: "border-emerald-500/30 bg-emerald-500/10",
+  NOT_MET: "border-rose-500/30 bg-rose-500/10",
+  EXEMPT: "border-divider/40 bg-content1/60",
 };
 
 export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableProps) => {
@@ -60,10 +60,10 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
             )}
           >
             <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-slate-500">#{index + 1}</span>
+              <span className="text-sm font-semibold text-default-500">#{index + 1}</span>
               <div>
-                <p className="text-sm font-semibold text-ink">{row.name}</p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                <p className="text-sm font-semibold text-foreground">{row.name}</p>
+                <div className="mt-1 flex items-center gap-2 text-xs text-default-500">
                   <span>{row.totalMinutes} min</span>
                   <span>•</span>
                   <span>{row.hasHr ? "HR logged" : "No HR data"}</span>
@@ -71,7 +71,7 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 rounded-full bg-white/70 px-2 py-1">
+              <div className="flex items-center gap-1 rounded-full border border-divider/40 bg-content2/70 px-2 py-1">
                 {row.activityTypes.map((type) => (
                   <ActivityIcon key={`${row.id}-${type}`} type={type} />
                 ))}

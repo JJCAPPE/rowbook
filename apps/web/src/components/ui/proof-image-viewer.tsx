@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Maximize2, RotateCw } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type ProofImageViewerProps = {
@@ -19,50 +20,57 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <button
+      <Button
         type="button"
-        className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+        size="sm"
+        variant="ghost"
+        className="gap-2"
         onClick={() => setIsOpen(true)}
       >
         <Maximize2 className="h-4 w-4" />
         View proof
-      </button>
+      </Button>
 
       {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6">
-          <div className="relative w-full max-w-3xl rounded-2xl bg-white p-4 shadow-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/80 p-6">
+          <div className="relative w-full max-w-3xl rounded-2xl border border-divider/40 bg-content1/90 p-4 shadow-lg backdrop-blur">
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-semibold text-slate-700">Proof image</h3>
+              <h3 className="text-sm font-semibold text-default-600">Proof image</h3>
               <div className="flex items-center gap-2">
-                <a
+                <Button
+                  as="a"
                   href={src}
                   download
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
                 >
-                  <Download className="mr-1 inline-block h-4 w-4" />
+                  <Download className="h-4 w-4" />
                   Download
-                </a>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
                   onClick={rotate}
                 >
-                  <RotateCw className="mr-1 inline-block h-4 w-4" />
+                  <RotateCw className="h-4 w-4" />
                   Rotate
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white"
+                  size="sm"
                   onClick={() => {
                     setIsOpen(false);
                     setRotation(0);
                   }}
                 >
                   Close
-                </button>
+                </Button>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-center rounded-xl bg-slate-100 p-4">
+            <div className="mt-4 flex items-center justify-center rounded-xl border border-divider/40 bg-content2/70 p-4">
               <img
                 src={src}
                 alt={alt}

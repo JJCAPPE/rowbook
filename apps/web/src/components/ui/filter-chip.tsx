@@ -1,21 +1,28 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonProps as HeroButtonProps } from "@heroui/react";
+import { Button as HeroButton } from "@heroui/react";
 
-import { cn } from "@/lib/utils";
-
-type FilterChipProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type FilterChipProps = Omit<HeroButtonProps, "color" | "variant" | "size"> & {
   isActive?: boolean;
 };
 
-export const FilterChip = ({ className, isActive, type = "button", ...props }: FilterChipProps) => (
-  <button
-    type={type}
-    className={cn(
-      "rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide",
-      isActive
-        ? "border-ink bg-ink text-white"
-        : "border-slate-200 bg-white text-slate-600",
-      className,
-    )}
-    {...props}
-  />
-);
+export const FilterChip = ({ className, isActive, type = "button", ...props }: FilterChipProps) => {
+  const color: HeroButtonProps["color"] = isActive ? "secondary" : "default";
+
+  return (
+    <HeroButton
+      type={type}
+      size="sm"
+      radius="full"
+      variant={isActive ? "solid" : "bordered"}
+      color={color}
+      className={[
+        "text-xs font-semibold uppercase tracking-[0.2em]",
+        isActive ? "text-white" : "text-default-500",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    />
+  );
+};

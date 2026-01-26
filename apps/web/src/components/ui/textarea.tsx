@@ -1,9 +1,23 @@
-import type { TextareaHTMLAttributes } from "react";
+import { forwardRef } from "react";
+import type { TextAreaProps as HeroTextAreaProps } from "@heroui/react";
+import { Textarea as HeroTextarea } from "@heroui/react";
 
-import { cn } from "@/lib/utils";
+type TextareaProps = Omit<HeroTextAreaProps, "classNames"> & {
+  className?: string;
+  classNames?: HeroTextAreaProps["classNames"];
+};
 
-type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
-
-export const Textarea = ({ className, ...props }: TextareaProps) => (
-  <textarea className={cn("input-field min-h-[96px] resize-none", className)} {...props} />
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, classNames, ...props }, ref) => (
+    <HeroTextarea
+      {...props}
+      ref={ref}
+      variant="bordered"
+      radius="lg"
+      className={className}
+      classNames={classNames}
+    />
+  ),
 );
+
+Textarea.displayName = "Textarea";

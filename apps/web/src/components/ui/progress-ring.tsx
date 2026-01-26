@@ -17,7 +17,7 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#e2e8f0"
+          stroke="hsl(var(--heroui-default-200))"
           strokeWidth="12"
           fill="transparent"
         />
@@ -25,7 +25,7 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#2563eb"
+          stroke="hsl(var(--heroui-primary))"
           strokeWidth="12"
           fill="transparent"
           strokeLinecap="round"
@@ -34,8 +34,8 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
         />
       </svg>
       <div className="absolute text-center">
-        <p className="text-2xl font-semibold text-ink">{Math.round(progress * 100)}%</p>
-        <p className="text-xs text-slate-500">of goal</p>
+        <p className="text-2xl font-semibold text-foreground">{Math.round(progress * 100)}%</p>
+        <p className="text-xs text-default-500">of goal</p>
       </div>
     </div>
   );
