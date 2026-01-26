@@ -32,7 +32,7 @@ export default function AthleteHistoryPage() {
 
       <div className="grid gap-4">
         {isLoading ? (
-          <Card className="text-sm text-slate-500">Loading weekly history...</Card>
+          <Card className="text-sm text-default-500">Loading weekly history...</Card>
         ) : error ? (
           <Card className="text-sm text-rose-500">Unable to load history.</Card>
         ) : history.length > 0 ? (
@@ -41,10 +41,10 @@ export default function AthleteHistoryPage() {
             return (
               <Card key={weekKey} className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-ink">
+                  <p className="text-sm font-semibold text-foreground">
                     {formatWeekRange(week.weekStartAt, week.weekEndAt)}
                   </p>
-                  <p className="text-xs text-slate-500">{week.totalMinutes} total minutes</p>
+                  <p className="text-xs text-default-500">{week.totalMinutes} total minutes</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <WeeklyStatusBadge status={week.status} />
@@ -59,7 +59,7 @@ export default function AthleteHistoryPage() {
             );
           })
         ) : (
-          <Card className="text-sm text-slate-500">No weekly history yet.</Card>
+          <Card className="text-sm text-default-500">No weekly history yet.</Card>
         )}
       </div>
     </div>

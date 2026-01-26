@@ -17,7 +17,7 @@ export default function AthleteLeaderboardPage() {
 
       <Card>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading leaderboard...</p>
+          <p className="text-sm text-default-500">Loading leaderboard...</p>
         ) : error ? (
           <p className="text-sm text-rose-500">Unable to load leaderboard.</p>
         ) : (

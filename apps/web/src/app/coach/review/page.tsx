@@ -43,25 +43,25 @@ export default function CoachReviewQueuePage() {
 
       <Card className="space-y-4">
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading review queue...</p>
+          <p className="text-sm text-default-500">Loading review queue...</p>
         ) : error ? (
           <p className="text-sm text-rose-500">Unable to load review queue.</p>
         ) : entries.length ? (
           entries.map((entry) => (
-            <div key={entry.id} className="rounded-xl border border-slate-100 bg-white p-4">
+            <div key={entry.id} className="rounded-2xl border border-divider/40 bg-content2/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-ink">
+                  <p className="text-sm font-semibold text-foreground">
                     {entry.activityType} • {formatMinutes(entry.minutes)}
                   </p>
-                  <p className="text-xs text-slate-500">{formatFullDate(entry.date)}</p>
+                  <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
                   {entry.athleteName ? (
-                    <p className="text-xs text-slate-500">Athlete: {entry.athleteName}</p>
+                    <p className="text-xs text-default-500">Athlete: {entry.athleteName}</p>
                   ) : null}
                 </div>
                 <StatusBadge status={entry.validationStatus} />
               </div>
-              <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 text-xs text-default-500 sm:grid-cols-3">
                 <span>Distance: {formatDistance(entry.distance)}</span>
                 <span>Avg HR: {entry.avgHr ?? "—"}</span>
                 <span>Notes: {entry.notes ?? "—"}</span>
@@ -70,7 +70,7 @@ export default function CoachReviewQueuePage() {
                 {entry.proofUrl ? (
                   <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                 ) : (
-                  <p className="text-xs text-slate-500">Proof not available.</p>
+                  <p className="text-xs text-default-500">Proof not available.</p>
                 )}
                 <div className="flex items-center gap-2">
                   <Button
@@ -100,7 +100,7 @@ export default function CoachReviewQueuePage() {
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-500">Nothing to review right now.</p>
+          <p className="text-sm text-default-500">Nothing to review right now.</p>
         )}
       </Card>
     </div>

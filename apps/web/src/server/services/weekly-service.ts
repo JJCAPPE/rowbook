@@ -100,10 +100,11 @@ export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) =
 };
 
 export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
-  const [aggregatesResult, entriesResult, requirement] = await Promise.all([
+  const [aggregatesResult, entriesResult, requirement, exemptionsResult] = await Promise.all([
     getLeaderboardForWeek(teamId, weekStartAt),
     listEntriesByTeamWeek(teamId, weekStartAt),
     getWeeklyRequirement(teamId, weekStartAt),
+    listExemptionsByWeek(weekStartAt, teamId),
   ]);
   const aggregates = aggregatesResult as Array<{
     athleteId: string;
@@ -117,6 +118,8 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     athleteId: string;
     validationStatus: ValidationStatus;
   }>;
+  const exemptions = exemptionsResult as Array<{ athleteId: string }>;
+  const exemptionsSet = new Set(exemptions.map((exemption) => exemption.athleteId));
 
   const entriesByAthlete = new Map<string, typeof entries>();
   for (const entry of entries) {
@@ -132,10 +135,12 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     const missingProof = athleteEntries.some(
       (entry) => entry.validationStatus !== "VERIFIED",
     );
-    const missingMinutes =
-      requiredMinutes > 0 &&
-      aggregate.totalMinutes < requiredMinutes &&
-      aggregate.status !== "EXEMPT";
+    const status: WeeklyStatus = exemptionsSet.has(aggregate.athleteId)
+      ? "EXEMPT"
+      : aggregate.totalMinutes >= requiredMinutes
+        ? "MET"
+        : "NOT_MET";
+    const missingMinutes = requiredMinutes > 0 && status === "NOT_MET";
 
     return {
       id: aggregate.athleteId,
@@ -145,7 +150,7 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
           ? aggregate.athlete?.name ?? aggregate.athlete?.email ?? "Athlete"
           : "Athlete",
       totalMinutes: aggregate.totalMinutes,
-      status: aggregate.status,
+      status,
       activityTypes: aggregate.activityTypes,
       hasHr: aggregate.hasHrData,
       missingProof,

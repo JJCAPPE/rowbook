@@ -57,41 +57,41 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="section-title">Recent entries</p>
-          <span className="text-xs text-slate-500">Proof images retained 7 days</span>
+          <span className="text-xs text-default-500">Proof images retained 7 days</span>
         </div>
         <div className="grid gap-4">
           {isLoading ? (
-            <p className="text-sm text-slate-500">Loading athlete entries...</p>
+            <p className="text-sm text-default-500">Loading athlete entries...</p>
           ) : error ? (
             <p className="text-sm text-rose-500">Unable to load athlete detail.</p>
           ) : entries.length ? (
             entries.map((entry) => (
-              <div key={entry.id} className="rounded-xl border border-slate-100 bg-white p-4">
+              <div key={entry.id} className="rounded-2xl border border-divider/40 bg-content2/70 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-ink">
+                    <p className="text-sm font-semibold text-foreground">
                       {entry.activityType} • {formatMinutes(entry.minutes)}
                     </p>
-                    <p className="text-xs text-slate-500">{formatFullDate(entry.date)}</p>
+                    <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
                   </div>
                   <StatusBadge status={entry.validationStatus} />
                 </div>
-                <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                <div className="mt-3 grid gap-2 text-xs text-default-500 sm:grid-cols-3">
                   <span>Distance: {formatDistance(entry.distance)}</span>
                   <span>Avg HR: {entry.avgHr ?? "—"}</span>
                   <span>Notes: {entry.notes ?? "—"}</span>
                 </div>
                 <div className="mt-3">
                   {entry.proofUrl ? (
-                    <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
-                  ) : (
-                    <p className="text-xs text-slate-500">Proof not available.</p>
-                  )}
+                  <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
+                ) : (
+                  <p className="text-xs text-default-500">Proof not available.</p>
+                )}
                 </div>
               </div>
             ))
           ) : (
-            <p className="text-sm text-slate-500">No entries yet.</p>
+            <p className="text-sm text-default-500">No entries yet.</p>
           )}
         </div>
       </Card>

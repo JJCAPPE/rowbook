@@ -6,6 +6,7 @@ import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
 import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import { MiniTrendChart } from "@/components/ui/mini-trend-chart";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatTile } from "@/components/ui/stat-tile";
@@ -48,7 +49,7 @@ export default function AthleteDashboardPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Dashboard" subtitle="Loading your weekly stats..." />
-        <Card className="text-sm text-slate-500">Fetching dashboard...</Card>
+        <Card className="text-sm text-default-500">Fetching dashboard...</Card>
       </div>
     );
   }
@@ -72,12 +73,9 @@ export default function AthleteDashboardPage() {
             : "Weekly requirement has not been set yet."
         }
         actions={
-          <Link
-            href="/athlete/log"
-            className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
+          <Button as={Link} href="/athlete/log">
             Log workout
-          </Link>
+          </Button>
         }
       />
 
@@ -86,10 +84,10 @@ export default function AthleteDashboardPage() {
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div className="space-y-2">
               <p className="section-title">Weekly progress</p>
-              <p className="text-2xl font-semibold text-ink">
+              <p className="text-2xl font-semibold text-foreground">
                 {totalMinutes} / {requiredMinutes} min
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-default-500">
                 {requiredMinutes === 0
                   ? "Waiting for a weekly requirement."
                   : remainingMinutes > 0
@@ -117,7 +115,7 @@ export default function AthleteDashboardPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="section-title">Recent entries</p>
-            <p className="text-sm text-slate-500">Latest workouts with proof status.</p>
+            <p className="text-sm text-default-500">Latest workouts with proof status.</p>
           </div>
           <Link className="text-sm font-semibold text-primary" href="/athlete/history">
             View all
@@ -128,17 +126,17 @@ export default function AthleteDashboardPage() {
           {entries.map((entry) => (
             <div
               key={entry.id}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-100 bg-white px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
             >
               <div className="flex items-center gap-3">
-                <div className="rounded-full bg-slate-100 p-2">
+                <div className="rounded-full border border-divider/40 bg-content2/70 p-2">
                   <ActivityIcon type={entry.activityType} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-ink">
+                  <p className="text-sm font-semibold text-foreground">
                     {formatMinutes(entry.minutes)} {ACTIVITY_TYPE_LABELS[entry.activityType]}
                   </p>
-                  <p className="text-xs text-slate-500">{formatFullDate(entry.date)}</p>
+                  <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
                 </div>
               </div>
               <StatusBadge status={entry.validationStatus} />
