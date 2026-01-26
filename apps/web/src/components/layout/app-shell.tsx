@@ -26,7 +26,7 @@ export const AppShell = ({
   activeWeekKey,
   children,
 }: AppShellProps) => (
-  <div className="min-h-screen bg-slate-50">
+  <div className="min-h-screen bg-background">
     <div className="flex min-h-screen">
       <SidebarNav items={navItems} />
       <div className="flex flex-1 flex-col">
@@ -36,7 +36,7 @@ export const AppShell = ({
           weekOptions={weekOptions}
           activeWeekKey={activeWeekKey}
         />
-        <main className={cn("flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-12")}>
+        <main className={cn("flex-1 px-4 pb-24 pt-8 md:px-10 md:pb-12")}>
           {children}
         </main>
       </div>

@@ -24,15 +24,15 @@ export const TopBar = ({
 }: TopBarProps) => (
   <div
     className={cn(
-      "sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-slate-100 bg-white/90 px-4 py-4 backdrop-blur md:px-8",
+      "sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-divider/40 bg-content1/80 px-4 py-4 backdrop-blur-xl md:px-8",
       className,
     )}
   >
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-default-500">
         {title}
       </p>
-      <p className="text-lg font-semibold text-ink">Week overview</p>
+      <p className="font-display text-lg font-semibold text-foreground">Week overview</p>
     </div>
     <div className="flex items-center gap-4">
       {weekOptions?.length ? (

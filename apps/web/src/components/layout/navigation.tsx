@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Chip } from "@heroui/react";
 
 import { cn } from "@/lib/utils";
 
@@ -25,10 +26,20 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
   const pathname = usePathname();
 
   return (
-    <nav className={cn("hidden w-64 flex-col border-r border-slate-100 bg-white p-6 md:flex", className)}>
-      <Link href="/" className="text-xl font-semibold text-ink">
-        Rowbook
-      </Link>
+    <nav
+      className={cn(
+        "hidden w-64 flex-col border-r border-divider/40 bg-content1/80 p-6 backdrop-blur-xl md:flex",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <Link href="/" className="font-display text-xl font-semibold text-foreground">
+          Rowbook
+        </Link>
+        <Chip size="sm" variant="flat" color="secondary" className="text-[0.6rem]">
+          v0.1
+        </Chip>
+      </div>
       <div className="mt-8 flex flex-1 flex-col gap-2">
         {items.map((item) => {
           const active = isActivePath(pathname, item.href);
@@ -40,8 +51,8 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition",
                 active
-                  ? "bg-blue-50 text-primary"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-ink",
+                  ? "border border-divider/60 bg-content2/80 text-foreground shadow-sm"
+                  : "text-default-500 hover:bg-content2/60 hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -50,7 +61,7 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
           );
         })}
       </div>
-      <div className="mt-auto text-xs text-slate-400">
+      <div className="mt-auto text-xs text-default-500">
         Sunday cutoff at 6:00 PM ET
       </div>
     </nav>
@@ -63,7 +74,7 @@ export const BottomNav = ({ items, className }: NavigationProps) => {
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white px-4 py-3 md:hidden",
+        "fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-divider/40 bg-content1/80 px-4 py-3 backdrop-blur-xl md:hidden",
         className,
       )}
     >
@@ -75,8 +86,8 @@ export const BottomNav = ({ items, className }: NavigationProps) => {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex flex-col items-center gap-1 text-xs font-semibold",
-              active ? "text-primary" : "text-slate-500",
+              "flex flex-col items-center gap-1 text-xs font-semibold uppercase tracking-[0.18em]",
+              active ? "text-primary" : "text-default-500",
             )}
           >
             <Icon className="h-4 w-4" />
