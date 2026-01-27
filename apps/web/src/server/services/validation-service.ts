@@ -2,6 +2,8 @@ import { ValidationStatus } from "@rowbook/shared";
 import { getTrainingEntryById, updateTrainingEntry } from "@/server/repositories/training-entries";
 import { updateProofImage } from "@/server/repositories/proof-images";
 import { createAuditLog } from "@/server/repositories/audit-logs";
+import { getTeamIdForAthlete } from "@/server/repositories/users";
+import { aggregateWeekForTeam } from "@/server/services/weekly-service";
 
 export const overrideValidationStatus = async (
   actorId: string,
@@ -30,6 +32,11 @@ export const overrideValidationStatus = async (
     before: entry,
     after: updated,
   });
+
+  const teamId = await getTeamIdForAthlete(entry.athleteId);
+  if (teamId) {
+    await aggregateWeekForTeam(teamId, entry.weekStartAt);
+  }
 
   return updated;
 };

@@ -19,6 +19,7 @@ const computeAggregate = (entries: Array<{
   activityType: ActivityType;
   minutes: number;
   avgHr: number | null;
+  validationStatus: ValidationStatus;
 }>) => {
   const totals = new Map<
     string,
@@ -26,6 +27,9 @@ const computeAggregate = (entries: Array<{
   >();
 
   for (const entry of entries) {
+    if (entry.validationStatus === "REJECTED") {
+      continue;
+    }
     const current =
       totals.get(entry.athleteId) ?? {
         totalMinutes: 0,
@@ -56,6 +60,7 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
     activityType: ActivityType;
     minutes: number;
     avgHr: number | null;
+    validationStatus: ValidationStatus;
   }>;
   const exemptions = exemptionsResult as Array<{ athleteId: string }>;
 

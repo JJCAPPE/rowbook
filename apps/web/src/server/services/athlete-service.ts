@@ -1,4 +1,4 @@
-import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange } from "@rowbook/shared";
+import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus } from "@rowbook/shared";
 import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
@@ -23,11 +23,18 @@ const attachProofUrls = async <T extends { proofImageId: string }>(
     }),
   );
 
-const computeTotals = (entries: Array<{ minutes: number; avgHr: number | null }>) => {
+const computeTotals = (entries: Array<{
+  minutes: number;
+  avgHr: number | null;
+  validationStatus: ValidationStatus;
+}>) => {
   let totalMinutes = 0;
   let hasHrData = false;
 
   for (const entry of entries) {
+    if (entry.validationStatus === "REJECTED") {
+      continue;
+    }
     totalMinutes += entry.minutes;
     if (entry.avgHr !== null && entry.avgHr !== undefined) {
       hasHrData = true;
@@ -125,6 +132,9 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
       let hasHrData = false;
 
       for (const entry of weekEntries) {
+        if (entry.validationStatus === "REJECTED") {
+          continue;
+        }
         totalMinutes += entry.minutes;
         activityTypes.add(entry.activityType);
         if (entry.avgHr !== null && entry.avgHr !== undefined) {
@@ -166,15 +176,22 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
   )) as TrainingEntry[];
   const entriesWithProof = await attachProofUrls(entries, athleteId);
 
-  const totalMinutes = entries.reduce((sum, entry) => sum + entry.minutes, 0);
-  const totalDistanceKm = entries.reduce((sum, entry) => sum + entry.distance, 0);
+  const totalMinutes = entries.reduce(
+    (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.minutes),
+    0,
+  );
+  const totalDistanceKm = entries.reduce(
+    (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.distance),
+    0,
+  );
+  const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
 
   return {
     weekStartAt: normalizedWeekStart,
     weekEndAt,
     totalMinutes,
     totalDistanceKm,
-    sessions: entries.length,
+    sessions: countedEntries.length,
     entries: entriesWithProof,
   };
 };

@@ -34,10 +34,11 @@ export default function AthleteDashboardPage() {
   const { data: history } = trpc.athlete.getHistory.useQuery();
 
   const entries: TrainingEntry[] = dashboard?.entries ?? [];
+  const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
   const requiredMinutes = dashboard?.requiredMinutes ?? 0;
   const totalMinutes = dashboard?.totalMinutes ?? 0;
-  const totalDistanceKm = entries.reduce((sum, entry) => sum + entry.distance, 0);
-  const sessions = entries.length;
+  const totalDistanceKm = countedEntries.reduce((sum, entry) => sum + entry.distance, 0);
+  const sessions = countedEntries.length;
   const hasHr = dashboard?.hasHrData ?? false;
   const goalMinutes = requiredMinutes > 0 ? requiredMinutes : 1;
   const remainingMinutes =
