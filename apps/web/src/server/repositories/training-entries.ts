@@ -19,17 +19,20 @@ export const createTrainingEntry = (data: {
     data,
   });
 
-export const updateTrainingEntry = (id: string, data: Partial<{
-  activityType: ActivityType;
-  date: Date;
-  minutes: number;
-  distance: number;
-  avgHr: number | null;
-  notes: string | null;
-  validationStatus: ValidationStatus;
-  entryStatus: EntryStatus;
-  lockedAt: Date | null;
-}>) =>
+export const updateTrainingEntry = (
+  id: string,
+  data: Partial<{
+    activityType: ActivityType;
+    date: Date;
+    minutes: number;
+    distance: number;
+    avgHr: number | null;
+    notes: string | null;
+    validationStatus: ValidationStatus;
+    entryStatus: EntryStatus;
+    lockedAt: Date | null;
+  }>,
+) =>
   prisma.trainingEntry.update({
     where: { id },
     data,
@@ -61,7 +64,10 @@ export const updateTrainingEntriesByProofImageId = (
     data,
   });
 
-export const listEntriesByAthleteWeek = (athleteId: string, weekStartAt: Date) =>
+export const listEntriesByAthleteWeek = (
+  athleteId: string,
+  weekStartAt: Date,
+) =>
   prisma.trainingEntry.findMany({
     where: { athleteId, weekStartAt },
     orderBy: { date: "desc" },
@@ -82,7 +88,10 @@ export const listEntriesByAthlete = (athleteId: string) =>
     orderBy: { date: "desc" },
   });
 
-export const listEntriesByAthleteSinceWeekStart = (athleteId: string, weekStartAt: Date) =>
+export const listEntriesByAthleteSinceWeekStart = (
+  athleteId: string,
+  weekStartAt: Date,
+) =>
   prisma.trainingEntry.findMany({
     where: {
       athleteId,
