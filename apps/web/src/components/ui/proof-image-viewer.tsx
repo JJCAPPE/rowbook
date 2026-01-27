@@ -46,7 +46,6 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
                   className="gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Download
                 </Button>
                 <Button
                   type="button"
@@ -56,7 +55,6 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
                   onClick={rotate}
                 >
                   <RotateCw className="h-4 w-4" />
-                  Rotate
                 </Button>
                 <Button
                   type="button"
@@ -66,7 +64,6 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
                     setRotation(0);
                   }}
                 >
-                  Close
                 </Button>
               </div>
             </div>
