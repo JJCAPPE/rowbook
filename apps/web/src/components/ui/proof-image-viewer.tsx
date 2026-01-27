@@ -64,6 +64,7 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
                     setRotation(0);
                   }}
                 >
+                  Close
                 </Button>
               </div>
             </div>
@@ -71,7 +72,7 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
               <img
                 src={src}
                 alt={alt}
-                className="max-h-[70vh] w-auto rounded-lg object-contain"
+                className="max-h-[35vh] w-auto rounded-lg object-contain"
                 style={{ transform: `rotate(${rotation}deg)` }}
               />
             </div>

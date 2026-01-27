@@ -77,7 +77,7 @@ export default function CoachReviewQueuePage() {
         </FilterChip>
       </div>
 
-      <Card className="space-y-4">
+      <Card className="space-y-3 p-4">
         {isLoading ? (
           <p className="text-sm text-default-500">Loading review queue...</p>
         ) : error ? (
@@ -101,18 +101,26 @@ export default function CoachReviewQueuePage() {
               && entry.validationStatus === "REJECTED";
 
             return (
-              <div key={entry.id} className="rounded-2xl border border-divider/40 bg-content2/70 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+              <div
+                key={entry.id}
+                className="rounded-2xl border border-divider/40 bg-content2/70 p-3 sm:p-4"
+              >
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                  <div className="space-y-1">
                     <p className="text-sm font-semibold text-foreground">
                       {entry.activityType} • {formatMinutes(entry.minutes)}
                     </p>
-                    <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
-                    {entry.athleteName ? (
-                      <p className="text-xs text-default-500">Athlete: {entry.athleteName}</p>
-                    ) : null}
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-default-500">
+                      <span>{formatFullDate(entry.date)}</span>
+                      {entry.athleteName ? (
+                        <>
+                          <span className="text-default-400">•</span>
+                          <span>Athlete: {entry.athleteName}</span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex flex-wrap items-start gap-2 md:justify-end">
                     {isProcessing ? (
                       <Badge tone="pending">Supabase OCR job running</Badge>
                     ) : null}
@@ -127,18 +135,20 @@ export default function CoachReviewQueuePage() {
                     <StatusBadge status={entry.validationStatus} />
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 text-xs text-default-500 sm:grid-cols-3">
-                  <span>Distance: {formatDistance(entry.distance)}</span>
-                  <span>Avg HR: {entry.avgHr ?? "—"}</span>
-                  <span>Notes: {entry.notes ?? "—"}</span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-                  {entry.proofUrl ? (
-                    <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
-                  ) : (
-                    <p className="text-xs text-default-500">Proof not available.</p>
-                  )}
-                  <div className="flex items-center gap-2">
+                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <div className="space-y-2">
+                    <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-3">
+                      <span>Distance: {formatDistance(entry.distance)}</span>
+                      <span>Avg HR: {entry.avgHr ?? "—"}</span>
+                      <span>Notes: {entry.notes ?? "—"}</span>
+                    </div>
+                    {entry.proofUrl ? (
+                      <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
+                    ) : (
+                      <p className="text-xs text-default-500">Proof not available.</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 md:justify-end">
                     <Button
                       variant="outline"
                       size="sm"

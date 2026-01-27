@@ -97,15 +97,36 @@ export const listEntriesForReview = (
   teamId: string,
   weekStartAt: Date,
   statuses: ValidationStatus[],
-) =>
-  prisma.trainingEntry.findMany({
+  options?: { includeReviewed?: boolean },
+) => {
+  const orFilters = [
+    {
+      validationStatus: { in: statuses },
+    },
+  ];
+
+  if (options?.includeReviewed) {
+    orFilters.push({
+      validationStatus: { in: ["VERIFIED", "REJECTED"] as ValidationStatus[] },
+      proofImage: {
+        reviewedById: null,
+        proofExtractionJob: { status: "COMPLETED" },
+      },
+    });
+  }
+
+  return prisma.trainingEntry.findMany({
     where: {
       weekStartAt,
-      validationStatus: { in: statuses },
       athlete: {
         athleteProfile: { teamId },
       },
+      OR: orFilters,
     },
-    include: { athlete: true },
+    include: {
+      athlete: true,
+      proofImage: { include: { proofExtractionJob: true } },
+    },
     orderBy: { date: "desc" },
   });
+};

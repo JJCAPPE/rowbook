@@ -1,6 +1,7 @@
 import {
   ActivityType,
   PENDING_PROOF_STATUSES,
+  ProofExtractionStatus,
   ValidationStatus,
   getWeekEndAt,
   getWeekRange,
@@ -39,6 +40,10 @@ type ReviewEntry = {
   date: Date;
   validationStatus: ValidationStatus;
   athlete: { name: string | null; email: string };
+  proofImage: {
+    reviewedById: string | null;
+    proofExtractionJob: { status: ProofExtractionStatus; lastError: string | null } | null;
+  };
 };
 
 const attachProofUrls = async <T extends { proofImageId: string }>(
@@ -147,15 +152,18 @@ export const getReviewQueue = async (
     team.id,
     week,
     Array.from(PENDING_PROOF_STATUSES),
+    { includeReviewed: true },
   )) as ReviewEntry[];
   const entriesWithProof = await attachProofUrls(entries, actorId, true);
 
   return {
     teamId: team.id,
     weekStartAt: week,
-    entries: entriesWithProof.map(({ athlete, ...rest }) => ({
+    entries: entriesWithProof.map(({ athlete, proofImage, ...rest }) => ({
       ...rest,
       athleteName: athlete?.name ?? athlete?.email ?? null,
+      proofExtractionStatus: proofImage?.proofExtractionJob?.status ?? null,
+      proofReviewedById: proofImage?.reviewedById ?? null,
     })),
   };
 };

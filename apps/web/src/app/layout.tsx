@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Manrope, Sora } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Providers } from "./providers";
 
 export const metadata = {
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="en" className="light" data-theme="light">
       <body className={`${manrope.variable} ${sora.variable} bg-background text-foreground`}>
         <Providers>{children}</Providers>
+        <SpeedInsights />
       </body>
     </html>
   );
