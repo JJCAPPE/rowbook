@@ -98,6 +98,7 @@ export const LogWorkoutForm = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [proofInputKey, setProofInputKey] = useState(0);
   const today = getTodayString();
   const {
     register,
@@ -180,7 +181,11 @@ export const LogWorkoutForm = () => {
         utils.coach.getTeamOverview.invalidate(),
       ]);
 
-      reset(defaultValues);
+      reset({ ...defaultValues, date: getTodayString() });
+      setPreviewUrl(null);
+      setIsUploading(false);
+      setUploadProgress(0);
+      setProofInputKey((current) => current + 1);
       setSubmitted(true);
     } catch (error) {
       if (error instanceof Error) {
@@ -216,6 +221,7 @@ export const LogWorkoutForm = () => {
       <div className="space-y-3">
         <Label htmlFor="proof">Proof image</Label>
         <Input
+          key={proofInputKey}
           id="proof"
           type="file"
           accept="image/*"
