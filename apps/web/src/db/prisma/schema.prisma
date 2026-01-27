@@ -158,6 +158,8 @@ model TrainingEntry {
   minutes          Int
   distance         Float
   avgHr            Int?
+  avgPace          Float?           // Pace in seconds per unit (500m for erg, 1km for bike/run, 100m for swim)
+  avgWatts         Float?           // Average watts (Concept2 only: ERG and CYCLE)
   notes            String?
   proofImageId     String
   validationStatus ValidationStatus @default(NOT_CHECKED)
