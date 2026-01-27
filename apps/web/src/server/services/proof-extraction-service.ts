@@ -212,15 +212,114 @@ const parseAvgHrFromText = (text: string) => {
     }
   }
 
+  const rateMatch = text.match(/\br\s*([0-9]{2,3})\b/i);
+  if (rateMatch) {
+    const value = Number(rateMatch[1]);
+    if (Number.isFinite(value) && value >= 40 && value <= 230) {
+      return value;
+    }
+  }
+
   return null;
 };
 
+const parseDurationToMinutes = (raw: string) => {
+  const cleaned = raw.replace(/,/g, ".").trim();
+  const parts = cleaned.split(":").map((part) => part.trim());
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const numbers = parts.map((value) => Number(value));
+  if (numbers.some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  if (numbers.length === 3) {
+    const [hours, minutes, seconds] = numbers;
+    return Math.round((hours * 3600 + minutes * 60 + seconds) / 60);
+  }
+
+  if (numbers.length === 2) {
+    const [minutes, seconds] = numbers;
+    return Math.round((minutes * 60 + seconds) / 60);
+  }
+
+  return null;
+};
+
+const parseConcept2TotalTimeMinutes = (text: string) => {
+  const totalMatch = text.match(
+    /total\s*time[:\s]*([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?(?:[.,][0-9])?)/i,
+  );
+  if (!totalMatch) {
+    return null;
+  }
+  return parseDurationToMinutes(totalMatch[1]);
+};
+
+const parseConcept2MetersFromLines = (lines: string[]) => {
+  const headerIndex = lines.findIndex((line) => /meter/i.test(line));
+  const candidateLines =
+    headerIndex >= 0 ? lines.slice(headerIndex + 1, headerIndex + 8) : lines;
+
+  const candidates: number[] = [];
+  for (const line of candidateLines) {
+    const numbers = line.match(/\b\d{4,6}\b/g);
+    if (!numbers) {
+      continue;
+    }
+    for (const value of numbers) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 400) {
+        candidates.push(parsed);
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return Math.max(...candidates);
+};
+
+const detectConcept2 = (rawText: string) =>
+  /concept\s*2|pm5|view detail|total time/i.test(rawText);
+
+const extractConcept2Fields = (rawText: string) => {
+  if (!detectConcept2(rawText)) {
+    return null;
+  }
+
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const normalized = lines.join(" ");
+
+  const date = parseDateFromText(normalized);
+  const minutes = parseConcept2TotalTimeMinutes(normalized);
+  const meters = parseConcept2MetersFromLines(lines);
+  const distance = meters !== null ? meters / 1000 : null;
+  const avgHr = parseAvgHrFromText(normalized);
+
+  return { date, minutes, distance, avgHr };
+};
+
 export const extractProofFieldsFromText = (rawText: string) => {
-  const text = rawText.replace(/\s+/g, " ").trim();
-  const date = parseDateFromText(text);
-  const minutes = parseMinutesFromText(text);
-  const distance = parseDistanceKmFromText(text);
-  const avgHr = parseAvgHrFromText(text);
+  const normalizedText = rawText.replace(/\s+/g, " ").trim();
+  const baseDate = parseDateFromText(normalizedText);
+  const baseMinutes = parseMinutesFromText(normalizedText);
+  const baseDistance = parseDistanceKmFromText(normalizedText);
+  const baseAvgHr = parseAvgHrFromText(normalizedText);
+
+  const concept2 = extractConcept2Fields(rawText);
+  const date = concept2?.date ?? baseDate;
+  const minutes = concept2 ? concept2.minutes : baseMinutes;
+  const distance = concept2 ? concept2.distance : baseDistance;
+  const avgHr = concept2?.avgHr ?? baseAvgHr;
 
   const extractedFields: ProofExtractedFields = {
     date: date ?? null,

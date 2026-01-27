@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
 import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
+import { Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { formatFullDate, formatMinutes, formatDistance, formatWeekRange } from "
 import { trpc } from "@/lib/trpc";
 
 export default function AthleteDashboardPage() {
+  const utils = trpc.useUtils();
   const searchParams = useSearchParams();
   const weekStartParam = searchParams.get("weekStartAt");
   const weekStartAt = useMemo(() => {
@@ -32,6 +34,16 @@ export default function AthleteDashboardPage() {
     weekStartAt ? { weekStartAt } : undefined,
   );
   const { data: history } = trpc.athlete.getHistory.useQuery();
+  const { mutateAsync: deleteEntry, isLoading: isDeleting } =
+    trpc.athlete.deleteEntry.useMutation({
+      onSuccess: async () => {
+        await utils.athlete.getDashboard.invalidate();
+        await utils.athlete.getHistory.invalidate();
+        await utils.athlete.getHistoryWithEntries.invalidate();
+        await utils.athlete.getWeekDetail.invalidate();
+        await utils.athlete.getLeaderboard.invalidate();
+      },
+    });
 
   const entries: TrainingEntry[] = dashboard?.entries ?? [];
   const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
@@ -58,6 +70,14 @@ export default function AthleteDashboardPage() {
         minutes: week.totalMinutes,
       }));
   }, [history]);
+
+  const handleDelete = async (entryId: string) => {
+    const confirmed = window.confirm("Remove this entry? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+    await deleteEntry({ id: entryId });
+  };
 
   if (isLoading) {
     return (
@@ -153,7 +173,20 @@ export default function AthleteDashboardPage() {
                   <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
                 </div>
               </div>
-              <StatusBadge status={entry.validationStatus} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={entry.validationStatus} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  aria-label="Delete entry"
+                  className="h-8 w-8 min-w-0 text-default-500"
+                  disabled={isDeleting}
+                  onClick={() => handleDelete(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>

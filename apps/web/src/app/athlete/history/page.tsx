@@ -4,9 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
 import type { ActivityType } from "@rowbook/shared";
+import { Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { ActivityIcon } from "@/components/ui/activity-icon";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -18,9 +20,20 @@ import { getWeekKey } from "@/lib/week-options";
 type HistoryFilter = "ALL" | ActivityType | "HR_PRESENT" | "MIN_30";
 
 export default function AthleteHistoryPage() {
+  const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
   const history = data ?? [];
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>("ALL");
+  const { mutateAsync: deleteEntry, isLoading: isDeleting } =
+    trpc.athlete.deleteEntry.useMutation({
+      onSuccess: async () => {
+        await utils.athlete.getDashboard.invalidate();
+        await utils.athlete.getHistory.invalidate();
+        await utils.athlete.getHistoryWithEntries.invalidate();
+        await utils.athlete.getWeekDetail.invalidate();
+        await utils.athlete.getLeaderboard.invalidate();
+      },
+    });
 
   const filteredHistory = useMemo(
     () =>
@@ -62,6 +75,14 @@ export default function AthleteHistoryPage() {
       }),
     [activeFilter, history],
   );
+
+  const handleDelete = async (entryId: string) => {
+    const confirmed = window.confirm("Remove this entry? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+    await deleteEntry({ id: entryId });
+  };
 
   return (
     <div className="space-y-6">
@@ -140,7 +161,20 @@ export default function AthleteHistoryPage() {
                           </p>
                         </div>
                       </div>
-                      <StatusBadge status={entry.validationStatus} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={entry.validationStatus} />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          isIconOnly
+                          aria-label="Delete entry"
+                          className="h-8 w-8 min-w-0 text-default-500"
+                          disabled={isDeleting}
+                          onClick={() => handleDelete(entry.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
