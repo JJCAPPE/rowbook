@@ -30,3 +30,12 @@ export const deleteFile = async (path: string) => {
     throw new Error(error.message);
   }
 };
+
+export const downloadFile = async (path: string) => {
+  const { data, error } = await supabaseAdmin.storage.from(storageBucket).download(path);
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to download proof image.");
+  }
+
+  return data;
+};

@@ -1,5 +1,5 @@
 import { prisma } from "@/db/client";
-import { ValidationStatus } from "@rowbook/shared";
+import { PENDING_PROOF_STATUSES, ValidationStatus } from "@rowbook/shared";
 import { Prisma } from "@prisma/client";
 
 export const createProofImage = (data: {
@@ -15,6 +15,18 @@ export const createProofImage = (data: {
 export const updateProofImage = (id: string, data: Prisma.ProofImageUncheckedUpdateInput) =>
   prisma.proofImage.update({
     where: { id },
+    data,
+  });
+
+export const updateProofImageIfPending = (
+  id: string,
+  data: Prisma.ProofImageUncheckedUpdateInput,
+) =>
+  prisma.proofImage.updateMany({
+    where: {
+      id,
+      validationStatus: { in: Array.from(PENDING_PROOF_STATUSES) },
+    },
     data,
   });
 

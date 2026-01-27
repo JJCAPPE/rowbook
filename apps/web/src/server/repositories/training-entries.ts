@@ -44,6 +44,23 @@ export const getTrainingEntryById = (id: string) =>
     include: { proofImage: true },
   });
 
+export const getTrainingEntryByProofImageId = (proofImageId: string) =>
+  prisma.trainingEntry.findFirst({
+    where: { proofImageId },
+  });
+
+export const updateTrainingEntriesByProofImageId = (
+  proofImageId: string,
+  data: Partial<{
+    validationStatus: ValidationStatus;
+    entryStatus: EntryStatus;
+  }>,
+) =>
+  prisma.trainingEntry.updateMany({
+    where: { proofImageId },
+    data,
+  });
+
 export const listEntriesByAthleteWeek = (athleteId: string, weekStartAt: Date) =>
   prisma.trainingEntry.findMany({
     where: { athleteId, weekStartAt },
