@@ -45,15 +45,38 @@ export default function CoachReviewQueuePage() {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }, [weekStartParam]);
 
-  const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery(
-    weekStartAt ? { weekStartAt } : undefined,
-  );
+  const reviewQueueInput = weekStartAt ? { weekStartAt } : undefined;
+  const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery(reviewQueueInput);
   const entries: ReviewEntry[] = data?.entries ?? [];
   const { mutateAsync: overrideStatus, isLoading: isUpdating } =
     trpc.coach.overrideValidationStatus.useMutation({
+      onMutate: async ({ entryId }) => {
+        await utils.coach.getReviewQueue.cancel(reviewQueueInput);
+        const previous = utils.coach.getReviewQueue.getData(reviewQueueInput);
+
+        utils.coach.getReviewQueue.setData(reviewQueueInput, (current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            entries: current.entries.filter((entry) => entry.id !== entryId),
+          };
+        });
+
+        return { previous };
+      },
+      onError: (_error, _variables, context) => {
+        if (context?.previous) {
+          utils.coach.getReviewQueue.setData(reviewQueueInput, context.previous);
+        }
+      },
       onSuccess: async () => {
         await utils.coach.getReviewQueue.invalidate();
         await utils.coach.getTeamOverview.invalidate();
+      },
+      onSettled: async () => {
+        await utils.coach.getReviewQueue.invalidate();
       },
     });
 
