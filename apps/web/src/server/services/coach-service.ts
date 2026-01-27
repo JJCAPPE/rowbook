@@ -36,6 +36,8 @@ type ReviewEntry = {
   minutes: number;
   distance: number;
   avgHr: number | null;
+  avgPace: number | null;
+  avgWatts: number | null;
   notes: string | null;
   date: Date;
   validationStatus: ValidationStatus;

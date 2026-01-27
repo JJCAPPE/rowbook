@@ -40,3 +40,7 @@ export const formatWeekRange = (start: Date, end: Date) => {
   const endLabel = new Date(end.getTime() - 1);
   return `${formatShortDate(start)} - ${formatShortDate(endLabel)}`;
 };
+
+// Re-export pace and watts formatting from shared package
+export { formatPace, formatPaceWithUnit, formatWatts } from "@rowbook/shared";
+

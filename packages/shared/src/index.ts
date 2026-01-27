@@ -11,3 +11,5 @@ export * from "./schemas/user";
 export * from "./schemas/weekly";
 export * from "./utils/time";
 export * from "./utils/week";
+export * from "./utils/pace";
+

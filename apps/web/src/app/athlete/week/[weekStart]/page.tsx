@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatTile } from "@/components/ui/stat-tile";
-import { formatFullDate, formatMinutes, formatDistance, formatWeekRange } from "@/lib/format";
+import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import type { TrainingEntry } from "@rowbook/shared";
 
@@ -65,10 +65,14 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                   </div>
                   <StatusBadge status={entry.validationStatus} />
                 </div>
-                <div className="mt-3 grid gap-2 text-xs text-default-500 sm:grid-cols-3">
+                <div className="mt-3 grid gap-2 text-xs text-default-500 sm:grid-cols-2 md:grid-cols-3">
                   <span>Distance: {formatDistance(entry.distance)}</span>
+                  <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace) ?? "—"}</span>
+                  {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && (
+                    <span>Watts: {formatWatts(entry.avgWatts) ?? "—"}</span>
+                  )}
                   <span>Avg HR: {entry.avgHr ?? "—"}</span>
-                  <span>Notes: {entry.notes ?? "—"}</span>
+                  <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
                 </div>
                 <div className="mt-3">
                   {entry.proofUrl ? (

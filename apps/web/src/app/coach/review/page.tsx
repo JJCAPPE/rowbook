@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatFullDate, formatMinutes, formatDistance } from "@/lib/format";
+import { formatFullDate, formatMinutes, formatDistance, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -21,6 +21,8 @@ type ReviewEntry = {
   minutes: number;
   distance: number;
   avgHr: number | null;
+  avgPace: number | null;
+  avgWatts: number | null;
   notes: string | null;
   date: Date;
   validationStatus: ValidationStatus;
@@ -137,10 +139,14 @@ export default function CoachReviewQueuePage() {
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                   <div className="space-y-2">
-                    <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-3">
+                    <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-2 md:grid-cols-3">
                       <span>Distance: {formatDistance(entry.distance)}</span>
+                      <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace) ?? "—"}</span>
+                      {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && (
+                        <span>Watts: {formatWatts(entry.avgWatts) ?? "—"}</span>
+                      )}
                       <span>Avg HR: {entry.avgHr ?? "—"}</span>
-                      <span>Notes: {entry.notes ?? "—"}</span>
+                      <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
                     </div>
                     {entry.proofUrl ? (
                       <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />

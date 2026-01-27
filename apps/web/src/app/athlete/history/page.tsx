@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
-import { formatFullDate, formatMinutes, formatWeekRange } from "@/lib/format";
+import { formatFullDate, formatMinutes, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { getWeekKey } from "@/lib/week-options";
 
@@ -145,35 +145,49 @@ export default function AthleteHistoryPage() {
                   {week.entries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
+                      className="rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-full border border-divider/40 bg-content2/70 p-2">
-                          <ActivityIcon type={entry.activityType} />
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-full border border-divider/40 bg-content2/70 p-2">
+                            <ActivityIcon type={entry.activityType} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              {formatMinutes(entry.minutes)}{" "}
+                              {ACTIVITY_TYPE_LABELS[entry.activityType]}
+                            </p>
+                            <p className="text-xs text-default-500">
+                              {formatFullDate(entry.date)}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {formatMinutes(entry.minutes)}{" "}
-                            {ACTIVITY_TYPE_LABELS[entry.activityType]}
-                          </p>
-                          <p className="text-xs text-default-500">
-                            {formatFullDate(entry.date)}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={entry.validationStatus} />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            isIconOnly
+                            aria-label="Delete entry"
+                            className="h-8 w-8 min-w-0 text-default-500"
+                            disabled={isDeleting}
+                            onClick={() => handleDelete(entry.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={entry.validationStatus} />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          isIconOnly
-                          aria-label="Delete entry"
-                          className="h-8 w-8 min-w-0 text-default-500"
-                          disabled={isDeleting}
-                          onClick={() => handleDelete(entry.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      {/* Pace and watts row */}
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-default-500">
+                        {entry.avgPace != null && (
+                          <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace)}</span>
+                        )}
+                        {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && entry.avgWatts != null && (
+                          <span>Watts: {formatWatts(entry.avgWatts)}</span>
+                        )}
+                        {entry.avgHr != null && (
+                          <span>HR: {entry.avgHr} bpm</span>
+                        )}
                       </div>
                     </div>
                   ))}

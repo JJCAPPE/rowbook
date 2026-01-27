@@ -1,4 +1,10 @@
-import { getWeekRange, isWithinWeek, ValidationStatus } from "@rowbook/shared";
+import {
+  getWeekRange,
+  isWithinWeek,
+  ValidationStatus,
+  calculatePaceSeconds,
+  calculateWatts,
+} from "@rowbook/shared";
 import {
   createTrainingEntry,
   deleteTrainingEntry,
@@ -49,6 +55,10 @@ export const createEntry = async (athleteId: string, input: {
     throw new Error("Proof image has not been uploaded yet.");
   }
 
+  // Calculate pace and watts
+  const avgPace = calculatePaceSeconds(input.activityType, input.distance, input.minutes);
+  const avgWatts = calculateWatts(input.activityType, avgPace);
+
   const entry = await createTrainingEntry({
     athleteId,
     activityType: input.activityType,
@@ -56,6 +66,8 @@ export const createEntry = async (athleteId: string, input: {
     minutes: input.minutes,
     distance: input.distance,
     avgHr: input.avgHr ?? null,
+    avgPace,
+    avgWatts,
     notes: input.notes ?? null,
     proofImageId: input.proofImageId,
     validationStatus: "NOT_CHECKED" as ValidationStatus,
@@ -106,12 +118,30 @@ export const updateEntry = async (athleteId: string, input: {
     }
   }
 
+  // Recalculate pace and watts if activity type, distance, or time changed
+  const activityType = input.activityType ?? entry.activityType;
+  const minutes = input.minutes ?? entry.minutes;
+  const distance = input.distance ?? entry.distance;
+  const needsRecalculation = input.activityType !== undefined 
+    || input.minutes !== undefined 
+    || input.distance !== undefined;
+
+  let avgPace: number | null | undefined;
+  let avgWatts: number | null | undefined;
+
+  if (needsRecalculation) {
+    avgPace = calculatePaceSeconds(activityType, distance, minutes);
+    avgWatts = calculateWatts(activityType, avgPace);
+  }
+
   const updated = await updateTrainingEntry(entry.id, {
     activityType: input.activityType,
     date: input.date,
     minutes: input.minutes,
     distance: input.distance,
     avgHr: input.avgHr ?? undefined,
+    avgPace,
+    avgWatts,
     notes: input.notes ?? undefined,
   });
 
