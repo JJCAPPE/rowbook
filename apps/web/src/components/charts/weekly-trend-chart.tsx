@@ -27,11 +27,12 @@ export const WeeklyTrendChart = ({ data }: WeeklyTrendChartProps) => (
             borderColor: "hsl(var(--heroui-default-200))",
             color: "hsl(var(--heroui-foreground))",
           }}
-          formatter={(value: number, _name: string, props: { dataKey?: string }) => {
-            if (props?.dataKey === "avgHr") {
-              return [`${value} bpm`, "Avg HR"];
+          formatter={(value, _name, item) => {
+            const numericValue = typeof value === "number" ? value : Number(value);
+            if (item?.dataKey === "avgHr") {
+              return [`${numericValue} bpm`, "Avg HR"];
             }
-            return [`${value} min`, "Minutes"];
+            return [`${numericValue} min`, "Minutes"];
           }}
         />
         <Line

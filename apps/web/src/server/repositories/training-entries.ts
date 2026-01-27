@@ -1,4 +1,5 @@
 import { prisma } from "@/db/client";
+import type { Prisma } from "@prisma/client";
 import { ActivityType, ValidationStatus, EntryStatus } from "@rowbook/shared";
 
 export const createTrainingEntry = (data: {
@@ -112,7 +113,7 @@ export const listEntriesForReview = (
   statuses: ValidationStatus[],
   options?: { includeReviewed?: boolean },
 ) => {
-  const orFilters = [
+  const orFilters: Prisma.TrainingEntryWhereInput[] = [
     {
       validationStatus: { in: statuses },
     },

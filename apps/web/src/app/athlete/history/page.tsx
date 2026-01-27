@@ -22,7 +22,7 @@ type HistoryFilter = "ALL" | ActivityType | "HR_PRESENT" | "MIN_30";
 export default function AthleteHistoryPage() {
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
-  const history = data ?? [];
+  const history = useMemo(() => data ?? [], [data]);
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>("ALL");
   const { mutateAsync: deleteEntry, isLoading: isDeleting } =
     trpc.athlete.deleteEntry.useMutation({

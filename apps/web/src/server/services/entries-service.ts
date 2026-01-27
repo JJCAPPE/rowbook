@@ -114,7 +114,7 @@ export const createEntry = async (athleteId: string, input: {
     lockedAt: null,
   });
 
-  if (shouldUpdateProofImage) {
+  if (shouldUpdateProofImage && ocrExtractedFields) {
     await updateProofImageIfPending(input.proofImageId, {
       extractedFields: ocrExtractedFields,
       validationStatus,

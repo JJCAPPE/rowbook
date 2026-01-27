@@ -1,6 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -548,8 +549,17 @@ export const LogWorkoutForm = () => {
         </div>
         {errors.proof ? <p className="text-xs text-rose-500">{errors.proof.message}</p> : null}
         {previewUrl ? (
-          <div className="rounded-2xl border border-divider/40 bg-content2/70 p-3">
-            <img src={previewUrl} alt="Proof preview" className="h-40 w-full rounded-lg object-cover" />
+          <div className="h-40 w-full rounded-2xl border border-divider/40 bg-content2/70 p-3">
+            <div className="relative h-full w-full">
+              <Image
+                src={previewUrl}
+                alt="Proof preview"
+                fill
+                sizes="(max-width: 768px) 100vw, 600px"
+                className="rounded-lg object-cover"
+                unoptimized
+              />
+            </div>
           </div>
         ) : (
           <p className="text-xs text-default-500">Take a photo of your screen, or upload a screenshot from Strava, Garmin, Polar, etc.</p>

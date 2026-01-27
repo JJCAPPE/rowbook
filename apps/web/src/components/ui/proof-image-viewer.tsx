@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Download, Maximize2, RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -69,11 +70,14 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
               </div>
             </div>
             <div className="mt-4 flex items-center justify-center rounded-xl border border-divider/40 bg-content2/70 p-4">
-              <img
+              <Image
                 src={src}
                 alt={alt}
+                width={1200}
+                height={800}
                 className="max-h-[35vh] w-auto rounded-lg object-contain"
                 style={{ transform: `rotate(${rotation}deg)` }}
+                unoptimized
               />
             </div>
           </div>
