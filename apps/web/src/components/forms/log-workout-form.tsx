@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -99,6 +99,8 @@ export const LogWorkoutForm = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [proofInputKey, setProofInputKey] = useState(0);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const today = getTodayString();
   const {
     register,
@@ -120,6 +122,7 @@ export const LogWorkoutForm = () => {
 
   const proof = watch("proof");
   const activityType = watch("activityType");
+  const proofRegister = register("proof");
 
   useEffect(() => {
     if (!proof || proof.length === 0) {
@@ -196,6 +199,15 @@ export const LogWorkoutForm = () => {
     }
   };
 
+  const handleCameraChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.currentTarget.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+    setValue("proof", files, { shouldDirty: true, shouldValidate: true });
+    event.currentTarget.value = "";
+  };
+
   return (
     <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-3">
@@ -219,22 +231,53 @@ export const LogWorkoutForm = () => {
       </div>
 
       <div className="space-y-3">
-        <Label htmlFor="proof">Proof image</Label>
-        <Input
-          key={proofInputKey}
+        <Label htmlFor="proof">Proof of workout</Label>
+        <input
+          key={`camera-${proofInputKey}`}
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCameraChange}
+          className="sr-only"
+        />
+        <input
+          key={`upload-${proofInputKey}`}
           id="proof"
           type="file"
           accept="image/*"
-          {...register("proof")}
-          className="file:mr-4 file:rounded-full file:border-0 file:bg-content2/70 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-default-500 hover:file:bg-content2"
+          {...proofRegister}
+          ref={(element) => {
+            proofRegister.ref(element);
+            uploadInputRef.current = element;
+          }}
+          className="sr-only"
         />
+        <div className="flex flex-wrap justify-center items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => cameraInputRef.current?.click()}
+          >
+            Take photo of Screen
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            Upload Screenshot
+          </Button>
+        </div>
         {errors.proof ? <p className="text-xs text-rose-500">{errors.proof.message}</p> : null}
         {previewUrl ? (
           <div className="rounded-2xl border border-divider/40 bg-content2/70 p-3">
             <img src={previewUrl} alt="Proof preview" className="h-40 w-full rounded-lg object-cover" />
           </div>
         ) : (
-          <p className="text-xs text-default-500">Upload a photo or screenshot of your workout.</p>
+          <p className="text-xs text-default-500">Take a photo of your screen, or upload a screenshot from Strava, Garmin, Polar, etc.</p>
         )}
         {isUploading ? (
           <div className="space-y-2">
