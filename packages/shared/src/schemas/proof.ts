@@ -35,6 +35,12 @@ export const ProofExtractedFieldsSchema = z.object({
 });
 export type ProofExtractedFields = z.infer<typeof ProofExtractedFieldsSchema>;
 
+export const ProofOcrResultSchema = z.object({
+  extractedFields: ProofExtractedFieldsSchema.optional().nullable(),
+  error: z.string().max(1000).optional().nullable(),
+});
+export type ProofOcrResult = z.infer<typeof ProofOcrResultSchema>;
+
 export const ProofImageSchema = z.object({
   id: z.string(),
   athleteId: z.string(),

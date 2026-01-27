@@ -9,6 +9,7 @@ import {
   MinutesSchema,
   OptionalNotesSchema,
 } from "./common";
+import { ProofOcrResultSchema } from "./proof";
 
 export const TrainingEntryInputSchema = z.object({
   activityType: ActivityTypeSchema,
@@ -20,6 +21,7 @@ export const TrainingEntryInputSchema = z.object({
   avgWatts: z.number().positive().optional().nullable(),
   notes: OptionalNotesSchema,
   proofImageId: z.string(),
+  proofOcr: ProofOcrResultSchema.optional().nullable(),
 });
 export type TrainingEntryInput = z.infer<typeof TrainingEntryInputSchema>;
 
@@ -56,4 +58,3 @@ export const TrainingEntrySchema = z.object({
   updatedAt: z.date(),
 });
 export type TrainingEntry = z.infer<typeof TrainingEntrySchema>;
-

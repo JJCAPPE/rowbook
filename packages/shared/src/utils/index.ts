@@ -3,3 +3,4 @@ export * from "./week";
 export * from "./validation";
 export * from "./aggregation";
 export * from "./pace";
+export * from "./proof-extraction";

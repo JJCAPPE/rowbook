@@ -51,7 +51,7 @@ export default function AthleteDashboardPage() {
   const totalMinutes = dashboard?.totalMinutes ?? 0;
   const totalDistanceKm = countedEntries.reduce((sum, entry) => sum + entry.distance, 0);
   const sessions = countedEntries.length;
-  const hasHr = dashboard?.hasHrData ?? false;
+  const avgHr = dashboard?.avgHr ?? null;
   const goalMinutes = requiredMinutes > 0 ? requiredMinutes : 1;
   const remainingMinutes =
     requiredMinutes > totalMinutes ? requiredMinutes - totalMinutes : 0;
@@ -68,6 +68,7 @@ export default function AthleteDashboardPage() {
       .map((week) => ({
         week: formatWeekRange(week.weekStartAt, week.weekEndAt),
         minutes: week.totalMinutes,
+        avgHr: week.avgHr ?? null,
       }));
   }, [history]);
 
@@ -135,7 +136,7 @@ export default function AthleteDashboardPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <StatTile label="Distance" value={formatDistance(totalDistanceKm)} />
             <StatTile label="Sessions" value={`${sessions}`} />
-            <StatTile label="HR data" value={hasHr ? "Tracked" : "Missing"} />
+            <StatTile label="Avg HR" value={avgHr ? `${avgHr} bpm` : "—"} />
           </div>
         </Card>
 

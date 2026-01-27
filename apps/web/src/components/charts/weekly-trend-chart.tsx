@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 type WeeklyTrendChartProps = {
-  data: { week: string; minutes: number }[];
+  data: { week: string; minutes: number; avgHr?: number | null }[];
 };
 
 export const WeeklyTrendChart = ({ data }: WeeklyTrendChartProps) => (
@@ -18,7 +18,8 @@ export const WeeklyTrendChart = ({ data }: WeeklyTrendChartProps) => (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
         <XAxis dataKey="week" tickLine={false} axisLine={false} />
-        <YAxis tickLine={false} axisLine={false} />
+        <YAxis yAxisId="minutes" tickLine={false} axisLine={false} />
+        <YAxis yAxisId="avgHr" orientation="right" tickLine={false} axisLine={false} hide />
         <Tooltip
           contentStyle={{
             borderRadius: 12,
@@ -26,14 +27,29 @@ export const WeeklyTrendChart = ({ data }: WeeklyTrendChartProps) => (
             borderColor: "hsl(var(--heroui-default-200))",
             color: "hsl(var(--heroui-foreground))",
           }}
-          formatter={(value: number) => [`${value} min`, "Minutes"]}
+          formatter={(value: number, _name: string, props: { dataKey?: string }) => {
+            if (props?.dataKey === "avgHr") {
+              return [`${value} bpm`, "Avg HR"];
+            }
+            return [`${value} min`, "Minutes"];
+          }}
         />
         <Line
           type="monotone"
           dataKey="minutes"
+          yAxisId="minutes"
           stroke="hsl(var(--heroui-primary))"
           strokeWidth={3}
           dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="avgHr"
+          yAxisId="avgHr"
+          stroke="hsl(var(--heroui-danger))"
+          strokeWidth={2}
+          dot={false}
+          connectNulls
         />
       </LineChart>
     </ResponsiveContainer>

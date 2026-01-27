@@ -4,6 +4,11 @@ import {
   ValidationStatus,
   calculatePaceSeconds,
   calculateWatts,
+  ProofExtractionStatus,
+  ProofOcrResult,
+  resolveValidationStatus,
+  shouldAutoVerifyProof,
+  summarizeExtractedFields,
 } from "@rowbook/shared";
 import {
   createTrainingEntry,
@@ -13,8 +18,8 @@ import {
   updateTrainingEntry,
 } from "@/server/repositories/training-entries";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { getProofImageById } from "@/server/repositories/proof-images";
-import { createProofExtractionJob } from "@/server/repositories/proof-extraction-jobs";
+import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
+import { upsertProofExtractionJobResult } from "@/server/repositories/proof-extraction-jobs";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";
 
@@ -35,6 +40,7 @@ export const createEntry = async (athleteId: string, input: {
   avgHr?: number | null;
   notes?: string | null;
   proofImageId: string;
+  proofOcr?: ProofOcrResult | null;
 }) => {
   const now = new Date();
   const { weekStartAt, weekEndAt } = getWeekRange(now);
@@ -55,6 +61,38 @@ export const createEntry = async (athleteId: string, input: {
     throw new Error("Proof image has not been uploaded yet.");
   }
 
+  const entryValuesForVerification = {
+    date: input.date,
+    minutes: input.minutes,
+    distance: input.distance,
+    avgHr: input.avgHr ?? null,
+  };
+
+  const ocrExtractedFields = input.proofOcr?.extractedFields ?? null;
+  const ocrError = input.proofOcr?.error ?? null;
+
+  let validationStatus: ValidationStatus = "NOT_CHECKED";
+  let proofExtractionStatus: ProofExtractionStatus | null = null;
+  let proofExtractionError: string | null = null;
+  let shouldUpdateProofImage = false;
+
+  if (ocrError) {
+    proofExtractionStatus = "FAILED";
+    proofExtractionError = ocrError;
+  } else if (ocrExtractedFields) {
+    const { hasAny, hasRequired } = summarizeExtractedFields(ocrExtractedFields);
+
+    if (!hasAny) {
+      proofExtractionStatus = "FAILED";
+      proofExtractionError = "No extractable data found.";
+    } else {
+      const autoVerified = shouldAutoVerifyProof(entryValuesForVerification, ocrExtractedFields);
+      validationStatus = resolveValidationStatus(hasRequired, autoVerified);
+      proofExtractionStatus = "COMPLETED";
+      shouldUpdateProofImage = true;
+    }
+  }
+
   // Calculate pace and watts
   const avgPace = calculatePaceSeconds(input.activityType, input.distance, input.minutes);
   const avgWatts = calculateWatts(input.activityType, avgPace);
@@ -70,13 +108,25 @@ export const createEntry = async (athleteId: string, input: {
     avgWatts,
     notes: input.notes ?? null,
     proofImageId: input.proofImageId,
-    validationStatus: "NOT_CHECKED" as ValidationStatus,
+    validationStatus,
     entryStatus: "ACTIVE",
     weekStartAt,
     lockedAt: null,
   });
 
-  await createProofExtractionJob(input.proofImageId);
+  if (shouldUpdateProofImage) {
+    await updateProofImageIfPending(input.proofImageId, {
+      extractedFields: ocrExtractedFields,
+      validationStatus,
+    });
+  }
+
+  if (proofExtractionStatus) {
+    await upsertProofExtractionJobResult(input.proofImageId, {
+      status: proofExtractionStatus,
+      lastError: proofExtractionError,
+    });
+  }
   await createAuditLog({
     actorId: athleteId,
     entityType: "TRAINING_ENTRY",

@@ -7,6 +7,7 @@ import { getExemption, listExemptionsByAthleteSince } from "@/server/repositorie
 import { getWeeklyAggregate, listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard } from "@/server/services/weekly-service";
+import { getWeightedAvgHr, getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
 
 const attachProofUrls = async <T extends { proofImageId: string }>(
   entries: T[],
@@ -62,6 +63,9 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
   ]);
 
   const totals = aggregate ?? computeTotals(entries);
+  const avgHr = getWeightedAvgHr(
+    entries.filter((entry) => entry.validationStatus !== "REJECTED"),
+  );
   const requiredMinutes = requirement?.requiredMinutes ?? 0;
   const status: WeeklyStatus = exemption
     ? "EXEMPT"
@@ -75,13 +79,40 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     requiredMinutes,
     totalMinutes: totals.totalMinutes,
     hasHrData: totals.hasHrData,
+    avgHr,
     status,
     entries,
   };
 };
 
-export const getAthleteHistory = async (athleteId: string) =>
-  listWeeklyAggregatesByAthlete(athleteId);
+export const getAthleteHistory = async (athleteId: string) => {
+  const history = await listWeeklyAggregatesByAthlete(athleteId);
+  if (!history.length) {
+    return history;
+  }
+
+  const earliestWeekStart = history[history.length - 1]?.weekStartAt;
+  if (!earliestWeekStart) {
+    return history;
+  }
+
+  const entries = (await listEntriesByAthleteSinceWeekStart(
+    athleteId,
+    earliestWeekStart,
+  )) as Array<{
+    weekStartAt: Date;
+    minutes: number;
+    avgHr: number | null;
+    validationStatus: ValidationStatus;
+  }>;
+
+  const avgHrByWeek = getWeightedAvgHrByWeek(entries);
+
+  return history.map((week) => ({
+    ...week,
+    avgHr: avgHrByWeek.get(week.weekStartAt.toISOString()) ?? null,
+  }));
+};
 
 export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount = 8) => {
   const teamId = await getTeamIdForAthlete(athleteId);

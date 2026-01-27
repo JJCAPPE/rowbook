@@ -36,6 +36,7 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
       .map((week) => ({
         week: formatWeekRange(week.weekStartAt, week.weekEndAt),
         minutes: week.totalMinutes,
+        avgHr: week.avgHr ?? null,
       }));
   }, [data?.history]);
 

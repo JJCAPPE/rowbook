@@ -143,7 +143,7 @@ export const LogWorkoutForm = () => {
     watch,
     setValue,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -317,6 +317,36 @@ export const LogWorkoutForm = () => {
   })();
 
   useEffect(() => {
+    if (!ocrResult?.hasAny) {
+      return;
+    }
+
+    const { extractedFields } = ocrResult;
+
+    if (extractedFields.date && !dirtyFields.date) {
+      const parsed = new Date(extractedFields.date);
+      if (!Number.isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        setValue("date", `${year}-${month}-${day}`, { shouldValidate: true });
+      }
+    }
+
+    if (typeof extractedFields.minutes === "number" && !dirtyFields.minutes) {
+      setValue("minutes", extractedFields.minutes, { shouldValidate: true });
+    }
+
+    if (typeof extractedFields.distance === "number" && !dirtyFields.distanceKm) {
+      setValue("distanceKm", extractedFields.distance, { shouldValidate: true });
+    }
+
+    if (typeof extractedFields.avgHr === "number" && !dirtyFields.avgHr) {
+      setValue("avgHr", extractedFields.avgHr, { shouldValidate: true });
+    }
+  }, [dirtyFields, ocrResult, setValue]);
+
+  useEffect(() => {
     if (!proof || proof.length === 0) {
       setPreviewUrl(null);
       return;
@@ -411,10 +441,25 @@ export const LogWorkoutForm = () => {
       ]);
 
       reset({ ...defaultValues, date: getTodayString() });
+      ocrRunIdRef.current += 1;
+      ocrFileRef.current = null;
+      ocrPromiseRef.current = null;
+      setOcrStatus("idle");
+      setOcrProgress(0);
+      setOcrPhase(null);
+      setOcrError(null);
+      setOcrResult(null);
+      void terminateOcrWorker();
       setPreviewUrl(null);
       setIsUploading(false);
       setUploadProgress(0);
       setProofInputKey((current) => current + 1);
+      if (cameraInputRef.current) {
+        cameraInputRef.current.value = "";
+      }
+      if (uploadInputRef.current) {
+        uploadInputRef.current.value = "";
+      }
       setSubmitted(true);
     } catch (error) {
       if (error instanceof Error) {

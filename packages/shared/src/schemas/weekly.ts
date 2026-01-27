@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { ActivityTypeSchema } from "../enums/activity-type";
 import { WeeklyStatusSchema } from "../enums/weekly-status";
+import { HeartRateSchema } from "./common";
 
 export const WeekRangeSchema = z.object({
   weekStartAt: z.date(),
@@ -43,6 +44,7 @@ export const WeeklyAggregateSchema = WeekRangeSchema.extend({
   totalMinutes: z.number().int().nonnegative(),
   activityTypes: z.array(ActivityTypeSchema),
   hasHrData: z.boolean(),
+  avgHr: HeartRateSchema.optional().nullable(),
   status: WeeklyStatusSchema,
 });
 export type WeeklyAggregate = z.infer<typeof WeeklyAggregateSchema>;

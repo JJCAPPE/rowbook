@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 type MiniTrendChartProps = {
-  data: { week: string; minutes: number }[];
+  data: { week: string; minutes: number; avgHr?: number | null }[];
 };
 
 export const MiniTrendChart = ({ data }: MiniTrendChartProps) => (
@@ -18,7 +18,8 @@ export const MiniTrendChart = ({ data }: MiniTrendChartProps) => (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
         <XAxis dataKey="week" tickLine={false} axisLine={false} hide />
-        <YAxis tickLine={false} axisLine={false} hide />
+        <YAxis yAxisId="minutes" tickLine={false} axisLine={false} hide />
+        <YAxis yAxisId="avgHr" orientation="right" tickLine={false} axisLine={false} hide />
         <Tooltip
           contentStyle={{
             borderRadius: 12,
@@ -26,15 +27,30 @@ export const MiniTrendChart = ({ data }: MiniTrendChartProps) => (
             borderColor: "hsl(var(--heroui-default-200))",
             color: "hsl(var(--heroui-foreground))",
           }}
-          formatter={(value: number) => [`${value} min`, "Minutes"]}
+          formatter={(value: number, _name: string, props: { dataKey?: string }) => {
+            if (props?.dataKey === "avgHr") {
+              return [`${value} bpm`, "Avg HR"];
+            }
+            return [`${value} min`, "Minutes"];
+          }}
           labelFormatter={(label) => `Week of ${label}`}
         />
         <Line
           type="monotone"
           dataKey="minutes"
+          yAxisId="minutes"
           stroke="hsl(var(--heroui-primary))"
           strokeWidth={3}
           dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="avgHr"
+          yAxisId="avgHr"
+          stroke="hsl(var(--heroui-danger))"
+          strokeWidth={2}
+          dot={false}
+          connectNulls
         />
       </LineChart>
     </ResponsiveContainer>

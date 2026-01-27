@@ -10,6 +10,30 @@ export const createProofExtractionJob = (proofImageId: string) =>
     },
   });
 
+export const upsertProofExtractionJobResult = (
+  proofImageId: string,
+  data: { status: ProofExtractionStatus; lastError?: string | null },
+) => {
+  const lastError = data.lastError ? data.lastError.slice(0, 1000) : null;
+
+  return prisma.proofExtractionJob.upsert({
+    where: { proofImageId },
+    create: {
+      proofImageId,
+      status: data.status,
+      attempts: 1,
+      lockedAt: null,
+      lastError,
+    },
+    update: {
+      status: data.status,
+      lastError,
+      lockedAt: null,
+      attempts: { increment: 1 },
+    },
+  });
+};
+
 export const lockNextProofExtractionJob = async () => {
   const candidate = await prisma.proofExtractionJob.findFirst({
     where: {

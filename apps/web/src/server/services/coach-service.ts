@@ -15,6 +15,7 @@ import { listTeamAthletes, getUserById } from "@/server/repositories/users";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
 import { listExemptionsByWeek } from "@/server/repositories/exemptions";
 import { getProofViewUrl } from "@/server/services/proof-service";
+import { getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
 
 type TeamLeaderboardRow = {
   id: string;
@@ -115,6 +116,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
     listWeeklyAggregatesByAthlete(athleteId),
   ]);
   const entries = entriesResult as TrainingEntry[];
+  const avgHrByWeek = getWeightedAvgHrByWeek(entries);
 
   const entriesWithProof = await attachProofUrls(entries, actorId, true);
 
@@ -131,7 +133,10 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
         }
       : { id: athleteId, name: "Athlete" },
     entries: entriesWithProof,
-    history,
+    history: history.map((week) => ({
+      ...week,
+      avgHr: avgHrByWeek.get(week.weekStartAt.toISOString()) ?? null,
+    })),
     activityMix: Array.from(activityMixMap.entries()).map(([type, minutes]) => ({
       type,
       minutes,
