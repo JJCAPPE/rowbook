@@ -9,6 +9,8 @@ export const createTrainingEntry = (data: {
   minutes: number;
   distance: number;
   avgHr?: number | null;
+  avgPace?: number | null;
+  avgWatts?: number | null;
   notes?: string | null;
   proofImageId: string;
   validationStatus: ValidationStatus;
@@ -28,6 +30,8 @@ export const updateTrainingEntry = (
     minutes: number;
     distance: number;
     avgHr: number | null;
+    avgPace: number | null;
+    avgWatts: number | null;
     notes: string | null;
     validationStatus: ValidationStatus;
     entryStatus: EntryStatus;
