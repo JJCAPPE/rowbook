@@ -37,7 +37,7 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
           Rowbook
         </Link>
         <Chip size="sm" variant="flat" color="secondary" className="text-[0.6rem]">
-          v0.1
+          v1.0
         </Chip>
       </div>
       <div className="mt-8 flex flex-1 flex-col gap-2">
