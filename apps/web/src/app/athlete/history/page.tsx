@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
 import { formatFullDate, formatMinutes, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -197,11 +198,9 @@ export default function AthleteHistoryPage() {
                       {(entry as any).extractedFields && (
                         <details className="mt-2 text-[10px] text-default-500">
                           <summary className="cursor-pointer select-none hover:text-foreground">
-                            View Gemini extraction data
+                            View details from Gemini extraction
                           </summary>
-                          <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
-                            {JSON.stringify((entry as any).extractedFields, null, 2)}
-                          </pre>
+                          <ProofExtractionFeedback fields={(entry as any).extractedFields} />
                         </details>
                       )}
                     </div>

@@ -3,6 +3,7 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
+import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatTile } from "@/components/ui/stat-tile";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
@@ -82,11 +83,9 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                 {entry.extractedFields && (
                   <details className="mt-3 text-[10px] text-default-500">
                     <summary className="cursor-pointer select-none hover:text-foreground">
-                      View Gemini extraction data
+                      View details from Gemini extraction
                     </summary>
-                    <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
-                      {JSON.stringify(entry.extractedFields, null, 2)}
-                    </pre>
+                    <ProofExtractionFeedback fields={entry.extractedFields} />
                   </details>
                 )}
                 <div className="mt-3">

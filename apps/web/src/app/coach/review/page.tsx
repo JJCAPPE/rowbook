@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
+import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatFullDate, formatMinutes, formatDistance, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -181,11 +182,9 @@ export default function CoachReviewQueuePage() {
                     {entry.extractedFields ? (
                       <details className="text-xs text-default-500">
                         <summary className="cursor-pointer select-none hover:text-foreground">
-                          View Gemini extraction data
+                          View details from Gemini extraction
                         </summary>
-                        <pre className="mt-1 max-h-[200px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
-                          {JSON.stringify(entry.extractedFields, null, 2)}
-                        </pre>
+                        <ProofExtractionFeedback fields={entry.extractedFields} />
                       </details>
                     ) : null}
                     {entry.proofUrl ? (

@@ -13,6 +13,7 @@ import { MiniTrendChart } from "@/components/ui/mini-trend-chart";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatTile } from "@/components/ui/stat-tile";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { Card } from "@/components/ui/card";
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
@@ -210,11 +211,9 @@ export default function AthleteDashboardPage() {
               {entry.extractedFields && (
                 <details className="mt-2 text-[10px] text-default-500">
                   <summary className="cursor-pointer select-none hover:text-foreground">
-                    View Gemini extraction data
+                    View details from Gemini extraction
                   </summary>
-                  <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
-                    {JSON.stringify(entry.extractedFields, null, 2)}
-                  </pre>
+                  <ProofExtractionFeedback fields={entry.extractedFields} />
                 </details>
               )}
             </div>
