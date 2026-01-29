@@ -45,7 +45,7 @@ export default function AthleteDashboardPage() {
       },
     });
 
-  const entries: TrainingEntry[] = dashboard?.entries ?? [];
+  const entries = (dashboard?.entries ?? []) as Array<TrainingEntry & { extractedFields: any }>;
   const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
   const requiredMinutes = dashboard?.requiredMinutes ?? 0;
   const totalMinutes = dashboard?.totalMinutes ?? 0;
@@ -206,6 +206,16 @@ export default function AthleteDashboardPage() {
                 <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
                   <span className="font-semibold">Rejection reason:</span> {entry.rejectionNote}
                 </div>
+              )}
+              {entry.extractedFields && (
+                <details className="mt-2 text-[10px] text-default-500">
+                  <summary className="cursor-pointer select-none hover:text-foreground">
+                    View Gemini extraction data
+                  </summary>
+                  <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
+                    {JSON.stringify(entry.extractedFields, null, 2)}
+                  </pre>
+                </details>
               )}
             </div>
           ))}

@@ -47,6 +47,7 @@ type ReviewEntry = {
   proofImage: {
     reviewedById: string | null;
     proofExtractionJob: { status: ProofExtractionStatus; lastError: string | null } | null;
+    extractedFields: any;
   };
 };
 
@@ -176,6 +177,7 @@ export const getReviewQueue = async (
       athleteName: athlete?.name ?? athlete?.email ?? null,
       proofExtractionStatus: proofImage?.proofExtractionJob?.status ?? null,
       proofReviewedById: proofImage?.reviewedById ?? null,
+      extractedFields: proofImage?.extractedFields ?? null,
     })),
   };
 };

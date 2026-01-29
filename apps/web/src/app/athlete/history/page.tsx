@@ -194,6 +194,16 @@ export default function AthleteHistoryPage() {
                           <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
                         </div>
                       )}
+                      {(entry as any).extractedFields && (
+                        <details className="mt-2 text-[10px] text-default-500">
+                          <summary className="cursor-pointer select-none hover:text-foreground">
+                            View Gemini extraction data
+                          </summary>
+                          <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
+                            {JSON.stringify((entry as any).extractedFields, null, 2)}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   ))}
                 </div>

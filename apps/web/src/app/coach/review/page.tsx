@@ -31,6 +31,7 @@ type ReviewEntry = {
   athleteName: string | null;
   proofExtractionStatus: ProofExtractionStatus | null;
   proofReviewedById: string | null;
+  extractedFields: unknown | null;
 };
 
 export default function CoachReviewQueuePage() {
@@ -177,6 +178,16 @@ export default function CoachReviewQueuePage() {
                       <span>Avg HR: {entry.avgHr ?? "—"}</span>
                       <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
                     </div>
+                    {entry.extractedFields ? (
+                      <details className="text-xs text-default-500">
+                        <summary className="cursor-pointer select-none hover:text-foreground">
+                          View Gemini extraction data
+                        </summary>
+                        <pre className="mt-1 max-h-[200px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
+                          {JSON.stringify(entry.extractedFields, null, 2)}
+                        </pre>
+                      </details>
+                    ) : null}
                     {entry.proofUrl ? (
                       <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                     ) : (

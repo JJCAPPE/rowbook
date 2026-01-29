@@ -9,17 +9,18 @@ import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard } from "@/server/services/weekly-service";
 import { getWeightedAvgHr, getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
 
-const attachProofUrls = async <T extends { proofImageId: string }>(
+const attachProofUrls = async <T extends { proofImageId: string; proofImage?: { extractedFields: any } }>(
   entries: T[],
   athleteId: string,
-): Promise<Array<T & { proofUrl: string | null }>> =>
+): Promise<Array<T & { proofUrl: string | null; extractedFields: any }>> =>
   Promise.all(
     entries.map(async (entry) => {
+      const extractedFields = entry.proofImage?.extractedFields ?? null;
       try {
         const view = await getProofViewUrl(athleteId, entry.proofImageId, false);
-        return { ...entry, proofUrl: view.signedUrl };
+        return { ...entry, proofUrl: view.signedUrl, extractedFields };
       } catch {
-        return { ...entry, proofUrl: null };
+        return { ...entry, proofUrl: null, extractedFields };
       }
     }),
   );
@@ -81,7 +82,10 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     hasHrData: totals.hasHrData,
     avgHr,
     status,
-    entries,
+    entries: (entries as any[]).map(e => ({
+      ...e,
+      extractedFields: e.proofImage?.extractedFields ?? null
+    })),
   };
 };
 
@@ -192,7 +196,10 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
         status,
         hasHrData,
         activityTypes: Array.from(activityTypes),
-        entries: sortedEntries,
+        entries: sortedEntries.map(e => ({
+          ...e,
+          extractedFields: (e as any).proofImage?.extractedFields ?? null
+        })),
       };
     })
     .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());

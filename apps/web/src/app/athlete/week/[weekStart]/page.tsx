@@ -18,7 +18,7 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
   const { data, isLoading, error } = trpc.athlete.getWeekDetail.useQuery({
     weekStartAt,
   });
-  const entries: Array<TrainingEntry & { proofUrl: string | null }> = data?.entries ?? [];
+  const entries: Array<TrainingEntry & { proofUrl: string | null; extractedFields: any }> = data?.entries ?? [];
 
   return (
     <div className="space-y-6">
@@ -78,6 +78,16 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                   <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
                     <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
                   </div>
+                )}
+                {entry.extractedFields && (
+                  <details className="mt-3 text-[10px] text-default-500">
+                    <summary className="cursor-pointer select-none hover:text-foreground">
+                      View Gemini extraction data
+                    </summary>
+                    <pre className="mt-1 max-h-[150px] overflow-auto rounded border border-divider/40 bg-default-100 p-2 font-mono">
+                      {JSON.stringify(entry.extractedFields, null, 2)}
+                    </pre>
+                  </details>
                 )}
                 <div className="mt-3">
                   {entry.proofUrl ? (
