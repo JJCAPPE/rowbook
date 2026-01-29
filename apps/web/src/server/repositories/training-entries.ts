@@ -36,6 +36,7 @@ export const updateTrainingEntry = (
     validationStatus: ValidationStatus;
     entryStatus: EntryStatus;
     lockedAt: Date | null;
+    rejectionNote: string | null;
   }>,
 ) =>
   prisma.trainingEntry.update({

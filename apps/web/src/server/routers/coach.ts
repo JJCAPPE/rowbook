@@ -55,8 +55,8 @@ export const coachRouter = router({
       removeExemption(ctx.session.user.id, input.athleteId, input.weekStartAt),
     ),
   overrideValidationStatus: coachProcedure
-    .input(z.object({ entryId: z.string(), status: ValidationStatusSchema }))
+    .input(z.object({ entryId: z.string(), status: ValidationStatusSchema, rejectionNote: z.string().optional().nullable() }))
     .mutation(({ ctx, input }) =>
-      overrideValidationStatus(ctx.session.user.id, input.entryId, input.status),
+      overrideValidationStatus(ctx.session.user.id, input.entryId, input.status, input.rejectionNote),
     ),
 });

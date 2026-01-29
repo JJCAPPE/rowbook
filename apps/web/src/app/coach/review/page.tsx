@@ -26,6 +26,7 @@ type ReviewEntry = {
   notes: string | null;
   date: Date;
   validationStatus: ValidationStatus;
+  rejectionNote: string | null;
   proofUrl: string | null;
   athleteName: string | null;
   proofExtractionStatus: ProofExtractionStatus | null;
@@ -158,6 +159,11 @@ export default function CoachReviewQueuePage() {
                     {ocrVerified ? <Badge tone="success">OCR verified</Badge> : null}
                     {ocrRejected ? <Badge tone="danger">OCR rejected</Badge> : null}
                     <StatusBadge status={entry.validationStatus} />
+                    {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
+                      <div className="mt-1 text-[10px] text-rose-500 max-w-[200px] text-right">
+                        Reason: {entry.rejectionNote}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -194,9 +200,15 @@ export default function CoachReviewQueuePage() {
                       size="sm"
                       type="button"
                       disabled={isUpdating}
-                      onClick={() =>
-                        overrideStatus({ entryId: entry.id, status: "REJECTED" })
-                      }
+                      onClick={() => {
+                        const note = window.prompt("Reason for rejection:");
+                        if (note === null) return;
+                        overrideStatus({
+                          entryId: entry.id,
+                          status: "REJECTED",
+                          rejectionNote: note,
+                        });
+                      }}
                     >
                       Reject
                     </Button>

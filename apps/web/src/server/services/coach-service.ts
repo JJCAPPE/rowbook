@@ -42,6 +42,7 @@ type ReviewEntry = {
   notes: string | null;
   date: Date;
   validationStatus: ValidationStatus;
+  rejectionNote: string | null;
   athlete: { name: string | null; email: string };
   proofImage: {
     reviewedById: string | null;
@@ -122,6 +123,9 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
 
   const activityMixMap = new Map<ActivityType, number>();
   for (const entry of entries) {
+    if (entry.validationStatus === "REJECTED") {
+      continue;
+    }
     activityMixMap.set(entry.activityType, (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes);
   }
 
@@ -160,14 +164,15 @@ export const getReviewQueue = async (
     week,
     Array.from(PENDING_PROOF_STATUSES),
     { includeReviewed: true },
-  )) as ReviewEntry[];
+  )) as unknown as ReviewEntry[];
   const entriesWithProof = await attachProofUrls(entries, actorId, true);
 
   return {
     teamId: team.id,
     weekStartAt: week,
-    entries: entriesWithProof.map(({ athlete, proofImage, ...rest }) => ({
+    entries: entriesWithProof.map(({ athlete, proofImage, rejectionNote, ...rest }) => ({
       ...rest,
+      rejectionNote,
       athleteName: athlete?.name ?? athlete?.email ?? null,
       proofExtractionStatus: proofImage?.proofExtractionJob?.status ?? null,
       proofReviewedById: proofImage?.reviewedById ?? null,

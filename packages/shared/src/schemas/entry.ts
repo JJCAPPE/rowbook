@@ -54,6 +54,7 @@ export const TrainingEntrySchema = z.object({
   entryStatus: EntryStatusSchema,
   weekStartAt: z.date(),
   lockedAt: z.date().nullable(),
+  rejectionNote: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -202,6 +202,11 @@ export default function AthleteDashboardPage() {
                   <span>Distance: {formatDistance(entry.distance)}</span>
                 )}
               </div>
+              {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
+                <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
+                  <span className="font-semibold">Rejection reason:</span> {entry.rejectionNote}
+                </div>
+              )}
             </div>
           ))}
         </div>

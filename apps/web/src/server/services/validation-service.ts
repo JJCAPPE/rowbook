@@ -9,6 +9,7 @@ export const overrideValidationStatus = async (
   actorId: string,
   entryId: string,
   status: ValidationStatus,
+  rejectionNote?: string | null,
 ) => {
   const entry = await getTrainingEntryById(entryId);
   if (!entry) {
@@ -17,6 +18,7 @@ export const overrideValidationStatus = async (
 
   const updated = await updateTrainingEntry(entryId, {
     validationStatus: status,
+    rejectionNote: status === "REJECTED" ? rejectionNote : null,
   });
 
   await updateProofImage(entry.proofImageId, {

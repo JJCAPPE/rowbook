@@ -74,6 +74,11 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                   <span>Avg HR: {entry.avgHr ?? "—"}</span>
                   <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
                 </div>
+                {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
+                  <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
+                    <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
+                  </div>
+                )}
                 <div className="mt-3">
                   {entry.proofUrl ? (
                     <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />

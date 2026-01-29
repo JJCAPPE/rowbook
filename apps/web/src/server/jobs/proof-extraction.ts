@@ -2,7 +2,6 @@ import {
   PENDING_PROOF_STATUSES,
   ValidationStatus,
   compareAverageHr,
-  compareDistanceKm,
 } from "@rowbook/shared";
 import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
 import {
@@ -12,7 +11,7 @@ import {
 } from "@/server/repositories/proof-extraction-jobs";
 import { getTrainingEntryByProofImageId, updateTrainingEntry } from "@/server/repositories/training-entries";
 import { downloadFile } from "@/server/storage/proof-storage";
-import { extractProofFieldsFromText, extractTextFromImage } from "@/server/services/proof-extraction-service";
+import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
 
 const toBuffer = async (data: unknown) => {
   if (data instanceof Buffer) {
@@ -66,8 +65,8 @@ const shouldAutoVerify = (
     return false;
   }
 
-  const minutesMatch = extracted.minutes === entry.minutes;
-  const distanceMatch = compareDistanceKm(entry.distance, extracted.distance).matches;
+  const minutesMatch = extracted.minutes >= entry.minutes;
+  const distanceMatch = extracted.distance >= entry.distance;
   const dateMatch = isSameDate(entry.date, parsedDate);
   const hrMatch = entry.avgHr === null
     ? true
@@ -106,8 +105,30 @@ const processJob = async (jobId: string, proofImageId: string) => {
 
   const file = await downloadFile(proofImage.storagePath);
   const buffer = await toBuffer(file);
-  const text = await extractTextFromImage(buffer);
-  const { extractedFields, hasAny, hasRequired } = extractProofFieldsFromText(text);
+  
+  let extractedData;
+  try {
+    extractedData = await extractProofWithGemini(buffer);
+  } catch (error) {
+     const message = error instanceof Error ? error.message : "Gemini extraction failed";
+     await markProofExtractionJobFailed(jobId, message);
+     return { proofImageId, status: "FAILED", reason: "extraction_error" };
+  }
+
+  const { date, minutes, distance, avgHr, confidence, rejectionReason } = extractedData;
+
+  const extractedFields = {
+    date,
+    minutes,
+    distance,
+    avgHr,
+    rejectionReason,
+    activityType: null,
+  };
+
+  // If confidence is extremely low, we might not extract anything useful.
+  // But let's rely on hasAny checks.
+  const hasAny = [date, minutes, distance, avgHr].some((value) => value !== null && value !== undefined);
 
   if (!hasAny) {
     await markProofExtractionJobFailed(jobId, "No extractable data found.");
@@ -121,6 +142,17 @@ const processJob = async (jobId: string, proofImageId: string) => {
     distance: extractedFields.distance ?? null,
     avgHr: extractedFields.avgHr ?? null,
   });
+  
+  // We can also use confidence to require manual review even if fields match
+  // e.g. if (autoVerified && confidence < 0.8) autoVerified = false;
+  // For now, let's trust the data match.
+
+  const hasRequired = Boolean(extractedFields.date)
+    && extractedFields.minutes !== null
+    && extractedFields.minutes !== undefined
+    && extractedFields.distance !== null
+    && extractedFields.distance !== undefined;
+
   const validationStatus = resolveValidationStatus(hasRequired, autoVerified);
 
   const updateResult = await updateProofImageIfPending(proofImageId, {
