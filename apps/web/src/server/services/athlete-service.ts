@@ -1,4 +1,4 @@
-import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus } from "@rowbook/shared";
+import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, nowInZone } from "@rowbook/shared";
 import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
@@ -6,7 +6,7 @@ import { getWeeklyRequirement, listWeeklyRequirementsByTeamSince } from "@/serve
 import { getExemption, listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
 import { getWeeklyAggregate, listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { getProofViewUrl } from "@/server/services/proof-service";
-import { getTeamLeaderboard } from "@/server/services/weekly-service";
+import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
 import { getWeightedAvgHr, getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
 
 const attachProofs = async <T extends { proofImages: Array<{ id: string; extractedFields: any }> }>(
@@ -58,7 +58,7 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
   }
 
   const { weekStartAt: normalizedWeekStart, weekEndAt } = getWeekRange(
-    weekStartAt ?? new Date(),
+    weekStartAt ?? nowInZone(),
   );
 
   const [entries, requirement, exemption, aggregate] = await Promise.all([
@@ -134,7 +134,7 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
     throw new Error("Athlete is not assigned to a team.");
   }
 
-  const { weekStartAt: currentWeekStart } = getWeekRange(new Date());
+  const { weekStartAt: currentWeekStart } = getWeekRange(nowInZone());
   let earliestWeekStart = currentWeekStart;
 
   for (let index = 1; index < weekCount; index += 1) {
@@ -272,14 +272,20 @@ export const getAthleteLeaderboard = async (athleteId: string, weekStartAt?: Dat
     throw new Error("Athlete is not assigned to a team.");
   }
 
-  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(new Date()).weekStartAt;
+  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(nowInZone()).weekStartAt;
   const weekEndAt = getWeekEndAt(week);
-  const leaderboard = await getTeamLeaderboard(teamId, week);
+  const [leaderboard, teamStats, teamTrend] = await Promise.all([
+    getTeamLeaderboard(teamId, week),
+    getTeamStats(teamId, week),
+    getTeamTrend(teamId, week),
+  ]);
 
   return {
     teamId,
     weekStartAt: week,
     weekEndAt,
     leaderboard,
+    teamStats,
+    teamTrend,
   };
 };

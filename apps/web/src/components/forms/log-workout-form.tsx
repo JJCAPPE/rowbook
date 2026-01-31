@@ -8,6 +8,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ACTIVITY_TYPE_LABELS,
   ActivityTypeValues,
+  nowInZone,
+  toZonedDate,
 } from "@rowbook/shared";
 
 import { ActivityIcon } from "@/components/ui/activity-icon";
@@ -23,13 +25,7 @@ const optionalNumber = z.preprocess(
   z.coerce.number().positive().optional(),
 );
 
-const getTodayString = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const getTodayString = () => nowInZone().toISODate() ?? "";
 
 const schema = z.object({
   activityType: z.enum(ActivityTypeValues),
@@ -183,7 +179,7 @@ export const LogWorkoutForm = () => {
     try {
       await createEntry({
         activityType: values.activityType,
-        date: new Date(values.date),
+        date: toZonedDate(values.date),
         minutes: values.minutes,
         distance: values.distanceKm,
         avgHr: values.avgHr ?? null,
@@ -407,35 +403,7 @@ export const LogWorkoutForm = () => {
         ) : (
           <p className="text-xs text-default-500">Take photos of your screen, or upload screenshots from Strava, Garmin, Polar, etc.</p>
         )}
-        {isUploading ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
-              <span>Step 1: Uploading proof</span>
-              <span>{uploadProgress}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-200"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
 
-        {isExtracting ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
-              <span>Step 2: Extracting data</span>
-              <span>{Math.round(extractionProgress)}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300"
-                style={{ width: `${extractionProgress}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
 
 
       </div>
@@ -478,6 +446,36 @@ export const LogWorkoutForm = () => {
         </Button>
         <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
       </div>
+
+      {isUploading ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+            <span>Step 1: Uploading proof</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-200"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {isExtracting ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+            <span>Step 2: Extracting data</span>
+            <span>{Math.round(extractionProgress)}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300"
+              style={{ width: `${extractionProgress}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {isSaving ? (
         <div className="space-y-2">

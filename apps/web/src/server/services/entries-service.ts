@@ -9,6 +9,7 @@ import {
   resolveValidationStatus,
   shouldAutoVerifyProof,
   summarizeExtractedFields,
+  nowInZone,
 } from "@rowbook/shared";
 import {
   createTrainingEntry,
@@ -43,13 +44,13 @@ export const createEntry = async (athleteId: string, input: {
   proofImageIds: string[];
   proofOcr?: ProofOcrResult | null; // TODO: Multiple OCR results support? For now assuming frontend sends one or logic handles separately. But really, we should likely rely on backend extraction per image.
 }) => {
-  const now = new Date();
+  const now = nowInZone();
   const { weekStartAt, weekEndAt } = getWeekRange(now);
 
   if (!isWithinWeek(input.date, weekStartAt)) {
     throw new Error("Entry date must be within the active week.");
   }
-  if (input.date.getTime() > now.getTime()) {
+  if (input.date.getTime() > now.toMillis()) {
     throw new Error("Entry date cannot be in the future.");
   }
 
@@ -154,7 +155,7 @@ export const updateEntry = async (athleteId: string, input: {
     throw new Error("Entry not found.");
   }
 
-  const now = new Date();
+  const now = nowInZone();
   const { weekStartAt, weekEndAt } = getWeekRange(now);
   if (entry.entryStatus === "LOCKED" || entry.weekStartAt.getTime() !== weekStartAt.getTime()) {
     throw new Error("Entry is locked.");
@@ -164,7 +165,7 @@ export const updateEntry = async (athleteId: string, input: {
     if (!isWithinWeek(input.date, weekStartAt)) {
       throw new Error("Entry date must be within the active week.");
     }
-    if (input.date.getTime() > now.getTime()) {
+    if (input.date.getTime() > now.toMillis()) {
       throw new Error("Entry date cannot be in the future.");
     }
   }
@@ -215,7 +216,7 @@ export const deleteEntry = async (athleteId: string, entryId: string) => {
     throw new Error("Entry not found.");
   }
 
-  const now = new Date();
+  const now = nowInZone();
   const { weekStartAt } = getWeekRange(now);
   if (entry.entryStatus === "LOCKED" || entry.weekStartAt.getTime() !== weekStartAt.getTime()) {
     throw new Error("Entry is locked.");
@@ -235,6 +236,6 @@ export const deleteEntry = async (athleteId: string, entryId: string) => {
 };
 
 export const listEntriesForActiveWeek = async (athleteId: string) => {
-  const { weekStartAt } = getWeekRange(new Date());
+  const { weekStartAt } = getWeekRange(nowInZone());
   return listEntriesByAthleteWeek(athleteId, weekStartAt);
 };

@@ -1,4 +1,5 @@
 import type { ProofExtractedFields } from "@rowbook/shared";
+import { nowInZone } from "@rowbook/shared";
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 
 // We keep this for backward compatibility if needed, but the main logic uses Gemini now.
@@ -76,7 +77,7 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
     },
   });
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = nowInZone().toISODate() ?? "";
   const prompt = `
     Analyze this image and extract workout proof data.
     Current date is ${today}.

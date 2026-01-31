@@ -1,4 +1,4 @@
-import { getPreviousWeekStartAt } from "@rowbook/shared";
+import { getPreviousWeekStartAt, nowInZone } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import { listTeams } from "@/server/repositories/teams";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";

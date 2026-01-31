@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Download, Maximize2, RotateCw } from "lucide-react";
 
@@ -16,6 +17,11 @@ type ProofImageViewerProps = {
 export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const rotate = () => setRotation((prev) => (prev + 90) % 360);
 
@@ -32,8 +38,8 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
         View proof
       </Button>
 
-      {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/80 p-6">
+      {isOpen && mounted ? createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-overlay/80 p-6">
           <div className="relative w-full max-w-3xl rounded-2xl border border-divider/40 bg-content1/90 p-4 shadow-lg backdrop-blur">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-sm font-semibold text-default-600">Proof image</h3>
@@ -75,13 +81,14 @@ export const ProofImageViewer = ({ src, alt, className }: ProofImageViewerProps)
                 alt={alt}
                 width={1200}
                 height={800}
-                className="max-h-[35vh] w-auto rounded-lg object-contain"
+                className="max-h-[85vh] w-auto rounded-lg object-contain"
                 style={{ transform: `rotate(${rotation}deg)` }}
                 unoptimized
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

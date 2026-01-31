@@ -28,10 +28,10 @@ export type ProofConfirm = z.infer<typeof ProofConfirmSchema>;
 
 export const ProofExtractedFieldsSchema = z.object({
   activityType: ActivityTypeSchema.optional().nullable(),
-  minutes: MinutesSchema.optional().nullable(),
+  minutes: z.number().positive().optional().nullable(),
   distance: DistanceSchema.optional().nullable(),
   avgHr: HeartRateSchema.optional().nullable(),
-  date: IsoDateTimeSchema.optional().nullable(),
+  date: z.string().optional().nullable(),
 });
 export type ProofExtractedFields = z.infer<typeof ProofExtractedFieldsSchema>;
 

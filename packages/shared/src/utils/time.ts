@@ -1,11 +1,14 @@
-import { DateTime } from "luxon";
-
+import { DateTime, Settings } from "luxon";
+ 
 export type DateInput = Date | string | number | DateTime;
-
+ 
 export const DEFAULT_TIMEZONE = "America/New_York";
-
-export const DEFAULT_TIME_FORMAT = "yyyy-LL-dd'T'HH:mm:ssZZ";
-
+ 
+// Ensure all Luxon operations use New York time by default
+Settings.defaultZone = DEFAULT_TIMEZONE;
+ 
+export const DEFAULT_TIME_FORMAT = "yyyy-LL-dd"; // Changed from "yyyy-LL-dd'T'HH:mm:ssZZ"
+ 
 export const toDateTime = (
   input: DateInput,
   timeZone = DEFAULT_TIMEZONE,

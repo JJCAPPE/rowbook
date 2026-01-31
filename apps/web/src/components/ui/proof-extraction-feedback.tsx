@@ -13,26 +13,32 @@ export function ProofExtractionFeedback({ fields }: ProofExtractionFeedbackProps
   const data = fields as ProofExtractedFields;
 
   const items = [
-    { label: "Activity", value: data.activityType },
-    { 
-      label: "Duration", 
-      value: typeof data.minutes === "number" ? formatMinutes(data.minutes) : null 
+    {
+      label: "Activity",
+      value: data.activityType,
+      missing: false
     },
-    { 
-      label: "Distance", 
-      value: typeof data.distance === "number" ? formatDistance(data.distance) : null 
+    {
+      label: "Duration",
+      value: typeof data.minutes === "number" ? formatMinutes(data.minutes) : null,
+      missing: typeof data.minutes !== "number"
     },
-    { 
-      label: "Avg HR", 
-      value: typeof data.avgHr === "number" ? `${data.avgHr} bpm` : null 
+    {
+      label: "Distance",
+      value: typeof data.distance === "number" ? formatDistance(data.distance) : null,
+      missing: typeof data.distance !== "number"
     },
-    { 
-      label: "Date", 
-      value: data.date ? formatFullDate(new Date(data.date)) : null 
+    {
+      label: "Avg HR",
+      value: typeof data.avgHr === "number" ? `${data.avgHr} bpm` : null,
+      missing: typeof data.avgHr !== "number"
     },
-  ].filter((item) => item.value !== null && item.value !== undefined);
-
-  if (items.length === 0) return null;
+    {
+      label: "Date",
+      value: data.date ? formatFullDate(new Date(data.date)) : null,
+      missing: !data.date
+    },
+  ];
 
   return (
     <div className="mt-2 space-y-2 rounded-xl border border-divider/20 bg-gradient-to-br from-content1/50 to-content2/50 p-3 shadow-inner">
@@ -48,9 +54,13 @@ export function ProofExtractionFeedback({ fields }: ProofExtractionFeedbackProps
             <span className="text-[9px] font-medium uppercase tracking-tight text-default-400">
               {item.label}
             </span>
-            <span className="text-xs font-semibold text-default-600">
-              {item.value}
-            </span>
+            {item.missing ? (
+              <span className="text-xs font-semibold text-rose-500">Missing</span>
+            ) : (
+              <span className="text-xs font-semibold text-default-600">
+                {item.value}
+              </span>
+            )}
           </div>
         ))}
       </div>

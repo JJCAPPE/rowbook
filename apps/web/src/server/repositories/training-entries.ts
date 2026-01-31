@@ -115,6 +115,21 @@ export const listEntriesByTeamWeek = (teamId: string, weekStartAt: Date) =>
     include: { athlete: true },
   });
 
+export const listEntriesByTeamSinceWeekStart = (
+  teamId: string,
+  weekStartAt: Date,
+) =>
+  prisma.trainingEntry.findMany({
+    where: {
+      weekStartAt: {
+        gte: weekStartAt,
+      },
+      athlete: { athleteProfile: { teamId } },
+    },
+    include: { athlete: true },
+    orderBy: { weekStartAt: "asc" },
+  });
+
 export const listEntriesByAthlete = (athleteId: string) =>
   prisma.trainingEntry.findMany({
     where: { athleteId },

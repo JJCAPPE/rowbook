@@ -1,20 +1,16 @@
-
-import { ValidationStatus } from "@rowbook/shared";
+import { ValidationStatus, toZonedDateTime } from "@rowbook/shared";
 
 export const isDateMatch = (entryDate: Date, extractedDateStr: string | null | undefined) => {
     if (!extractedDateStr) return false;
     
-    const extractedDate = new Date(extractedDateStr); // UTC Midnight
-    if (Number.isNaN(extractedDate.getTime())) return false;
+    // Extracted date is just "YYYY-MM-DD", toZonedDateTime will treat it as midnight in America/New_York
+    const extractedDate = toZonedDateTime(extractedDateStr);
+    if (!extractedDate.isValid) return false;
 
-    const entryTime = entryDate.getTime();
-    // Earliest valid time: Extracted Date 00:00 UTC minus 14 hours (start of day in UTC+14)
-    const startWindow = extractedDate.getTime() - (14 * 60 * 60 * 1000);
-    // Latest valid time: Extracted Date 23:59 UTC plus 12 hours (end of day in UTC-12)
-    // roughly extractedDate + 36h
-    const endWindow = extractedDate.getTime() + (36 * 60 * 60 * 1000);
+    // Both are now effectively in America/New_York
+    const entryDateZoned = toZonedDateTime(entryDate);
     
-    return entryTime >= startWindow && entryTime <= endWindow;
+    return entryDateZoned.hasSame(extractedDate, "day");
 };
 
 export const evaluateAutoVerification = (

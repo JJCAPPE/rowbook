@@ -6,6 +6,7 @@ export const WEEK_START_MINUTE = 0;
 export const getWeekStartAt = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
+  cutoffHour = WEEK_START_HOUR,
 ): Date => {
   const zoned = toDateTime(date, timeZone);
   const daysSinceSunday = zoned.weekday % 7;
@@ -13,7 +14,7 @@ export const getWeekStartAt = (
   let weekStart = zoned
     .minus({ days: daysSinceSunday })
     .set({
-      hour: WEEK_START_HOUR,
+      hour: cutoffHour,
       minute: WEEK_START_MINUTE,
       second: 0,
       millisecond: 0,
@@ -37,19 +38,21 @@ export const getWeekEndAt = (
 export const getPreviousWeekStartAt = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
+  cutoffHour = WEEK_START_HOUR,
 ): Date => {
-  const currentWeekStart = getWeekStartAt(date, timeZone);
+  const currentWeekStart = getWeekStartAt(date, timeZone, cutoffHour);
   return toDateTime(currentWeekStart, timeZone).minus({ weeks: 1 }).toUTC().toJSDate();
 };
 
 export const getWeekRange = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
+  cutoffHour = WEEK_START_HOUR,
 ): {
   weekStartAt: Date;
   weekEndAt: Date;
 } => {
-  const weekStartAt = getWeekStartAt(date, timeZone);
+  const weekStartAt = getWeekStartAt(date, timeZone, cutoffHour);
   return { weekStartAt, weekEndAt: getWeekEndAt(weekStartAt, timeZone) };
 };
 
@@ -70,7 +73,8 @@ export const isWithinActiveWeek = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
   referenceDate: DateInput = new Date(),
+  cutoffHour = WEEK_START_HOUR,
 ): boolean => {
-  const activeWeekStart = getWeekStartAt(referenceDate, timeZone);
+  const activeWeekStart = getWeekStartAt(referenceDate, timeZone, cutoffHour);
   return isWithinWeek(date, activeWeekStart, timeZone);
 };

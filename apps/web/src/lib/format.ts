@@ -10,8 +10,6 @@ const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
   day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
   timeZone: TIME_ZONE,
 });
 

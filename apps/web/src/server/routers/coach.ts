@@ -2,7 +2,13 @@ import { z } from "zod";
 import { ExemptionInputSchema, ValidationStatusSchema, WeeklyRequirementInputSchema } from "@rowbook/shared";
 import { coachProcedure, router } from "@/server/trpc";
 import { getAthleteDetail, getReviewQueue, getTeamOverview, getWeeklySettings } from "@/server/services/coach-service";
-import { removeExemption, setExemption, setWeeklyRequirement } from "@/server/services/requirement-service";
+import {
+  getWeeklyRequirementsRange,
+  removeExemption,
+  setExemption,
+  setWeeklyRequirement,
+  setWeeklyRequirements,
+} from "@/server/services/requirement-service";
 import { overrideValidationStatus } from "@/server/services/validation-service";
 
 export const coachRouter = router({
@@ -44,6 +50,29 @@ export const coachRouter = router({
     .mutation(({ ctx, input }) =>
       setWeeklyRequirement(ctx.session.user.id, input.teamId, input.weekStartAt, input.requiredMinutes),
     ),
+  getWeeklyRequirementsRange: coachProcedure
+    .input(z.object({ teamId: z.string(), startAt: z.coerce.date(), endAt: z.coerce.date() }))
+    .query(({ input }) => getWeeklyRequirementsRange(input.teamId, input.startAt, input.endAt)),
+  setWeeklyRequirements: coachProcedure
+    .input(
+      z.object({
+        teamId: z.string(),
+        requirements: z.array(z.object({ weekStartAt: z.coerce.date(), requiredMinutes: z.number() })),
+      }),
+    )
+    .mutation(({ ctx, input }) => setWeeklyRequirements(ctx.session.user.id, input.teamId, input.requirements)),
+  updateTeamSettings: coachProcedure
+    .input(z.object({ teamId: z.string(), weekCutoffHour: z.number().min(0).max(23) }))
+    .mutation(async ({ ctx, input }) => {
+      // We need to import updateTeamSettings service or just call repo directly?
+      // Best to add a service method.
+      // For now let's see if we can add it to coach-service or similar.
+      // Let's assume we create `updateTeamSettings` in coach-service.
+      // But wait, `getWeeklySettings` returns inferred type, checking coach-service.
+      return import("@/server/services/coach-service").then((mod) =>
+        mod.updateTeamSettings(ctx.session.user.id, input.teamId, { weekCutoffHour: input.weekCutoffHour }),
+      );
+    }),
   setExemption: coachProcedure
     .input(ExemptionInputSchema)
     .mutation(({ ctx, input }) =>

@@ -180,12 +180,7 @@ export default function CoachReviewQueuePage() {
                       <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
                     </div>
                     {entry.extractedFields ? (
-                      <details className="text-xs text-default-500">
-                        <summary className="cursor-pointer select-none hover:text-foreground">
-                          View details from Gemini extraction
-                        </summary>
-                        <ProofExtractionFeedback fields={entry.extractedFields} />
-                      </details>
+                      <ProofExtractionFeedback fields={entry.extractedFields} />
                     ) : null}
                     {entry.proofUrl ? (
                       <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />

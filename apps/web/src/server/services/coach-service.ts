@@ -5,10 +5,11 @@ import {
   ValidationStatus,
   getWeekEndAt,
   getWeekRange,
+  nowInZone,
 } from "@rowbook/shared";
 import type { TrainingEntry } from "@rowbook/shared";
-import { getDefaultTeam } from "@/server/repositories/teams";
-import { getTeamLeaderboard } from "@/server/services/weekly-service";
+import { getDefaultTeam, getTeamById, updateTeam } from "@/server/repositories/teams";
+import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
 import { listEntriesByAthlete, listEntriesByTeamWeek, listEntriesForReview } from "@/server/repositories/training-entries";
 import { listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { listTeamAthletes, getUserById } from "@/server/repositories/users";
@@ -16,6 +17,8 @@ import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements"
 import { listExemptionsByWeek } from "@/server/repositories/exemptions";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
+import { createAuditLog } from "@/server/repositories/audit-logs";
+import { getWeekStartAt } from "@rowbook/shared";
 
 type TeamLeaderboardRow = {
   id: string;
@@ -82,10 +85,12 @@ export const getTeamOverview = async (teamId?: string, weekStartAt?: Date) => {
   const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(new Date()).weekStartAt;
   const weekEndAt = getWeekEndAt(week);
 
-  const [leaderboardResult, entries, requirement] = await Promise.all([
+  const [leaderboardResult, entries, requirement, teamStats, teamTrend] = await Promise.all([
     getTeamLeaderboard(team.id, week),
     listEntriesByTeamWeek(team.id, week),
     getWeeklyRequirement(team.id, week),
+    getTeamStats(team.id, week),
+    getTeamTrend(team.id, week),
   ]);
   const leaderboard = leaderboardResult as TeamLeaderboardRow[];
 
@@ -114,6 +119,8 @@ export const getTeamOverview = async (teamId?: string, weekStartAt?: Date) => {
     leaderboard,
     pendingProofCount,
     missingMinutesCount,
+    teamStats,
+    teamTrend,
   };
 };
 
@@ -200,46 +207,55 @@ export const getReviewQueue = async (
   };
 };
 
-export const getWeeklySettings = async (teamId?: string, weekStartAt?: Date) => {
-  const team = teamId ? { id: teamId } : await getDefaultTeam();
-  if (!team) {
-    throw new Error("Team not found.");
-  }
+export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date) => {
+  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
+  if (!team) throw new Error("Team not found");
 
-  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(new Date()).weekStartAt;
-  const weekEndAt = getWeekEndAt(week);
+  // Cast team to any to access weekCutoffHour until types are fully regenerated
+  const cutoffHour = (team as any).weekCutoffHour ?? 18;
 
-  const [requirement, exemptionsResult, athletesResult] = await Promise.all([
-    getWeeklyRequirement(team.id, week),
-    listExemptionsByWeek(week, team.id),
+  const effectiveWeekStartAt = inputWeekStartAt ?? getWeekStartAt(new Date(), team.timezone, cutoffHour);
+  const weekEndAt = getWeekEndAt(effectiveWeekStartAt, team.timezone);
+
+  const [requirement, exemptions, activeAthletes] = await Promise.all([
+    getWeeklyRequirement(team.id, effectiveWeekStartAt),
+    listExemptionsByWeek(effectiveWeekStartAt, team.id),
     listTeamAthletes(team.id),
   ]);
-  const exemptions = exemptionsResult as Array<{
-    id: string;
-    athleteId: string;
-    reason: string | null;
-    athlete: { name: string | null; email: string };
-  }>;
-  const athletes = athletesResult as Array<{
-    id: string;
-    name: string | null;
-    email: string;
-  }>;
 
   return {
     teamId: team.id,
-    weekStartAt: week,
+    weekStartAt: effectiveWeekStartAt,
     weekEndAt,
-    requiredMinutes: requirement?.requiredMinutes ?? 0,
-    exemptions: exemptions.map((exemption) => ({
-      id: exemption.id,
-      athleteId: exemption.athleteId,
-      athleteName: exemption.athlete.name ?? exemption.athlete.email,
-      reason: exemption.reason,
+    weekCutoffHour: cutoffHour as number,
+    requiredMinutes: requirement?.requiredMinutes,
+    exemptions: exemptions.map((e) => ({
+      id: e.id,
+      athleteId: e.athleteId,
+      athleteName: e.athlete.name ?? "Unknown",
+      reason: e.reason,
     })),
-    athletes: athletes.map((athlete) => ({
-      id: athlete.id,
-      name: athlete.name ?? athlete.email,
+    athletes: activeAthletes.map((a) => ({
+      id: a.id,
+      name: a.name ?? "Unknown",
     })),
   };
+};
+
+export const updateTeamSettings = async (
+  actorId: string,
+  teamId: string,
+  settings: { weekCutoffHour: number },
+) => {
+  await updateTeam(teamId, settings);
+  
+  await createAuditLog({
+    actorId,
+    entityType: "TEAM_SETTINGS",
+    entityId: teamId,
+    action: "UPDATE",
+    after: settings,
+  });
+  
+  return { success: true };
 };

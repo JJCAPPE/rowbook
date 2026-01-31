@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { WeeklyTargetsTable } from "@/components/coach/weekly-targets-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatWeekRange } from "@/lib/format";
@@ -39,23 +40,8 @@ export default function CoachSettingsPage() {
   );
   const athletes: AthleteOption[] = data?.athletes ?? [];
   const exemptions: ExemptionItem[] = data?.exemptions ?? [];
-  const [requiredMinutes, setRequiredMinutes] = useState(0);
   const [selectedAthlete, setSelectedAthlete] = useState("");
   const [exemptionReason, setExemptionReason] = useState("");
-
-  useEffect(() => {
-    if (data?.requiredMinutes !== undefined) {
-      setRequiredMinutes(data.requiredMinutes);
-    }
-  }, [data?.requiredMinutes]);
-
-  const { mutateAsync: saveRequirement, isLoading: isSavingRequirement } =
-    trpc.coach.setWeeklyRequirement.useMutation({
-      onSuccess: async () => {
-        await utils.coach.getWeeklySettings.invalidate();
-        await utils.coach.getTeamOverview.invalidate();
-      },
-    });
 
   const { mutateAsync: saveExemption, isLoading: isSavingExemption } =
     trpc.coach.setExemption.useMutation({
@@ -75,6 +61,22 @@ export default function CoachSettingsPage() {
       },
     });
 
+  const { mutateAsync: saveRequirement, isLoading: isSavingRequirement } =
+    trpc.coach.setWeeklyRequirement.useMutation({
+      onSuccess: async () => {
+        await utils.coach.getWeeklySettings.invalidate();
+        await utils.coach.getTeamOverview.invalidate();
+      },
+    });
+
+  const { mutateAsync: updateTeamSettings, isLoading: isUpdatingSettings } =
+    trpc.coach.updateTeamSettings.useMutation({
+      onSuccess: async () => {
+        await utils.coach.getWeeklySettings.invalidate();
+        await utils.coach.getTeamOverview.invalidate(); // To reflect potential week shift
+      },
+    });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -84,145 +86,126 @@ export default function CoachSettingsPage() {
             ? `Week of ${formatWeekRange(data.weekStartAt, data.weekEndAt)}`
             : "Set weekly requirements and exemptions."
         }
+        actions={
+          data ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-default-500">Week boundary:</span>
+              <select
+                className="bg-transparent font-medium text-foreground outline-none cursor-pointer"
+                value={data.weekCutoffHour ?? 18}
+                disabled={isUpdatingSettings}
+                onChange={(e) => updateTeamSettings({
+                  teamId: data.teamId,
+                  weekCutoffHour: Number(e.target.value)
+                })}
+              >
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <option key={i} value={i}>
+                    {i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          {data && <WeeklyTargetsTable teamId={data.teamId} />}
+        </div>
+
         <Card className="space-y-4">
-          <div>
-            <p className="section-title">Required minutes</p>
-            <p className="text-sm text-default-500">Applies to all active athletes.</p>
-          </div>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="requiredMinutes">Minutes</Label>
-              <Input
-                id="requiredMinutes"
-                type="number"
-                value={String(requiredMinutes)}
-                min={0}
-                onChange={(event) => setRequiredMinutes(Number(event.target.value))}
-              />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="section-title">Exemptions</p>
+              <p className="text-sm text-default-500">Athletes excluded from weekly totals.</p>
             </div>
             <Button
+              variant="outline"
+              size="sm"
               type="button"
-              disabled={isSavingRequirement || !data}
+              disabled={!selectedAthlete || !data || isSavingExemption}
               onClick={() =>
                 data
-                  ? saveRequirement({
-                      teamId: data.teamId,
-                      weekStartAt: data.weekStartAt,
-                      requiredMinutes,
-                    })
-                  : null
-              }
-            >
-              {isSavingRequirement ? "Saving..." : "Save requirement"}
-            </Button>
-          </div>
-        </Card>
-
-        <Card className="space-y-4">
-          <div>
-            <p className="section-title">Week boundary</p>
-            <p className="text-sm text-default-500">Sunday at 6:00 PM ET.</p>
-          </div>
-          <div className="rounded-2xl border border-divider/40 bg-content2/70 p-4 text-sm text-default-500">
-            Entries after 6:00 PM roll into the next week and proof images are kept for
-            7 days after the cutoff.
-          </div>
-        </Card>
-      </div>
-
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="section-title">Exemptions</p>
-            <p className="text-sm text-default-500">Athletes excluded from weekly totals.</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            type="button"
-            disabled={!selectedAthlete || !data || isSavingExemption}
-            onClick={() =>
-              data
-                ? saveExemption({
+                  ? saveExemption({
                     athleteId: selectedAthlete,
                     weekStartAt: data.weekStartAt,
                     reason: exemptionReason || undefined,
                   })
-                : null
-            }
-          >
-            {isSavingExemption ? "Saving..." : "Add exemption"}
-          </Button>
-        </div>
-        {isLoading ? (
-          <p className="text-sm text-default-500">Loading weekly settings...</p>
-        ) : error ? (
-          <p className="text-sm text-rose-500">Unable to load settings.</p>
-        ) : data ? (
-          <>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="exemptionAthlete">Athlete</Label>
-                <select
-                  id="exemptionAthlete"
-                  value={selectedAthlete}
-                  onChange={(event) => setSelectedAthlete(event.target.value)}
-                  className="input-field"
-                >
-                  <option value="">Select athlete</option>
-                  {athletes.map((athlete) => (
-                    <option key={athlete.id} value={athlete.id}>
-                      {athlete.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="exemptionReason">Reason (optional)</Label>
-                <Input
-                  id="exemptionReason"
-                  value={exemptionReason}
-                  onChange={(event) => setExemptionReason(event.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid gap-3">
-              {exemptions.length ? (
-                exemptions.map((exemption) => (
-                  <div
-                    key={exemption.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
+                  : null
+              }
+            >
+              {isSavingExemption ? "Saving..." : "Add exemption"}
+            </Button>
+          </div>
+          {isLoading ? (
+            <p className="text-sm text-default-500">Loading weekly settings...</p>
+          ) : error ? (
+            <p className="text-sm text-rose-500">Unable to load settings.</p>
+          ) : data ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="exemptionAthlete">Athlete</Label>
+                  <select
+                    id="exemptionAthlete"
+                    value={selectedAthlete}
+                    onChange={(event) => setSelectedAthlete(event.target.value)}
+                    className="input-field"
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
-                      <p className="text-xs text-default-500">{exemption.reason ?? "No reason"}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      type="button"
-                      disabled={isRemovingExemption}
-                      onClick={() =>
-                        removeExemption({
-                          athleteId: exemption.athleteId,
-                          weekStartAt: data.weekStartAt,
-                        })
-                      }
+                    <option value="">Select athlete</option>
+                    {athletes.map((athlete) => (
+                      <option key={athlete.id} value={athlete.id}>
+                        {athlete.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exemptionReason">Reason (optional)</Label>
+                  <Input
+                    id="exemptionReason"
+                    value={exemptionReason}
+                    onChange={(event) => setExemptionReason(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3">
+                {exemptions.length ? (
+                  exemptions.map((exemption) => (
+                    <div
+                      key={exemption.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
                     >
-                      Remove
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-default-500">No exemptions yet.</p>
-              )}
-            </div>
-          </>
-        ) : null}
-      </Card>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
+                        <p className="text-xs text-default-500">{exemption.reason ?? "No reason"}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        disabled={isRemovingExemption}
+                        onClick={() =>
+                          removeExemption({
+                            athleteId: exemption.athleteId,
+                            weekStartAt: data.weekStartAt,
+                          })
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-default-500">No exemptions yet.</p>
+                )}
+              </div>
+            </>
+          ) : null}
+        </Card>
+      </div>
     </div>
   );
 }

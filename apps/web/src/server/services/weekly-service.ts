@@ -3,10 +3,16 @@ import {
   PENDING_PROOF_STATUSES,
   ValidationStatus,
   WeeklyStatus,
+  getPreviousWeekStartAt,
   getWeekEndAt,
 } from "@rowbook/shared";
+import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import { listTeamAthletes } from "@/server/repositories/users";
-import { listEntriesByAthleteWeek, listEntriesByTeamWeek } from "@/server/repositories/training-entries";
+import {
+  listEntriesByAthleteWeek,
+  listEntriesByTeamSinceWeekStart,
+  listEntriesByTeamWeek,
+} from "@/server/repositories/training-entries";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
 import { getExemption, listExemptionsByWeek } from "@/server/repositories/exemptions";
 import {
@@ -215,4 +221,94 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
       missingMinutes,
     };
   });
+};
+
+export const getTeamStats = async (teamId: string, weekStartAt: Date) => {
+  const entries = await listEntriesByTeamWeek(teamId, weekStartAt);
+  const validEntries = entries.filter((e) => e.validationStatus !== "REJECTED");
+
+  const totalMinutes = validEntries.reduce((sum, e) => sum + e.minutes, 0);
+  const totalDistance = validEntries.reduce((sum, e) => sum + e.distance, 0);
+  const avgHr = getWeightedAvgHr(
+    validEntries.map((e) => ({ minutes: e.minutes, avgHr: e.avgHr })),
+  );
+
+  return {
+    totalMinutes,
+    totalDistance,
+    avgHr,
+  };
+};
+
+export const getTeamTrend = async (
+  teamId: string,
+  endWeekStartAt: Date,
+  weeks = 6,
+) => {
+  let start = endWeekStartAt;
+  for (let i = 0; i < weeks - 1; i++) {
+    start = getPreviousWeekStartAt(start);
+  }
+
+  const entries = await listEntriesByTeamSinceWeekStart(teamId, start);
+  const validEntries = entries.filter(
+    (e) => e.validationStatus !== "REJECTED" && e.weekStartAt <= endWeekStartAt,
+  );
+
+  const weeksMap = new Map<
+    string,
+    {
+      minutes: number;
+      distance: number;
+      hrEntries: { minutes: number; avgHr: number | null }[];
+    }
+  >();
+
+  let loopWeek = start;
+  // Safety break to prevent infinite loops if date math is wrong
+  let safety = 0;
+  while (loopWeek <= endWeekStartAt && safety < 100) {
+    weeksMap.set(loopWeek.toISOString(), {
+      minutes: 0,
+      distance: 0,
+      hrEntries: [],
+    });
+    const next = new Date(loopWeek);
+    next.setDate(next.getDate() + 7);
+    loopWeek = next;
+    safety++;
+  }
+
+  for (const entry of validEntries) {
+    const key = entry.weekStartAt.toISOString();
+    const current = weeksMap.get(key);
+    if (current) {
+      current.minutes += entry.minutes;
+      current.distance += entry.distance;
+      if (entry.avgHr !== null && entry.avgHr !== undefined) {
+        current.hrEntries.push({ minutes: entry.minutes, avgHr: entry.avgHr });
+      }
+    }
+  }
+
+  const trend = [];
+  let cumulativeMinutes = 0;
+  let cumulativeDistance = 0;
+
+  const sortedKeys = Array.from(weeksMap.keys()).sort();
+
+  for (const key of sortedKeys) {
+    const data = weeksMap.get(key)!;
+    cumulativeMinutes += data.minutes;
+    cumulativeDistance += data.distance;
+
+    trend.push({
+      weekStartAt: new Date(key),
+      minutes: cumulativeMinutes,
+      distance: cumulativeDistance,
+      avgHr: getWeightedAvgHr(data.hrEntries),
+    });
+  }
+
+  return trend;
 };

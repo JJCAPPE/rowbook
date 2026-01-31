@@ -1,4 +1,4 @@
-import { ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, getWeekRange } from "@rowbook/shared";
+import { ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, getWeekRange, nowInZone } from "@rowbook/shared";
 import { createProofImage, getProofImageById, listExpiredProofImages, updateProofImage } from "@/server/repositories/proof-images";
 import { createUploadUrl, createViewUrl, deleteFile, downloadFile } from "@/server/storage/proof-storage";
 import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
@@ -51,7 +51,7 @@ export const createProofUpload = async (
     throw new Error("Unsupported file type.");
   }
 
-  const { weekEndAt } = getWeekRange(new Date());
+  const { weekEndAt } = getWeekRange(nowInZone());
   const deleteAfter = getDeleteAfter(weekEndAt);
   const safeName = sanitizeFileName(input.fileName);
   const storagePath = `${athleteId}/${Date.now()}-${safeName}`;
@@ -79,7 +79,7 @@ export const confirmProofUpload = async (athleteId: string, proofImageId: string
     throw new Error("Proof image not found.");
   }
 
-  const updatedTarget = await updateProofImage(proofImageId, { uploadedAt: new Date() });
+  const updatedTarget = await updateProofImage(proofImageId, { uploadedAt: nowInZone().toJSDate() });
   await createProofExtractionJob(proofImageId);
   return updatedTarget;
 };
@@ -122,7 +122,7 @@ export const extractDataFromProof = async (athleteId: string, proofImageId: stri
 };
 
 export const cleanupExpiredProofImages = async () => {
-  const now = new Date();
+  const now = nowInZone().toJSDate();
   const expired = await listExpiredProofImages(now);
 
   for (const proof of expired) {

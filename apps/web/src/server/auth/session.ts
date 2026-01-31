@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { parse, serialize } from "cookie";
 import { nanoid } from "nanoid";
+import { nowInZone } from "@rowbook/shared";
 
 export const SESSION_COOKIE_NAME = "rowbook_session";
 export const SESSION_TTL_DAYS = 30;
@@ -10,7 +11,7 @@ export const createSessionToken = () => nanoid(32);
 export const hashSessionToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 
-export const getSessionExpiresAt = (now: Date = new Date()) => {
+export const getSessionExpiresAt = (now: Date = nowInZone().toJSDate()) => {
   const expiresAt = new Date(now);
   expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
   return expiresAt;

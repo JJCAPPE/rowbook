@@ -1,5 +1,5 @@
 import { prisma } from "@/db/client";
-import { ProofExtractionStatus } from "@rowbook/shared";
+import { ProofExtractionStatus, nowInZone } from "@rowbook/shared";
 import { Prisma } from "@prisma/client";
 
 export const createProofExtractionJob = (proofImageId: string) =>
@@ -47,7 +47,7 @@ export const lockNextProofExtractionJob = async () => {
     return null;
   }
 
-  const now = new Date();
+  const now = nowInZone().toJSDate();
   const { count } = await prisma.proofExtractionJob.updateMany({
     where: {
       id: candidate.id,
