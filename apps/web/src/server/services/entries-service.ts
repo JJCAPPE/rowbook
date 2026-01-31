@@ -21,7 +21,8 @@ import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
 import { upsertProofExtractionJobResult } from "@/server/repositories/proof-extraction-jobs";
 import { createAuditLog } from "@/server/repositories/audit-logs";
-import { aggregateWeekForTeam } from "@/server/services/weekly-service";
+import { aggregateWeekForAthlete } from "@/server/services/weekly-service";
+import { evaluateAutoVerification } from "@/server/services/validation-logic";
 
 const syncTeamAggregatesForWeek = async (athleteId: string, weekStartAt: Date) => {
   const teamId = await getTeamIdForAthlete(athleteId);
@@ -29,7 +30,7 @@ const syncTeamAggregatesForWeek = async (athleteId: string, weekStartAt: Date) =
     return;
   }
 
-  await aggregateWeekForTeam(teamId, weekStartAt);
+  await aggregateWeekForAthlete(teamId, athleteId, weekStartAt);
 };
 
 export const createEntry = async (athleteId: string, input: {
@@ -90,8 +91,15 @@ export const createEntry = async (athleteId: string, input: {
   // The extraction job should be triggered.
   
   let validationStatus: ValidationStatus = "NOT_CHECKED";
-  // If we removed client-side OCR, we default to PENDING or extraction needed.
   
+  if (input.proofOcr?.extractedFields) {
+    const { autoVerified, validationStatus: evaluatedStatus } = evaluateAutoVerification(
+      { date: input.date, minutes: input.minutes },
+      [input.proofOcr.extractedFields as any]
+    );
+    validationStatus = evaluatedStatus;
+  }
+
   // Calculate pace and watts
   const avgPace = calculatePaceSeconds(input.activityType, input.distance, input.minutes);
   const avgWatts = calculateWatts(input.activityType, avgPace);
@@ -113,16 +121,10 @@ export const createEntry = async (athleteId: string, input: {
     lockedAt: null,
   });
 
-  // We should ideally ensure extraction jobs are queued for all images.
-  // Current system seems to pick up images that are 'PENDING'?
-  // Or is it triggered?
-  // `getProofImageById` doesn't show trigger.
-  // If `proofOcr` is provided (legacy), update first image.
-  
   if (input.proofOcr?.extractedFields) {
       await updateProofImageIfPending(proofImageId, {
         extractedFields: input.proofOcr.extractedFields,
-        validationStatus: "PENDING", // Re-evaluate
+        validationStatus: validationStatus, // Match the entry status
       });
   }
 

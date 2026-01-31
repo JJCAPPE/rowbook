@@ -2,6 +2,7 @@ import { ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, getWeekRange } from "@rowboo
 import { createProofImage, getProofImageById, listExpiredProofImages, updateProofImage } from "@/server/repositories/proof-images";
 import { createUploadUrl, createViewUrl, deleteFile, downloadFile } from "@/server/storage/proof-storage";
 import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
+import { createProofExtractionJob } from "@/server/repositories/proof-extraction-jobs";
 
 const toBuffer = async (data: unknown) => {
   if (data instanceof Buffer) {
@@ -78,7 +79,9 @@ export const confirmProofUpload = async (athleteId: string, proofImageId: string
     throw new Error("Proof image not found.");
   }
 
-  return updateProofImage(proofImageId, { uploadedAt: new Date() });
+  const updatedTarget = await updateProofImage(proofImageId, { uploadedAt: new Date() });
+  await createProofExtractionJob(proofImageId);
+  return updatedTarget;
 };
 
 export const getProofViewUrl = async (

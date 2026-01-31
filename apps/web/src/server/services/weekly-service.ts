@@ -6,9 +6,9 @@ import {
   getWeekEndAt,
 } from "@rowbook/shared";
 import { listTeamAthletes } from "@/server/repositories/users";
-import { listEntriesByTeamWeek } from "@/server/repositories/training-entries";
+import { listEntriesByAthleteWeek, listEntriesByTeamWeek } from "@/server/repositories/training-entries";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
-import { listExemptionsByWeek } from "@/server/repositories/exemptions";
+import { getExemption, listExemptionsByWeek } from "@/server/repositories/exemptions";
 import {
   listWeeklyAggregatesByTeamWeekWithAthlete,
   upsertWeeklyAggregate,
@@ -98,6 +98,49 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
   }
 
   return aggregates;
+};
+
+export const aggregateWeekForAthlete = async (teamId: string, athleteId: string, weekStartAt: Date) => {
+  const weekEndAt = getWeekEndAt(weekStartAt);
+  const [entries, requirement, exemption] = await Promise.all([
+    listEntriesByAthleteWeek(athleteId, weekStartAt),
+    getWeeklyRequirement(teamId, weekStartAt),
+    getExemption(athleteId, weekStartAt),
+  ]);
+
+  let totalMinutes = 0;
+  const activityTypes = new Set<ActivityType>();
+  let hasHrData = false;
+
+  for (const entry of entries) {
+    if (entry.validationStatus === "REJECTED") {
+      continue;
+    }
+    totalMinutes += entry.minutes;
+    activityTypes.add(entry.activityType);
+    if (entry.avgHr !== null && entry.avgHr !== undefined) {
+      hasHrData = true;
+    }
+  }
+
+  const requiredMinutes = requirement?.requiredMinutes ?? 0;
+  
+  const status: WeeklyStatus = exemption
+    ? "EXEMPT"
+    : totalMinutes >= requiredMinutes
+      ? "MET"
+      : "NOT_MET";
+
+  return upsertWeeklyAggregate({
+    athleteId,
+    teamId,
+    weekStartAt,
+    weekEndAt,
+    totalMinutes,
+    activityTypes: Array.from(activityTypes),
+    hasHrData,
+    status,
+  });
 };
 
 export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) => {

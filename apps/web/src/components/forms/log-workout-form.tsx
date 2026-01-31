@@ -52,8 +52,8 @@ type FormValues = z.infer<typeof schema>;
 const defaultValues: FormValues = {
   activityType: "ERG",
   date: getTodayString(),
-  minutes: 30,
-  distanceKm: 5,
+  minutes: 0,
+  distanceKm: 0,
   avgHr: undefined,
   notes: "",
   proof: null,
@@ -142,6 +142,7 @@ export const LogWorkoutForm = () => {
   const activityType = watch("activityType");
   const proofRegister = register("proof");
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  const [firstExtractedFields, setFirstExtractedFields] = useState<any | null>(null);
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
   const simulateProgress = (setProgress: (val: number | ((prev: number) => number)) => void) => {
@@ -161,7 +162,7 @@ export const LogWorkoutForm = () => {
 
   // Removed standard preview effect as we handle files manually now
   useEffect(() => {
-     setValue("proofImageIds", uploadedIds, { shouldValidate: true });
+    setValue("proofImageIds", uploadedIds, { shouldValidate: true });
   }, [uploadedIds, setValue]);
 
 
@@ -169,13 +170,13 @@ export const LogWorkoutForm = () => {
     setSubmitted(false);
     setSubmitError(null);
     setExtractionStatus(null);
-    
+
     // We expect files to be already uploaded
     if (uploadedIds.length === 0) {
-        setSubmitError("Please upload at least one proof image.");
-        return;
+      setSubmitError("Please upload at least one proof image.");
+      return;
     }
-    
+
     setIsSaving(true);
     let progressInterval: NodeJS.Timeout | null = simulateProgress(setSaveProgress);
 
@@ -188,6 +189,7 @@ export const LogWorkoutForm = () => {
         avgHr: values.avgHr ?? null,
         notes: values.notes?.trim() || undefined,
         proofImageIds: uploadedIds,
+        proofOcr: firstExtractedFields ? { extractedFields: firstExtractedFields } : null,
       });
 
       if (progressInterval) clearInterval(progressInterval);
@@ -210,109 +212,110 @@ export const LogWorkoutForm = () => {
       setProofInputKey((current) => current + 1);
       setSubmitted(true);
     } catch (error) {
-       if (error instanceof Error) {
+      if (error instanceof Error) {
         setSubmitError(error.message);
       } else {
         setSubmitError("Unable to save entry. Please try again.");
       }
     } finally {
-        if (progressInterval) clearInterval(progressInterval);
-        setIsSaving(false);
-        setSaveProgress(0);
+      if (progressInterval) clearInterval(progressInterval);
+      setIsSaving(false);
+      setSaveProgress(0);
     }
   };
 
   const handleFileSelect = async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
-      
-      setIsUploading(true);
-      setSubmitError(null);
-      
-      const newIds: string[] = [];
-      const newUrls: string[] = [];
-      
-      // Keep existing
-      const currentIds = [...uploadedIds];
-      const currentUrls = [...previewUrls];
+    if (!files || files.length === 0) return;
 
-      try {
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            // Enhance preview
-            newUrls.push(URL.createObjectURL(file));
+    setIsUploading(true);
+    setSubmitError(null);
 
-            const upload = await createUploadUrl({
-                fileName: file.name,
-                fileSize: file.size,
-                mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
-            });
-            
-            await uploadFileWithProgress(upload.uploadUrl, file, (progress) => {
-               // Per-file progress logic if needed
-               if (files.length === 1) setUploadProgress(progress);
-            });
-            
-            await confirmUpload({ proofImageId: upload.proofImageId });
-            newIds.push(upload.proofImageId);
-            
-            // Trigger extraction for the first file only (or all and aggregate?)
-            // Let's do first file for now to populate form
-            if (i === 0) {
-               setIsExtracting(true);
-               let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
-               try {
-                  const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
-                  console.log("Extracted Data for Form Population:", extracted);
-                  
-                  if (extracted.date) {
-                    console.log("Setting date to:", extracted.date);
-                    setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
-                  }
-                  if (extracted.minutes) {
-                    const flooredMinutes = Math.floor(extracted.minutes);
-                    console.log("Setting minutes to:", flooredMinutes);
-                    setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
-                  }
-                  if (extracted.distance) {
-                    console.log("Setting distance to:", extracted.distance);
-                    setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
-                  }
-                  if (extracted.avgHr) {
-                    console.log("Setting avgHr to:", extracted.avgHr);
-                    setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
-                  }
-                  
-                  if (extractInterval) clearInterval(extractInterval);
-                  extractInterval = null;
-                  setExtractionProgress(100);
-                  await new Promise(r => setTimeout(r, 400));
-               } catch (e) {
-                  console.error("Extraction failed", e);
-                  setSubmitError("Auto-extraction failed. Please enter details manually.");
-               } finally {
-                  if (extractInterval) clearInterval(extractInterval);
-                  setIsExtracting(false);
-                  setExtractionProgress(0);
-               }
+    const newIds: string[] = [];
+    const newUrls: string[] = [];
+
+    // Keep existing
+    const currentIds = [...uploadedIds];
+    const currentUrls = [...previewUrls];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // Enhance preview
+        newUrls.push(URL.createObjectURL(file));
+
+        const upload = await createUploadUrl({
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
+        });
+
+        await uploadFileWithProgress(upload.uploadUrl, file, (progress) => {
+          // Per-file progress logic if needed
+          if (files.length === 1) setUploadProgress(progress);
+        });
+
+        await confirmUpload({ proofImageId: upload.proofImageId });
+        newIds.push(upload.proofImageId);
+
+        // Trigger extraction for the first file only (or all and aggregate?)
+        // Let's do first file for now to populate form
+        if (i === 0) {
+          setIsExtracting(true);
+          let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
+          try {
+            const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
+            console.log("Extracted Data for Form Population:", extracted);
+            setFirstExtractedFields(extracted);
+
+            if (extracted.date) {
+              console.log("Setting date to:", extracted.date);
+              setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
             }
+            if (extracted.minutes) {
+              const flooredMinutes = Math.floor(extracted.minutes);
+              console.log("Setting minutes to:", flooredMinutes);
+              setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
+            }
+            if (extracted.distance) {
+              console.log("Setting distance to:", extracted.distance);
+              setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
+            }
+            if (extracted.avgHr) {
+              console.log("Setting avgHr to:", extracted.avgHr);
+              setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
+            }
+
+            if (extractInterval) clearInterval(extractInterval);
+            extractInterval = null;
+            setExtractionProgress(100);
+            await new Promise(r => setTimeout(r, 400));
+          } catch (e) {
+            console.error("Extraction failed", e);
+            setSubmitError("Auto-extraction failed. Please enter details manually.");
+          } finally {
+            if (extractInterval) clearInterval(extractInterval);
+            setIsExtracting(false);
+            setExtractionProgress(0);
+          }
         }
-        
-        setUploadedIds([...currentIds, ...newIds]);
-        setPreviewUrls([...currentUrls, ...newUrls]);
-        
-      } catch (e) {
-          setSubmitError("Failed to upload image(s).");
-      } finally {
-        setIsUploading(false);
       }
+
+      setUploadedIds([...currentIds, ...newIds]);
+      setPreviewUrls([...currentUrls, ...newUrls]);
+
+    } catch (e) {
+      setSubmitError("Failed to upload image(s).");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleCameraChange = (event: ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(event.currentTarget.files);
   };
-  
+
   const handleUploadChange = (event: ChangeEvent<HTMLInputElement>) => {
-      handleFileSelect(event.currentTarget.files);
+    handleFileSelect(event.currentTarget.files);
   };
 
   return (
@@ -388,18 +391,18 @@ export const LogWorkoutForm = () => {
         {errors.proofImageIds ? <p className="text-xs text-rose-500">{errors.proofImageIds.message}</p> : null}
         {previewUrls.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 w-full rounded-2xl border border-divider/40 bg-content2/70 p-3">
-             {previewUrls.map((url, index) => (
-                <div key={index} className="relative aspect-video w-full">
-                  <Image
-                    src={url}
-                    alt={`Proof preview ${index + 1}`}
-                    fill
-                    sizes="(max-width: 768px) 50vw, 300px"
-                    className="rounded-lg object-cover"
-                    unoptimized
-                  />
-                </div>
-             ))}
+            {previewUrls.map((url, index) => (
+              <div key={index} className="relative aspect-video w-full">
+                <Image
+                  src={url}
+                  alt={`Proof preview ${index + 1}`}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 300px"
+                  className="rounded-lg object-cover"
+                  unoptimized
+                />
+              </div>
+            ))}
           </div>
         ) : (
           <p className="text-xs text-default-500">Take photos of your screen, or upload screenshots from Strava, Garmin, Polar, etc.</p>
@@ -434,20 +437,7 @@ export const LogWorkoutForm = () => {
           </div>
         ) : null}
 
-        {isSaving ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
-              <span>Step 3: Saving workout</span>
-              <span>{Math.round(saveProgress)}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300"
-                style={{ width: `${saveProgress}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
+
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -489,6 +479,21 @@ export const LogWorkoutForm = () => {
         <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
       </div>
 
+      {isSaving ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+            <span>Step 3: Saving workout</span>
+            <span>{Math.round(saveProgress)}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300"
+              style={{ width: `${saveProgress}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
+
       {submitError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {submitError}
@@ -496,7 +501,7 @@ export const LogWorkoutForm = () => {
       ) : null}
       {submitted ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          Workout saved. Counted toward totals while pending review.
+          Workout saved.
         </div>
       ) : null}
     </form>

@@ -1,7 +1,6 @@
 import {
   PENDING_PROOF_STATUSES,
   ValidationStatus,
-  compareAverageHr,
 } from "@rowbook/shared";
 import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
 import {
@@ -12,6 +11,7 @@ import {
 import { getTrainingEntryByProofImageId, updateTrainingEntry } from "@/server/repositories/training-entries";
 import { downloadFile } from "@/server/storage/proof-storage";
 import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
+import { evaluateAutoVerification } from "@/server/services/validation-logic";
 
 const toBuffer = async (data: unknown) => {
   if (data instanceof Buffer) {
@@ -37,49 +37,6 @@ const toBuffer = async (data: unknown) => {
   }
 
   throw new Error("Unsupported proof image payload.");
-};
-
-const isSameDate = (left: Date, right: Date) =>
-  left.toISOString().slice(0, 10) === right.toISOString().slice(0, 10);
-
-const shouldAutoVerify = (
-  entry: {
-    date: Date;
-    minutes: number;
-    distance: number;
-    avgHr: number | null;
-  } | null,
-  extracted: {
-    date: string | null;
-    minutes: number | null;
-    distance: number | null;
-    avgHr: number | null;
-  },
-) => {
-  if (!entry || !extracted.date || extracted.minutes === null) {
-    return false;
-  }
-
-  const parsedDate = new Date(extracted.date);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return false;
-  }
-
-  const minutesMatch = extracted.minutes >= entry.minutes;
-  const dateMatch = isSameDate(entry.date, parsedDate);
-
-  return minutesMatch && dateMatch;
-};
-
-const resolveValidationStatus = (
-  hasRequired: boolean,
-  autoVerified: boolean,
-): ValidationStatus => {
-  if (autoVerified) {
-    return "VERIFIED";
-  }
-
-  return hasRequired ? "PENDING" : "EXTRACTION_INCOMPLETE";
 };
 
 const processJob = async (jobId: string, proofImageId: string) => {
@@ -136,7 +93,7 @@ const processJob = async (jobId: string, proofImageId: string) => {
   // Update the proof image with extracted data
   const updateResult = await updateProofImageIfPending(proofImageId, {
     extractedFields,
-    validationStatus: resolveValidationStatus(Boolean(extractedFields.date), false), // Mark as PENDING initially, verified by aggregation below
+    validationStatus: extractedFields.date ? "PENDING" : "EXTRACTION_INCOMPLETE",
   });
 
   if (updateResult.count === 0) {
@@ -155,63 +112,28 @@ const processJob = async (jobId: string, proofImageId: string) => {
       if (p.id === proofImageId) {
          return extractedFields;
       }
-      return p.extractedFields as typeof extractedFields | null;
+      return p.extractedFields as any;
     });
     
-    // Check if all proofs have data
-    const allExtracted = proofsState.every((p: any) => p !== null && p !== undefined);
-    
-    if (allExtracted) {
-       // Aggregate
-       const totals = proofsState.reduce((acc: any, curr: any) => {
-         if (!curr) return acc;
-         return {
-            minutes: acc.minutes + (curr.minutes ?? 0),
-            distance: acc.distance + (curr.distance ?? 0),
-            hrSum: acc.hrSum + ((curr.avgHr ?? 0) * (curr.minutes ?? 0)),
-            hrMinutes: acc.hrMinutes + (curr.minutes ?? 0),
-            date: curr.date, // Just take last one or check consistency
-         };
-       }, { minutes: 0, distance: 0, hrSum: 0, hrMinutes: 0, date: null as string | null });
+    const { autoVerified, validationStatus: entryValidationStatus } = evaluateAutoVerification(
+      { date: entry.date, minutes: entry.minutes },
+      proofsState
+    );
        
-       // Verification Logic
-       // Check dates consistency
-       
-       // Allow for small tolerance in minutes (e.g. 91.5 vs 92)
-       const minutesMatch = totals.minutes >= (entry.minutes - 1);
-
-       // Flexible Date Match: Check if entry date matches extracted date in ANY timezone.
-       // We accept if entry timestamp is within [ExtractedDayStartUTC - 14h, ExtractedDayEndUTC + 12h]
-       // This covers UTC+14 to UTC-12.
-       const dateMatch = proofsState.every((p: any) => {
-           if (!p?.date) return false;
-           
-           const extractedDate = new Date(p.date); // UTC Midnight
-           if (Number.isNaN(extractedDate.getTime())) return false;
-
-           const entryTime = entry.date.getTime();
-           // Earliest valid time: Extracted Date 00:00 UTC minus 14 hours (start of day in UTC+14)
-           const startWindow = extractedDate.getTime() - (14 * 60 * 60 * 1000);
-           // Latest valid time: Extracted Date 23:59 UTC plus 12 hours (end of day in UTC-12)
-           // roughly extractedDate + 36h
-           const endWindow = extractedDate.getTime() + (36 * 60 * 60 * 1000);
-           
-           return entryTime >= startWindow && entryTime <= endWindow;
-       });
-       
-       const autoVerified = minutesMatch && dateMatch;
-       
-       const entryValidationStatus = autoVerified ? "VERIFIED" : "PENDING";
-       
-       if (PENDING_PROOF_STATUSES.has(entry.validationStatus)) {
-         await updateTrainingEntry(entry.id, { validationStatus: entryValidationStatus as ValidationStatus });
-       }
+    if (PENDING_PROOF_STATUSES.has(entry.validationStatus)) {
+      await updateTrainingEntry(entry.id, { validationStatus: entryValidationStatus as ValidationStatus });
+      
+      // Also update all images for this entry to match the entry's verified status if it passed
+      if (autoVerified) {
+        const { updateProofImagesByEntryId } = await import("@/server/repositories/proof-images");
+        await updateProofImagesByEntryId(entry.id, { validationStatus: "VERIFIED" });
+      }
     }
   }
 
   await markProofExtractionJobCompleted(jobId);
   // We return status of THIS job
-  return { proofImageId, status: "COMPLETED", validationStatus: "PENDING" }; // Pending until aggregation decides entry status
+  return { proofImageId, status: "COMPLETED", validationStatus: "PENDING" }; 
 };
 
 export const runProofExtraction = async (options?: { maxJobs?: number }) => {

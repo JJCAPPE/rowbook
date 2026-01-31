@@ -3,7 +3,7 @@ import { getTrainingEntryById, updateTrainingEntry } from "@/server/repositories
 import { updateProofImage, updateProofImagesByEntryId } from "@/server/repositories/proof-images";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { aggregateWeekForTeam } from "@/server/services/weekly-service";
+import { aggregateWeekForAthlete } from "@/server/services/weekly-service";
 
 export const overrideValidationStatus = async (
   actorId: string,
@@ -46,7 +46,7 @@ export const overrideValidationStatus = async (
 
   const teamId = await getTeamIdForAthlete(entry.athleteId);
   if (teamId) {
-    await aggregateWeekForTeam(teamId, entry.weekStartAt);
+    await aggregateWeekForAthlete(teamId, entry.athleteId, entry.weekStartAt);
   }
 
   return updated;
