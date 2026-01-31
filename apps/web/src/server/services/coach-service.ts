@@ -31,6 +31,9 @@ type TeamLeaderboardRow = {
   missingProof: boolean;
   pendingProof: boolean;
   missingMinutes: boolean;
+  totalDistance: number;
+  avgHr: number | null;
+  previousWeekMinutes: number;
 };
 
 type ReviewEntry = {

@@ -160,11 +160,13 @@ export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) =
 };
 
 export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
-  const [aggregatesResult, entriesResult, requirement, exemptionsResult] = await Promise.all([
+  const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt);
+  const [aggregatesResult, entriesResult, requirement, exemptionsResult, previousAggregatesResult] = await Promise.all([
     getLeaderboardForWeek(teamId, weekStartAt),
     listEntriesByTeamWeek(teamId, weekStartAt),
     getWeeklyRequirement(teamId, weekStartAt),
     listExemptionsByWeek(weekStartAt, teamId),
+    getLeaderboardForWeek(teamId, previousWeekStartAt),
   ]);
   const aggregates = aggregatesResult as Array<{
     athleteId: string;
@@ -174,9 +176,16 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     hasHrData: boolean;
     athlete: { name: string | null; email: string };
   }>;
+  const previousAggregates = previousAggregatesResult as Array<{
+    athleteId: string;
+    totalMinutes: number;
+  }>;
   const entries = entriesResult as Array<{
     athleteId: string;
     validationStatus: ValidationStatus;
+    minutes: number;
+    distance: number;
+    avgHr: number | null;
   }>;
   const exemptions = exemptionsResult as Array<{ athleteId: string }>;
   const exemptionsSet = new Set(exemptions.map((exemption) => exemption.athleteId));
@@ -188,10 +197,22 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     entriesByAthlete.set(entry.athleteId, athleteEntries);
   }
 
+  const previousMinutesByAthlete = new Map<string, number>();
+  for (const agg of previousAggregates) {
+    previousMinutesByAthlete.set(agg.athleteId, agg.totalMinutes);
+  }
+
   const requiredMinutes = requirement?.requiredMinutes ?? 0;
 
   return aggregates.map((aggregate) => {
     const athleteEntries = entriesByAthlete.get(aggregate.athleteId) ?? [];
+    
+    // Calculate Stats
+    const validEntries = athleteEntries.filter(e => e.validationStatus !== "REJECTED");
+    const totalDistance = validEntries.reduce((sum, e) => sum + e.distance, 0);
+    const avgHr = getWeightedAvgHr(validEntries.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })));
+    const previousWeekMinutes = previousMinutesByAthlete.get(aggregate.athleteId) ?? 0;
+
     const missingProof = athleteEntries.some(
       (entry) => entry.validationStatus === "REJECTED",
     );
@@ -219,6 +240,9 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
       missingProof,
       pendingProof,
       missingMinutes,
+      totalDistance,
+      avgHr,
+      previousWeekMinutes,
     };
   });
 };

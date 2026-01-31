@@ -18,6 +18,9 @@ type LeaderboardRow = {
   missingProof?: boolean;
   pendingProof?: boolean;
   missingMinutes?: boolean;
+  totalDistance: number;
+  avgHr: number | null;
+  previousWeekMinutes: number;
 };
 
 type LeaderboardTableProps = {
@@ -53,6 +56,18 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
     return filtered;
   }, [rows, showExempt, showPendingReview, showMissingMinutes]);
 
+  const getTrend = (current: number, previous: number) => {
+    if (previous === 0) {
+      if (current > 0) return { percent: 100, direction: "up" as const };
+      return { percent: 0, direction: "neutral" as const };
+    }
+    const percent = Math.round(((current - previous) / previous) * 100);
+    return {
+      percent: Math.abs(percent),
+      direction: percent > 0 ? "up" as const : percent < 0 ? "down" as const : "neutral" as const
+    };
+  };
+
   return (
     <div className="space-y-4">
       {showFilters ? (
@@ -76,35 +91,50 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
       ) : null}
 
       <div className="grid gap-3">
-        {visibleRows.map((row, index) => (
-          <div
-            key={row.id}
-            className={cn(
-              "flex flex-wrap items-center justify-between gap-4 rounded-2xl border px-4 py-3",
-              statusStyles[row.status],
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-default-500">#{index + 1}</span>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{row.name}</p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-default-500">
-                  <span>{row.totalMinutes} min</span>
-                  <span>•</span>
-                  <span>{row.hasHr ? "HR logged" : "No HR data"}</span>
+        {visibleRows.map((row, index) => {
+          const trend = getTrend(row.totalMinutes, row.previousWeekMinutes);
+          return (
+            <div
+              key={row.id}
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-4 rounded-2xl border px-4 py-3",
+                statusStyles[row.status],
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-default-500">#{index + 1}</span>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{row.name}</p>
+                  <div className="mt-1 flex items-center gap-4 text-xs text-default-500">
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium text-foreground">{row.totalMinutes} min</span>
+                      {trend.direction !== "neutral" && (
+                        <span className={cn(
+                          "flex items-center text-[10px]",
+                          trend.direction === "up" ? "text-emerald-500" : "text-rose-500"
+                        )}>
+                          {trend.direction === "up" ? "▲" : "▼"} {trend.percent}%
+                        </span>
+                      )}
+                    </div>
+                    <span>•</span>
+                    <span>{(row.totalDistance / 1000).toFixed(1)} km</span>
+                    <span>•</span>
+                    <span>{row.avgHr ? `${Math.round(row.avgHr)} bpm` : "- bpm"}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 rounded-full border border-divider/40 bg-content2/70 px-2 py-1">
-                {row.activityTypes.map((type) => (
-                  <ActivityIcon key={`${row.id}-${type}`} type={type} />
-                ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1 rounded-full border border-divider/40 bg-content2/70 px-2 py-1">
+                  {row.activityTypes.map((type) => (
+                    <ActivityIcon key={`${row.id}-${type}`} type={type} />
+                  ))}
+                </div>
+                <WeeklyStatusBadge status={row.status} />
               </div>
-              <WeeklyStatusBadge status={row.status} />
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   );
