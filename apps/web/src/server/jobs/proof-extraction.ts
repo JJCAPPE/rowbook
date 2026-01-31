@@ -174,21 +174,29 @@ const processJob = async (jobId: string, proofImageId: string) => {
          };
        }, { minutes: 0, distance: 0, hrSum: 0, hrMinutes: 0, date: null as string | null });
        
-       const aggregatedAvgHr = totals.hrMinutes > 0 ? Math.round(totals.hrSum / totals.hrMinutes) : null;
-       
        // Verification Logic
-       // Check dates consistency?
-       // For now, assume if one matches date, it's fine. Or strict: all must match entry date.
-       // Let's be lenient: if totals meet requirements.
+       // Check dates consistency
        
-       const minutesMatch = totals.minutes >= entry.minutes;
-       // We only enforce date & minutes for validity now.
-       // HR and Distance are just data points.
+       // Allow for small tolerance in minutes (e.g. 91.5 vs 92)
+       const minutesMatch = totals.minutes >= (entry.minutes - 1);
 
+       // Flexible Date Match: Check if entry date matches extracted date in ANY timezone.
+       // We accept if entry timestamp is within [ExtractedDayStartUTC - 14h, ExtractedDayEndUTC + 12h]
+       // This covers UTC+14 to UTC-12.
        const dateMatch = proofsState.every((p: any) => {
            if (!p?.date) return false;
-           // simple string compare or robust date compare
-           return new Date(p.date).toISOString().slice(0, 10) === entry.date.toISOString().slice(0, 10);
+           
+           const extractedDate = new Date(p.date); // UTC Midnight
+           if (Number.isNaN(extractedDate.getTime())) return false;
+
+           const entryTime = entry.date.getTime();
+           // Earliest valid time: Extracted Date 00:00 UTC minus 14 hours (start of day in UTC+14)
+           const startWindow = extractedDate.getTime() - (14 * 60 * 60 * 1000);
+           // Latest valid time: Extracted Date 23:59 UTC plus 12 hours (end of day in UTC-12)
+           // roughly extractedDate + 36h
+           const endWindow = extractedDate.getTime() + (36 * 60 * 60 * 1000);
+           
+           return entryTime >= startWindow && entryTime <= endWindow;
        });
        
        const autoVerified = minutesMatch && dateMatch;
