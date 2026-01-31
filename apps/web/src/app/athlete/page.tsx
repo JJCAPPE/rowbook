@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
@@ -14,12 +14,16 @@ import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatTile } from "@/components/ui/stat-tile";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card } from "@/components/ui/card";
 import { ActivityIcon } from "@/components/ui/activity-icon";
+import { useDisclosure } from "@heroui/react";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 
 export default function AthleteDashboardPage() {
+  const disclosure = useDisclosure();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
   const weekStartParam = searchParams.get("weekStartAt");
@@ -38,11 +42,14 @@ export default function AthleteDashboardPage() {
   const { mutateAsync: deleteEntry, isLoading: isDeleting } =
     trpc.athlete.deleteEntry.useMutation({
       onSuccess: async () => {
-        await utils.athlete.getDashboard.invalidate();
-        await utils.athlete.getHistory.invalidate();
-        await utils.athlete.getHistoryWithEntries.invalidate();
-        await utils.athlete.getWeekDetail.invalidate();
-        await utils.athlete.getLeaderboard.invalidate();
+        await Promise.all([
+          utils.athlete.getDashboard.invalidate(),
+          utils.athlete.getHistory.invalidate(),
+          utils.athlete.getHistoryWithEntries.invalidate(),
+          utils.athlete.getWeekDetail.invalidate(),
+          utils.athlete.getLeaderboard.invalidate(),
+        ]);
+        setDeletingId(null);
       },
     });
 
@@ -73,12 +80,14 @@ export default function AthleteDashboardPage() {
       }));
   }, [history]);
 
-  const handleDelete = async (entryId: string) => {
-    const confirmed = window.confirm("Remove this entry? This cannot be undone.");
-    if (!confirmed) {
-      return;
-    }
-    await deleteEntry({ id: entryId });
+  const handleDelete = (entryId: string) => {
+    setDeletingId(entryId);
+    disclosure.onOpen();
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingId) return;
+    await deleteEntry({ id: deletingId });
   };
 
   if (isLoading) {
@@ -101,6 +110,16 @@ export default function AthleteDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <ConfirmModal
+        title="Remove workout entry"
+        isOpen={disclosure.isOpen}
+        onOpenChange={disclosure.onOpenChange}
+        onConfirm={confirmDelete}
+        isLoading={isDeleting}
+        confirmLabel="Remove"
+      >
+        Are you sure you want to remove this entry? This action cannot be undone.
+      </ConfirmModal>
       <PageHeader
         title="Dashboard"
         subtitle={

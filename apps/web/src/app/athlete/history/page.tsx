@@ -14,6 +14,8 @@ import { FilterChip } from "@/components/ui/filter-chip";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { useDisclosure } from "@heroui/react";
 import { formatFullDate, formatMinutes, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { getWeekKey } from "@/lib/week-options";
@@ -21,6 +23,8 @@ import { getWeekKey } from "@/lib/week-options";
 type HistoryFilter = "ALL" | ActivityType | "HR_PRESENT" | "MIN_30";
 
 export default function AthleteHistoryPage() {
+  const disclosure = useDisclosure();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
   const history = useMemo(() => data ?? [], [data]);
@@ -28,11 +32,14 @@ export default function AthleteHistoryPage() {
   const { mutateAsync: deleteEntry, isLoading: isDeleting } =
     trpc.athlete.deleteEntry.useMutation({
       onSuccess: async () => {
-        await utils.athlete.getDashboard.invalidate();
-        await utils.athlete.getHistory.invalidate();
-        await utils.athlete.getHistoryWithEntries.invalidate();
-        await utils.athlete.getWeekDetail.invalidate();
-        await utils.athlete.getLeaderboard.invalidate();
+        await Promise.all([
+          utils.athlete.getDashboard.invalidate(),
+          utils.athlete.getHistory.invalidate(),
+          utils.athlete.getHistoryWithEntries.invalidate(),
+          utils.athlete.getWeekDetail.invalidate(),
+          utils.athlete.getLeaderboard.invalidate(),
+        ]);
+        setDeletingId(null);
       },
     });
 
@@ -77,16 +84,28 @@ export default function AthleteHistoryPage() {
     [activeFilter, history],
   );
 
-  const handleDelete = async (entryId: string) => {
-    const confirmed = window.confirm("Remove this entry? This cannot be undone.");
-    if (!confirmed) {
-      return;
-    }
-    await deleteEntry({ id: entryId });
+  const handleDelete = (entryId: string) => {
+    setDeletingId(entryId);
+    disclosure.onOpen();
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingId) return;
+    await deleteEntry({ id: deletingId });
   };
 
   return (
     <div className="space-y-6">
+      <ConfirmModal
+        title="Remove workout entry"
+        isOpen={disclosure.isOpen}
+        onOpenChange={disclosure.onOpenChange}
+        onConfirm={confirmDelete}
+        isLoading={isDeleting}
+        confirmLabel="Remove"
+      >
+        Are you sure you want to remove this entry? This action cannot be undone.
+      </ConfirmModal>
       <PageHeader
         title="Weekly history"
         subtitle="Review totals, proof status, and weekly requirements."
