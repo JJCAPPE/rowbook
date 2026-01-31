@@ -22,6 +22,7 @@ export const evaluateAutoVerification = (
   }
 
   // Check if all proofs have been processed/extracted
+  // Note: We intentionally ignore distance matching/presence. Only Date and Minutes are required.
   const allExtracted = proofs.every((p) => p !== null && p !== undefined && p.date !== null && p.minutes !== null);
   if (!allExtracted) {
     return { autoVerified: false, validationStatus: "PENDING" };

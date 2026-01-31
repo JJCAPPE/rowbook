@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +32,11 @@ export function WeeklyTargetsTable({ teamId, className }: WeeklyTargetsTableProp
 
     // Calculate the 6-week range
     // We use the shared helper to ensure we align with backend's week definition
-    const startAt = getWeekStartAt(new Date());
-    const endAt = addWeeks(startAt, 6);
+    const { startAt, endAt } = useMemo(() => {
+        const start = getWeekStartAt(new Date());
+        const end = addWeeks(start, 6);
+        return { startAt: start, endAt: end };
+    }, []);
 
     const { data, isLoading } = trpc.coach.getWeeklyRequirementsRange.useQuery({
         teamId,
@@ -133,8 +136,8 @@ export function WeeklyTargetsTable({ teamId, className }: WeeklyTargetsTableProp
                                 <tr key={platformDate(week.weekStartAt)} className={isCurrentWeek ? "bg-primary-50/10" : ""}>
                                     <td className="px-4 py-3 align-middle">
                                         <div className="font-medium">
-                                            {isCurrentWeek && <span className="mr-2 text-xs font-bold text-primary uppercase tracking-wider">[Current]</span>}
                                             {formatShortDate(week.weekStartAt)} - {formatShortDate(addWeeks(week.weekStartAt, 1))}
+                                            {isCurrentWeek && <span className="ml-2 text-xs font-bold text-primary uppercase tracking-wider"> [Current]</span>}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 align-middle">

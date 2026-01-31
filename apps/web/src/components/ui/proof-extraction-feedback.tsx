@@ -25,8 +25,8 @@ export function ProofExtractionFeedback({ fields }: ProofExtractionFeedbackProps
     },
     {
       label: "Distance",
-      value: typeof data.distance === "number" ? formatDistance(data.distance) : null,
-      missing: typeof data.distance !== "number"
+      value: typeof data.distance === "number" ? formatDistance(data.distance) : "—",
+      missing: false // Distance is optional for verification
     },
     {
       label: "Avg HR",
