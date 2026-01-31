@@ -12,14 +12,34 @@ export const createTrainingEntry = (data: {
   avgPace?: number | null;
   avgWatts?: number | null;
   notes?: string | null;
-  proofImageId: string;
+  proofImageIds: string[];
   validationStatus: ValidationStatus;
   entryStatus: EntryStatus;
   weekStartAt: Date;
   lockedAt?: Date | null;
 }) =>
   prisma.trainingEntry.create({
-    data,
+    data: {
+      athleteId: data.athleteId,
+      activityType: data.activityType,
+      date: data.date,
+      minutes: data.minutes,
+      distance: data.distance,
+      avgHr: data.avgHr,
+      avgPace: data.avgPace,
+      avgWatts: data.avgWatts,
+      notes: data.notes,
+      // Connect multiple proof images
+      proofImages: {
+        connect: data.proofImageIds.map((id) => ({ id })),
+      },
+      // Set legacy field for backward compatibility if needed (using first image) or leave optional
+      proofImageId: data.proofImageIds[0] ?? undefined,
+      validationStatus: data.validationStatus,
+      entryStatus: data.entryStatus,
+      weekStartAt: data.weekStartAt,
+      lockedAt: data.lockedAt,
+    },
   });
 
 export const updateTrainingEntry = (
@@ -50,12 +70,18 @@ export const deleteTrainingEntry = (id: string) =>
 export const getTrainingEntryById = (id: string) =>
   prisma.trainingEntry.findUnique({
     where: { id },
-    include: { proofImage: true },
+    include: { proofImages: true },
   });
 
 export const getTrainingEntryByProofImageId = (proofImageId: string) =>
   prisma.trainingEntry.findFirst({
-    where: { proofImageId },
+    where: {
+      OR: [
+        { proofImages: { some: { id: proofImageId } } },
+        { proofImageId }, // Legacy fallback
+      ],
+    },
+    include: { proofImages: true },
   });
 
 export const updateTrainingEntriesByProofImageId = (
@@ -76,7 +102,7 @@ export const listEntriesByAthleteWeek = (
 ) =>
   prisma.trainingEntry.findMany({
     where: { athleteId, weekStartAt },
-    include: { proofImage: true },
+    include: { proofImages: true },
     orderBy: { date: "desc" },
   });
 
@@ -106,7 +132,7 @@ export const listEntriesByAthleteSinceWeekStart = (
         gte: weekStartAt,
       },
     },
-    include: { proofImage: true },
+    include: { proofImages: true },
     orderBy: { date: "desc" },
   });
 
@@ -142,7 +168,7 @@ export const listEntriesForReview = (
     },
     include: {
       athlete: true,
-      proofImage: { include: { proofExtractionJob: true } },
+      proofImages: { include: { proofExtractionJob: true } },
     },
     orderBy: { date: "desc" },
   });

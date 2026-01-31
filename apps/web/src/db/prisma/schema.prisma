@@ -144,8 +144,12 @@ model ProofImage {
 
   athlete          User               @relation("ProofAthlete", fields: [athleteId], references: [id])
   reviewedBy       User?              @relation("ProofReviewer", fields: [reviewedById], references: [id])
-  trainingEntries  TrainingEntry[]
+  // Old inverse relation
+  trainingEntriesOld TrainingEntry[] @relation("OldProofRelation")
+
   proofExtractionJob ProofExtractionJob?
+  trainingEntry    TrainingEntry?   @relation(fields: [trainingEntryId], references: [id])
+  trainingEntryId  String?
 
   @@index([athleteId, deleteAfter])
 }
@@ -161,7 +165,7 @@ model TrainingEntry {
   avgPace          Float?           // Pace in seconds per unit (500m for erg, 1km for bike/run, 100m for swim)
   avgWatts         Float?           // Average watts (Concept2 only: ERG and CYCLE)
   notes            String?
-  proofImageId     String
+  proofImageId     String? // Made optional to facilitate transition
   validationStatus ValidationStatus @default(NOT_CHECKED)
   entryStatus      EntryStatus      @default(ACTIVE)
   weekStartAt      DateTime
@@ -171,7 +175,11 @@ model TrainingEntry {
   updatedAt        DateTime         @updatedAt
 
   athlete    User       @relation("EntryAthlete", fields: [athleteId], references: [id])
-  proofImage ProofImage @relation(fields: [proofImageId], references: [id])
+  // Old relation (to be deprecated after migration)
+  proofImage ProofImage? @relation("OldProofRelation", fields: [proofImageId], references: [id])
+  
+  // New relation
+  proofImages ProofImage[]
 
   @@index([athleteId, weekStartAt])
 }

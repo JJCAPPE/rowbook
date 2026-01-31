@@ -1,7 +1,7 @@
 import { ProofConfirmSchema, ProofUploadRequestSchema } from "@rowbook/shared";
 import { TRPCError } from "@trpc/server";
 import { isCoachRole } from "@/server/auth/rbac";
-import { confirmProofUpload, createProofUpload, getProofViewUrl } from "@/server/services/proof-service";
+import { confirmProofUpload, createProofUpload, extractDataFromProof, getProofViewUrl } from "@/server/services/proof-service";
 import { protectedProcedure, router } from "@/server/trpc";
 import { z } from "zod";
 
@@ -17,5 +17,10 @@ export const proofRouter = router({
     .query(async ({ ctx, input }) => {
       const canViewAll = isCoachRole(ctx.session.user.role);
       return getProofViewUrl(ctx.session.user.id, input.proofImageId, canViewAll);
+    }),
+  extractFromProof: protectedProcedure
+    .input(z.object({ proofImageId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+       return extractDataFromProof(ctx.session.user.id, input.proofImageId);
     }),
 });

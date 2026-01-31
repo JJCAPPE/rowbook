@@ -56,7 +56,7 @@ const shouldAutoVerify = (
     avgHr: number | null;
   },
 ) => {
-  if (!entry || !extracted.date || extracted.minutes === null || extracted.distance === null) {
+  if (!entry || !extracted.date || extracted.minutes === null) {
     return false;
   }
 
@@ -66,13 +66,9 @@ const shouldAutoVerify = (
   }
 
   const minutesMatch = extracted.minutes >= entry.minutes;
-  const distanceMatch = extracted.distance >= entry.distance;
   const dateMatch = isSameDate(entry.date, parsedDate);
-  const hrMatch = entry.avgHr === null
-    ? true
-    : extracted.avgHr !== null && compareAverageHr(entry.avgHr, extracted.avgHr).matches;
 
-  return minutesMatch && distanceMatch && dateMatch && hrMatch;
+  return minutesMatch && dateMatch;
 };
 
 const resolveValidationStatus = (
@@ -135,29 +131,12 @@ const processJob = async (jobId: string, proofImageId: string) => {
     return { proofImageId, status: "FAILED", reason: "empty" };
   }
 
-  const entry = await getTrainingEntryByProofImageId(proofImageId);
-  const autoVerified = shouldAutoVerify(entry, {
-    date: extractedFields.date ?? null,
-    minutes: extractedFields.minutes ?? null,
-    distance: extractedFields.distance ?? null,
-    avgHr: extractedFields.avgHr ?? null,
-  });
+  // Trust the data match for now.
   
-  // We can also use confidence to require manual review even if fields match
-  // e.g. if (autoVerified && confidence < 0.8) autoVerified = false;
-  // For now, let's trust the data match.
-
-  const hasRequired = Boolean(extractedFields.date)
-    && extractedFields.minutes !== null
-    && extractedFields.minutes !== undefined
-    && extractedFields.distance !== null
-    && extractedFields.distance !== undefined;
-
-  const validationStatus = resolveValidationStatus(hasRequired, autoVerified);
-
+  // Update the proof image with extracted data
   const updateResult = await updateProofImageIfPending(proofImageId, {
     extractedFields,
-    validationStatus,
+    validationStatus: resolveValidationStatus(Boolean(extractedFields.date), false), // Mark as PENDING initially, verified by aggregation below
   });
 
   if (updateResult.count === 0) {
@@ -165,12 +144,66 @@ const processJob = async (jobId: string, proofImageId: string) => {
     return { proofImageId, status: "SKIPPED", reason: "reviewed" };
   }
 
-  if (entry && PENDING_PROOF_STATUSES.has(entry.validationStatus)) {
-    await updateTrainingEntry(entry.id, { validationStatus });
+  // Aggregate and Verify Entry
+  const entry = await getTrainingEntryByProofImageId(proofImageId);
+  
+  if (entry) {
+    const allProofs = (entry as any).proofImages ?? []; // Should be populated by include
+    
+    // Combine current result with others
+    const proofsState = allProofs.map((p: any) => {
+      if (p.id === proofImageId) {
+         return extractedFields;
+      }
+      return p.extractedFields as typeof extractedFields | null;
+    });
+    
+    // Check if all proofs have data
+    const allExtracted = proofsState.every((p: any) => p !== null && p !== undefined);
+    
+    if (allExtracted) {
+       // Aggregate
+       const totals = proofsState.reduce((acc: any, curr: any) => {
+         if (!curr) return acc;
+         return {
+            minutes: acc.minutes + (curr.minutes ?? 0),
+            distance: acc.distance + (curr.distance ?? 0),
+            hrSum: acc.hrSum + ((curr.avgHr ?? 0) * (curr.minutes ?? 0)),
+            hrMinutes: acc.hrMinutes + (curr.minutes ?? 0),
+            date: curr.date, // Just take last one or check consistency
+         };
+       }, { minutes: 0, distance: 0, hrSum: 0, hrMinutes: 0, date: null as string | null });
+       
+       const aggregatedAvgHr = totals.hrMinutes > 0 ? Math.round(totals.hrSum / totals.hrMinutes) : null;
+       
+       // Verification Logic
+       // Check dates consistency?
+       // For now, assume if one matches date, it's fine. Or strict: all must match entry date.
+       // Let's be lenient: if totals meet requirements.
+       
+       const minutesMatch = totals.minutes >= entry.minutes;
+       // We only enforce date & minutes for validity now.
+       // HR and Distance are just data points.
+
+       const dateMatch = proofsState.every((p: any) => {
+           if (!p?.date) return false;
+           // simple string compare or robust date compare
+           return new Date(p.date).toISOString().slice(0, 10) === entry.date.toISOString().slice(0, 10);
+       });
+       
+       const autoVerified = minutesMatch && dateMatch;
+       
+       const entryValidationStatus = autoVerified ? "VERIFIED" : "PENDING";
+       
+       if (PENDING_PROOF_STATUSES.has(entry.validationStatus)) {
+         await updateTrainingEntry(entry.id, { validationStatus: entryValidationStatus as ValidationStatus });
+       }
+    }
   }
 
   await markProofExtractionJobCompleted(jobId);
-  return { proofImageId, status: "COMPLETED", validationStatus };
+  // We return status of THIS job
+  return { proofImageId, status: "COMPLETED", validationStatus: "PENDING" }; // Pending until aggregation decides entry status
 };
 
 export const runProofExtraction = async (options?: { maxJobs?: number }) => {

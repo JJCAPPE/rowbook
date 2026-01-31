@@ -9,19 +9,24 @@ import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard } from "@/server/services/weekly-service";
 import { getWeightedAvgHr, getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
 
-const attachProofUrls = async <T extends { proofImageId: string; proofImage?: { extractedFields: any } }>(
+const attachProofs = async <T extends { proofImages: Array<{ id: string; extractedFields: any }> }>(
   entries: T[],
   athleteId: string,
-): Promise<Array<T & { proofUrl: string | null; extractedFields: any }>> =>
+): Promise<Array<T & { proofs: Array<{ id: string; url: string; extractedFields: any }> }>> =>
   Promise.all(
     entries.map(async (entry) => {
-      const extractedFields = entry.proofImage?.extractedFields ?? null;
-      try {
-        const view = await getProofViewUrl(athleteId, entry.proofImageId, false);
-        return { ...entry, proofUrl: view.signedUrl, extractedFields };
-      } catch {
-        return { ...entry, proofUrl: null, extractedFields };
-      }
+      const proofs = await Promise.all(
+        entry.proofImages.map(async (proof) => {
+          try {
+            const view = await getProofViewUrl(athleteId, proof.id, false);
+            return { id: proof.id, url: view.signedUrl, extractedFields: proof.extractedFields };
+          } catch {
+            return { id: proof.id, url: "", extractedFields: proof.extractedFields };
+          }
+        })
+      );
+      // Filter out failed URLs if needed, or keep empty string to indicate error
+      return { ...entry, proofs };
     }),
   );
 
@@ -73,6 +78,8 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     : totals.totalMinutes >= requiredMinutes
       ? "MET"
       : "NOT_MET";
+      
+  const entriesWithProofs = await attachProofs(entries as any[], athleteId);
 
   return {
     weekStartAt: normalizedWeekStart,
@@ -82,9 +89,12 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     hasHrData: totals.hasHrData,
     avgHr,
     status,
-    entries: (entries as any[]).map(e => ({
+    entries: entriesWithProofs.map(e => ({
       ...e,
-      extractedFields: e.proofImage?.extractedFields ?? null
+      proofs: e.proofs,
+      // Legacy support for frontend transition (using first proof)
+      extractedFields: e.proofs[0]?.extractedFields ?? null,
+      proofUrl: e.proofs[0]?.url ?? null,
     })),
   };
 };
@@ -159,6 +169,17 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
       weeksByKey.set(key, { weekStartAt: entry.weekStartAt, entries: [entry] });
     }
   }
+  
+  // Need to fetch proofs for all entries efficiently?
+  // attachProofs already takes an array. 
+  // We can just process on the fly or flat map.
+  // Actually, getAthleteHistoryWithEntries groups by week.
+  // It returns entries. 
+  
+  // The 'entries' variable contains all entries found.
+  // We should attach proofs to ALL of them first.
+  const allEntriesWithProofs = await attachProofs(entries as any[], athleteId);
+  const proofMap = new Map(allEntriesWithProofs.map(e => [e.id, e.proofs]));
 
   return Array.from(weeksByKey.values())
     .map(({ weekStartAt, entries: weekEntries }) => {
@@ -196,10 +217,15 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
         status,
         hasHrData,
         activityTypes: Array.from(activityTypes),
-        entries: sortedEntries.map(e => ({
-          ...e,
-          extractedFields: (e as any).proofImage?.extractedFields ?? null
-        })),
+        entries: sortedEntries.map(e => {
+            const proofs = proofMap.get(e.id) ?? [];
+            return {
+                ...e,
+                proofs,
+                extractedFields: proofs[0]?.extractedFields ?? null,
+                proofUrl: proofs[0]?.url ?? null, // Legacy
+            };
+        }),
       };
     })
     .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
@@ -212,7 +238,8 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
     athleteId,
     normalizedWeekStart,
   )) as TrainingEntry[];
-  const entriesWithProof = await attachProofUrls(entries, athleteId);
+  
+  const entriesWithProofs = await attachProofs(entries as any[], athleteId);
 
   const totalMinutes = entries.reduce(
     (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.minutes),
@@ -230,7 +257,12 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
     totalMinutes,
     totalDistanceKm,
     sessions: countedEntries.length,
-    entries: entriesWithProof,
+    entries: entriesWithProofs.map(e => ({
+        ...e,
+        proofs: e.proofs,
+        extractedFields: e.proofs[0]?.extractedFields ?? null,
+        proofUrl: e.proofs[0]?.url ?? null,
+    })),
   };
 };
 

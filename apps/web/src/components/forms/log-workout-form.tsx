@@ -42,9 +42,8 @@ const schema = z.object({
   distanceKm: z.coerce.number().nonnegative().min(0.1, "Enter distance"),
   avgHr: optionalNumber,
   notes: z.string().max(280).optional(),
-  proof: z
-    .custom<FileList | null>()
-    .refine((files) => files && files.length > 0, "Proof image is required"),
+  proof: z.custom<FileList | null>().optional(), // Handled by separate state
+  proofImageIds: z.array(z.string()).min(1, "At least one proof image is required"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -58,6 +57,7 @@ const defaultValues: FormValues = {
   avgHr: undefined,
   notes: "",
   proof: null,
+  proofImageIds: [],
 };
 
 const uploadFileWithProgress = (
@@ -108,7 +108,7 @@ const parseNumberValue = (value: unknown) => {
 
 export const LogWorkoutForm = () => {
   const [submitted, setSubmitted] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [proofInputKey, setProofInputKey] = useState(0);
@@ -131,61 +131,35 @@ export const LogWorkoutForm = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { mutateAsync: createUploadUrl } = trpc.proof.createUploadUrl.useMutation();
   const { mutateAsync: confirmUpload } = trpc.proof.confirmUpload.useMutation();
+  const { mutateAsync: extractFromProof } = trpc.proof.extractFromProof.useMutation();
   const { mutateAsync: createEntry } = trpc.athlete.createEntry.useMutation();
 
   const proof = watch("proof");
   const activityType = watch("activityType");
-  const watchedDate = watch("date");
-  const watchedMinutes = watch("minutes");
-  const watchedDistance = watch("distanceKm");
-  const watchedAvgHr = watch("avgHr");
   const proofRegister = register("proof");
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
 
 
+  // Removed standard preview effect as we handle files manually now
   useEffect(() => {
-    if (!proof || proof.length === 0) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const file = proof[0];
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-
-    return () => URL.revokeObjectURL(url);
-  }, [proof]);
+     setValue("proofImageIds", uploadedIds, { shouldValidate: true });
+  }, [uploadedIds, setValue]);
 
 
   const onSubmit = async (values: FormValues) => {
     setSubmitted(false);
     setSubmitError(null);
-    setIsUploading(false);
-    setUploadProgress(0);
-
-    const file = values.proof?.[0];
-    if (!file) {
-      setSubmitError("Proof image is required.");
-      return;
+    setExtractionStatus(null);
+    
+    // We expect files to be already uploaded
+    if (uploadedIds.length === 0) {
+        setSubmitError("Please upload at least one proof image.");
+        return;
     }
-
+    
     try {
-      const upload = await createUploadUrl({
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
-      });
-
-      setIsUploading(true);
-      setUploadProgress(0);
-      try {
-        await uploadFileWithProgress(upload.uploadUrl, file, setUploadProgress);
-      } finally {
-        setIsUploading(false);
-      }
-
-      await confirmUpload({ proofImageId: upload.proofImageId });
-
       await createEntry({
         activityType: values.activityType,
         date: new Date(values.date),
@@ -193,7 +167,7 @@ export const LogWorkoutForm = () => {
         distance: values.distanceKm,
         avgHr: values.avgHr ?? null,
         notes: values.notes?.trim() || undefined,
-        proofImageId: upload.proofImageId,
+        proofImageIds: uploadedIds,
       });
 
       await Promise.all([
@@ -205,19 +179,12 @@ export const LogWorkoutForm = () => {
       ]);
 
       reset({ ...defaultValues, date: getTodayString() });
-      setPreviewUrl(null);
-      setIsUploading(false);
-      setUploadProgress(0);
+      setPreviewUrls([]);
+      setUploadedIds([]);
       setProofInputKey((current) => current + 1);
-      if (cameraInputRef.current) {
-        cameraInputRef.current.value = "";
-      }
-      if (uploadInputRef.current) {
-        uploadInputRef.current.value = "";
-      }
       setSubmitted(true);
     } catch (error) {
-      if (error instanceof Error) {
+       if (error instanceof Error) {
         setSubmitError(error.message);
       } else {
         setSubmitError("Unable to save entry. Please try again.");
@@ -225,12 +192,74 @@ export const LogWorkoutForm = () => {
     }
   };
 
+  const handleFileSelect = async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      
+      setIsUploading(true);
+      setSubmitError(null);
+      
+      const newIds: string[] = [];
+      const newUrls: string[] = [];
+      
+      // Keep existing
+      const currentIds = [...uploadedIds];
+      const currentUrls = [...previewUrls];
+
+      try {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // Enhance preview
+            newUrls.push(URL.createObjectURL(file));
+
+            const upload = await createUploadUrl({
+                fileName: file.name,
+                fileSize: file.size,
+                mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
+            });
+            
+            await uploadFileWithProgress(upload.uploadUrl, file, (progress) => {
+               // Per-file progress logic if needed
+               if (files.length === 1) setUploadProgress(progress);
+            });
+            
+            await confirmUpload({ proofImageId: upload.proofImageId });
+            newIds.push(upload.proofImageId);
+            
+            // Trigger extraction for the first file only (or all and aggregate?)
+            // Let's do first file for now to populate form
+            if (i === 0) {
+               setExtractionStatus("Extracting data...");
+               try {
+                  const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
+                  console.log("Extracted:", extracted);
+                  if (extracted.date) setValue("date", extracted.date);
+                  if (extracted.minutes) setValue("minutes", extracted.minutes);
+                  if (extracted.distance) setValue("distanceKm", extracted.distance);
+                  if (extracted.avgHr) setValue("avgHr", extracted.avgHr);
+                  setExtractionStatus("Data extracted!");
+               } catch (e) {
+                  console.error("Extraction failed", e);
+                  setExtractionStatus("Auto-extraction failed. Please enter details manually.");
+               }
+            }
+        }
+        
+        setUploadedIds([...currentIds, ...newIds]);
+        setPreviewUrls([...currentUrls, ...newUrls]);
+        
+      } catch (e) {
+          setSubmitError("Failed to upload image(s).");
+      } finally {
+        setIsUploading(false);
+      }
+  };
+
   const handleCameraChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.currentTarget.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-    setValue("proof", files, { shouldDirty: true, shouldValidate: true });
+    handleFileSelect(event.currentTarget.files);
+  };
+  
+  const handleUploadChange = (event: ChangeEvent<HTMLInputElement>) => {
+      handleFileSelect(event.currentTarget.files);
   };
 
   return (
@@ -256,13 +285,14 @@ export const LogWorkoutForm = () => {
       </div>
 
       <div className="space-y-3">
-        <Label htmlFor="proof">Proof of workout</Label>
+        <Label htmlFor="proof">Proof of workout (select multiple if needed)</Label>
         <input
           key={`camera-${proofInputKey}`}
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
+          multiple
           onChange={handleCameraChange}
           className="sr-only"
         />
@@ -271,9 +301,9 @@ export const LogWorkoutForm = () => {
           id="proof"
           type="file"
           accept="image/*"
-          {...proofRegister}
+          multiple
+          onChange={handleUploadChange}
           ref={(element) => {
-            proofRegister.ref(element);
             uploadInputRef.current = element;
           }}
           className="sr-only"
@@ -301,22 +331,25 @@ export const LogWorkoutForm = () => {
             Upload Screenshot
           </Button>
         </div>
-        {errors.proof ? <p className="text-xs text-rose-500">{errors.proof.message}</p> : null}
-        {previewUrl ? (
-          <div className="h-40 w-full rounded-2xl border border-divider/40 bg-content2/70 p-3">
-            <div className="relative h-full w-full">
-              <Image
-                src={previewUrl}
-                alt="Proof preview"
-                fill
-                sizes="(max-width: 768px) 100vw, 600px"
-                className="rounded-lg object-cover"
-                unoptimized
-              />
-            </div>
+
+        {errors.proofImageIds ? <p className="text-xs text-rose-500">{errors.proofImageIds.message}</p> : null}
+        {previewUrls.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2 w-full rounded-2xl border border-divider/40 bg-content2/70 p-3">
+             {previewUrls.map((url, index) => (
+                <div key={index} className="relative aspect-video w-full">
+                  <Image
+                    src={url}
+                    alt={`Proof preview ${index + 1}`}
+                    fill
+                    sizes="(max-width: 768px) 50vw, 300px"
+                    className="rounded-lg object-cover"
+                    unoptimized
+                  />
+                </div>
+             ))}
           </div>
         ) : (
-          <p className="text-xs text-default-500">Take a photo of your screen, or upload a screenshot from Strava, Garmin, Polar, etc.</p>
+          <p className="text-xs text-default-500">Take photos of your screen, or upload screenshots from Strava, Garmin, Polar, etc.</p>
         )}
         {isUploading ? (
           <div className="space-y-2">
@@ -331,6 +364,12 @@ export const LogWorkoutForm = () => {
               />
             </div>
           </div>
+        ) : null}
+        
+        {extractionStatus ? (
+             <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
+                <span>✨ {extractionStatus}</span>
+             </div>
         ) : null}
       </div>
 

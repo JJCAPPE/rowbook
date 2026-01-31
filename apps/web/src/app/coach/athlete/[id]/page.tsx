@@ -24,7 +24,7 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
     athleteId: params.id,
   });
   const { data: overview } = trpc.coach.getTeamOverview.useQuery();
-  const entries: Array<TrainingEntry & { proofUrl: string | null }> = data?.entries ?? [];
+  const entries: any[] = data?.entries ?? [];
 
   const weeklyTrend = useMemo(() => {
     if (!data?.history?.length) {
@@ -127,12 +127,18 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
                   <span>Avg HR: {entry.avgHr ?? "—"}</span>
                   <span>Notes: {entry.notes ?? "—"}</span>
                 </div>
-                <div className="mt-3">
-                  {entry.proofUrl ? (
-                  <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
-                ) : (
-                  <p className="text-xs text-default-500">Proof not available.</p>
-                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {entry.proofs && entry.proofs.length > 0 ? (
+                    entry.proofs.map((proof: any) => (
+                      <div key={proof.id} className="w-full sm:w-[48%] lg:w-full xl:w-[48%]">
+                         <ProofImageViewer src={proof.url} alt="Workout proof" />
+                      </div>
+                    ))
+                  ) : entry.proofUrl ? (
+                    <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
+                  ) : (
+                    <p className="text-xs text-default-500">Proof not available.</p>
+                  )}
                 </div>
               </div>
             ))

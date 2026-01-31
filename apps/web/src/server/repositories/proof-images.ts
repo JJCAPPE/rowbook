@@ -42,3 +42,9 @@ export const listExpiredProofImages = (now: Date) =>
       deletedAt: null,
     },
   });
+
+export const updateProofImagesByEntryId = (entryId: string, data: Prisma.ProofImageUncheckedUpdateInput) =>
+  prisma.proofImage.updateMany({
+    where: { trainingEntryId: entryId },
+    data,
+  });

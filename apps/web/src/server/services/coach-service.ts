@@ -44,26 +44,32 @@ type ReviewEntry = {
   validationStatus: ValidationStatus;
   rejectionNote: string | null;
   athlete: { name: string | null; email: string };
-  proofImage: {
+  proofImages: Array<{
+    id: string;
     reviewedById: string | null;
     proofExtractionJob: { status: ProofExtractionStatus; lastError: string | null } | null;
     extractedFields: any;
-  };
+  }>;
 };
 
-const attachProofUrls = async <T extends { proofImageId: string }>(
+const attachProofs = async <T extends { proofImages: Array<any> }>(
   entries: T[],
-  actorId: string,
+  athleteId: string,
   canViewAll: boolean,
-): Promise<Array<T & { proofUrl: string | null }>> =>
+): Promise<Array<T & { proofs: Array<{ id: string; url: string; extractedFields: any }> }>> =>
   Promise.all(
-    entries.map(async (entry) => {
-      try {
-        const view = await getProofViewUrl(actorId, entry.proofImageId, canViewAll);
-        return { ...entry, proofUrl: view.signedUrl };
-      } catch {
-        return { ...entry, proofUrl: null };
-      }
+    entries.map(async (entry: any) => {
+      const proofs = await Promise.all(
+        (entry.proofImages || []).map(async (proof: any) => {
+          try {
+            const view = await getProofViewUrl(athleteId, proof.id, canViewAll);
+            return { id: proof.id, url: view.signedUrl, extractedFields: proof.extractedFields };
+          } catch {
+            return { id: proof.id, url: "", extractedFields: proof.extractedFields };
+          }
+        })
+      );
+      return { ...entry, proofs };
     }),
   );
 
@@ -120,7 +126,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
   const entries = entriesResult as TrainingEntry[];
   const avgHrByWeek = getWeightedAvgHrByWeek(entries);
 
-  const entriesWithProof = await attachProofUrls(entries, actorId, true);
+  const entriesWithProofs = await attachProofs(entries as any[], athleteId, true);
 
   const activityMixMap = new Map<ActivityType, number>();
   for (const entry of entries) {
@@ -137,7 +143,12 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
           name: athlete.name ?? athlete.email,
         }
       : { id: athleteId, name: "Athlete" },
-    entries: entriesWithProof,
+    entries: entriesWithProofs.map(e => ({
+        ...e,
+        proofs: e.proofs,
+        extractedFields: e.proofs[0]?.extractedFields ?? null,
+        proofUrl: e.proofs[0]?.url ?? null,
+    })),
     history: history.map((week) => ({
       ...week,
       avgHr: avgHrByWeek.get(week.weekStartAt.toISOString()) ?? null,
@@ -166,19 +177,26 @@ export const getReviewQueue = async (
     Array.from(PENDING_PROOF_STATUSES),
     { includeReviewed: true },
   )) as unknown as ReviewEntry[];
-  const entriesWithProof = await attachProofUrls(entries, actorId, true);
+  
+  const entriesWithProofs = await attachProofs(entries, actorId, true);
 
   return {
     teamId: team.id,
     weekStartAt: week,
-    entries: entriesWithProof.map(({ athlete, proofImage, rejectionNote, ...rest }) => ({
-      ...rest,
-      rejectionNote,
-      athleteName: athlete?.name ?? athlete?.email ?? null,
-      proofExtractionStatus: proofImage?.proofExtractionJob?.status ?? null,
-      proofReviewedById: proofImage?.reviewedById ?? null,
-      extractedFields: proofImage?.extractedFields ?? null,
-    })),
+    entries: entriesWithProofs.map(({ athlete, proofs, ...rest }: any) => {
+      const rejectionNote = rest.rejectionNote;
+      return {
+        ...rest,
+        proofs,
+        rejectionNote,
+        athleteName: athlete?.name ?? athlete?.email ?? null,
+        // Use first proof for these or expose array to frontend?
+        proofExtractionStatus: rest.proofImages?.[0]?.proofExtractionJob?.status ?? null,
+        proofReviewedById: rest.proofImages?.[0]?.reviewedById ?? null,
+        extractedFields: proofs[0]?.extractedFields ?? null,
+        proofUrl: proofs[0]?.url ?? null,
+      };
+    }),
   };
 };
 

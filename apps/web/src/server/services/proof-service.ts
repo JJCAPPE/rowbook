@@ -1,6 +1,33 @@
 import { ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, getWeekRange } from "@rowbook/shared";
 import { createProofImage, getProofImageById, listExpiredProofImages, updateProofImage } from "@/server/repositories/proof-images";
-import { createUploadUrl, createViewUrl, deleteFile } from "@/server/storage/proof-storage";
+import { createUploadUrl, createViewUrl, deleteFile, downloadFile } from "@/server/storage/proof-storage";
+import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
+
+const toBuffer = async (data: unknown) => {
+  if (data instanceof Buffer) {
+    return data;
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data);
+  }
+
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  if (data && typeof (data as Blob).arrayBuffer === "function") {
+    const arrayBuffer = await (data as Blob).arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  if (data && typeof (data as ReadableStream).getReader === "function") {
+    const arrayBuffer = await new Response(data as ReadableStream).arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  throw new Error("Unsupported proof image payload.");
+};
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 const VIEW_URL_TTL_SECONDS = 15 * 60;
@@ -72,8 +99,23 @@ export const getProofViewUrl = async (
 
   return {
     signedUrl: view.signedUrl,
-    expiresAt: new Date(Date.now() + VIEW_URL_TTL_SECONDS * 1000),
   };
+};
+
+export const extractDataFromProof = async (athleteId: string, proofImageId: string) => {
+  const proofImage = await getProofImageById(proofImageId);
+  if (!proofImage) {
+    throw new Error("Proof image not found.");
+  }
+
+  if (proofImage.athleteId !== athleteId) {
+    throw new Error("Access denied.");
+  }
+
+  const file = await downloadFile(proofImage.storagePath);
+  const buffer = await toBuffer(file);
+  
+  return extractProofWithGemini(buffer);
 };
 
 export const cleanupExpiredProofImages = async () => {

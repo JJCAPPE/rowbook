@@ -1,6 +1,6 @@
 import { ValidationStatus } from "@rowbook/shared";
 import { getTrainingEntryById, updateTrainingEntry } from "@/server/repositories/training-entries";
-import { updateProofImage } from "@/server/repositories/proof-images";
+import { updateProofImage, updateProofImagesByEntryId } from "@/server/repositories/proof-images";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";
@@ -21,10 +21,19 @@ export const overrideValidationStatus = async (
     rejectionNote: status === "REJECTED" ? rejectionNote : null,
   });
 
-  await updateProofImage(entry.proofImageId, {
+  // Update all proof images linked to this entry
+  await updateProofImagesByEntryId(entryId, {
     validationStatus: status,
     reviewedById: actorId,
   });
+
+  // Fallback for legacy single-image entries without relation back-link (if any during transition)
+  if (entry.proofImageId) {
+    await updateProofImage(entry.proofImageId, {
+      validationStatus: status,
+      reviewedById: actorId,
+    });
+  }
 
   await createAuditLog({
     actorId,

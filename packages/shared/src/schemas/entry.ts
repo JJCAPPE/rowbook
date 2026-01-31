@@ -20,7 +20,7 @@ export const TrainingEntryInputSchema = z.object({
   avgPace: z.number().positive().optional().nullable(),
   avgWatts: z.number().positive().optional().nullable(),
   notes: OptionalNotesSchema,
-  proofImageId: z.string(),
+  proofImageIds: z.array(z.string()).min(1),
   proofOcr: ProofOcrResultSchema.optional().nullable(),
 });
 export type TrainingEntryInput = z.infer<typeof TrainingEntryInputSchema>;
@@ -49,7 +49,7 @@ export const TrainingEntrySchema = z.object({
   avgPace: z.number().nullable(),
   avgWatts: z.number().nullable(),
   notes: z.string().max(1000).nullable(),
-  proofImageId: z.string(),
+  // REMOVED: proofImageId
   validationStatus: ValidationStatusSchema,
   entryStatus: EntryStatusSchema,
   weekStartAt: z.date(),
