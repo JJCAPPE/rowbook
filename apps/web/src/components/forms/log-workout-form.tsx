@@ -111,6 +111,10 @@ export const LogWorkoutForm = () => {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
   const [proofInputKey, setProofInputKey] = useState(0);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -140,6 +144,19 @@ export const LogWorkoutForm = () => {
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
+  const simulateProgress = (setProgress: (val: number | ((prev: number) => number)) => void) => {
+    setProgress(0);
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 90) return prev;
+        // Slow down as it gets higher
+        const increment = Math.max(1, (90 - prev) / 10);
+        return Math.min(90, prev + increment);
+      });
+    }, 100);
+    return interval;
+  };
+
 
 
   // Removed standard preview effect as we handle files manually now
@@ -159,6 +176,9 @@ export const LogWorkoutForm = () => {
         return;
     }
     
+    setIsSaving(true);
+    let progressInterval: NodeJS.Timeout | null = simulateProgress(setSaveProgress);
+
     try {
       await createEntry({
         activityType: values.activityType,
@@ -169,6 +189,12 @@ export const LogWorkoutForm = () => {
         notes: values.notes?.trim() || undefined,
         proofImageIds: uploadedIds,
       });
+
+      if (progressInterval) clearInterval(progressInterval);
+      progressInterval = null;
+      setSaveProgress(100);
+      // Brief delay to show 100%
+      await new Promise(r => setTimeout(r, 400));
 
       await Promise.all([
         utils.athlete.getDashboard.invalidate(),
@@ -189,6 +215,10 @@ export const LogWorkoutForm = () => {
       } else {
         setSubmitError("Unable to save entry. Please try again.");
       }
+    } finally {
+        if (progressInterval) clearInterval(progressInterval);
+        setIsSaving(false);
+        setSaveProgress(0);
     }
   };
 
@@ -228,18 +258,41 @@ export const LogWorkoutForm = () => {
             // Trigger extraction for the first file only (or all and aggregate?)
             // Let's do first file for now to populate form
             if (i === 0) {
-               setExtractionStatus("Extracting data...");
+               setIsExtracting(true);
+               let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
                try {
                   const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
-                  console.log("Extracted:", extracted);
-                  if (extracted.date) setValue("date", extracted.date);
-                  if (extracted.minutes) setValue("minutes", extracted.minutes);
-                  if (extracted.distance) setValue("distanceKm", extracted.distance);
-                  if (extracted.avgHr) setValue("avgHr", extracted.avgHr);
-                  setExtractionStatus("Data extracted!");
+                  console.log("Extracted Data for Form Population:", extracted);
+                  
+                  if (extracted.date) {
+                    console.log("Setting date to:", extracted.date);
+                    setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
+                  }
+                  if (extracted.minutes) {
+                    const flooredMinutes = Math.floor(extracted.minutes);
+                    console.log("Setting minutes to:", flooredMinutes);
+                    setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
+                  }
+                  if (extracted.distance) {
+                    console.log("Setting distance to:", extracted.distance);
+                    setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
+                  }
+                  if (extracted.avgHr) {
+                    console.log("Setting avgHr to:", extracted.avgHr);
+                    setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
+                  }
+                  
+                  if (extractInterval) clearInterval(extractInterval);
+                  extractInterval = null;
+                  setExtractionProgress(100);
+                  await new Promise(r => setTimeout(r, 400));
                } catch (e) {
                   console.error("Extraction failed", e);
-                  setExtractionStatus("Auto-extraction failed. Please enter details manually.");
+                  setSubmitError("Auto-extraction failed. Please enter details manually.");
+               } finally {
+                  if (extractInterval) clearInterval(extractInterval);
+                  setIsExtracting(false);
+                  setExtractionProgress(0);
                }
             }
         }
@@ -354,7 +407,7 @@ export const LogWorkoutForm = () => {
         {isUploading ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
-              <span>Uploading proof</span>
+              <span>Step 1: Uploading proof</span>
               <span>{uploadProgress}%</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
@@ -365,11 +418,35 @@ export const LogWorkoutForm = () => {
             </div>
           </div>
         ) : null}
-        
-        {extractionStatus ? (
-             <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
-                <span>✨ {extractionStatus}</span>
-             </div>
+
+        {isExtracting ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+              <span>Step 2: Extracting data</span>
+              <span>{Math.round(extractionProgress)}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${extractionProgress}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {isSaving ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
+              <span>Step 3: Saving workout</span>
+              <span>{Math.round(saveProgress)}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-content2/70">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${saveProgress}%` }}
+              />
+            </div>
+          </div>
         ) : null}
       </div>
 
