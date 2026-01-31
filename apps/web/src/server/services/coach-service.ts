@@ -79,14 +79,15 @@ const attachProofs = async <T extends { proofImages: Array<any> }>(
     }),
   );
 
-export const getTeamOverview = async (teamId?: string, weekStartAt?: Date) => {
-  const team = teamId ? { id: teamId } : await getDefaultTeam();
+export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) => {
+  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
   if (!team) {
     throw new Error("Team not found.");
   }
 
-  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(new Date()).weekStartAt;
-  const weekEndAt = getWeekEndAt(week);
+  const cutoffHour = (team as any).weekCutoffHour ?? 18;
+  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt, team.timezone, cutoffHour) : getWeekStartAt(new Date(), team.timezone, cutoffHour);
+  const weekEndAt = getWeekEndAt(week, team.timezone);
 
   const [leaderboardResult, entries, requirement, teamStats, teamTrend] = await Promise.all([
     getTeamLeaderboard(team.id, week),
@@ -173,14 +174,15 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
 export const getReviewQueue = async (
   actorId: string,
   teamId?: string,
-  weekStartAt?: Date,
+  inputWeekStartAt?: Date,
 ) => {
-  const team = teamId ? { id: teamId } : await getDefaultTeam();
+  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
   if (!team) {
     throw new Error("Team not found.");
   }
 
-  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(new Date()).weekStartAt;
+  const cutoffHour = (team as any).weekCutoffHour ?? 18;
+  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt, team.timezone, cutoffHour) : getWeekStartAt(new Date(), team.timezone, cutoffHour);
   const entries = (await listEntriesForReview(
     team.id,
     week,
@@ -217,7 +219,7 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
   // Cast team to any to access weekCutoffHour until types are fully regenerated
   const cutoffHour = (team as any).weekCutoffHour ?? 18;
 
-  const effectiveWeekStartAt = inputWeekStartAt ?? getWeekStartAt(new Date(), team.timezone, cutoffHour);
+  const effectiveWeekStartAt = getWeekStartAt(inputWeekStartAt ?? new Date(), team.timezone, cutoffHour);
   const weekEndAt = getWeekEndAt(effectiveWeekStartAt, team.timezone);
 
   const [requirement, exemptions, activeAthletes] = await Promise.all([
