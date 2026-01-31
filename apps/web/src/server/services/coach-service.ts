@@ -239,6 +239,7 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
       athleteId: e.athleteId,
       athleteName: e.athlete.name ?? "Unknown",
       reason: e.reason,
+      isIndefinite: (e as any).isIndefinite,
     })),
     athletes: activeAthletes.map((a) => ({
       id: a.id,

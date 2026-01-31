@@ -1,34 +1,52 @@
 import { prisma } from "@/db/client";
 
-export const upsertWeeklyRequirement = (data: {
+export const upsertWeeklyRequirement = async (data: {
   teamId: string;
   weekStartAt: Date;
   weekEndAt: Date;
   requiredMinutes: number;
-}) =>
-  prisma.weeklyRequirement.upsert({
+}) => {
+  const rangeStart = new Date(data.weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(data.weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+
+  const existing = await prisma.weeklyRequirement.findFirst({
     where: {
-      teamId_weekStartAt: {
-        teamId: data.teamId,
-        weekStartAt: data.weekStartAt,
+      teamId: data.teamId,
+      weekStartAt: {
+        gte: rangeStart,
+        lte: rangeEnd,
       },
     },
-    update: {
-      weekEndAt: data.weekEndAt,
-      requiredMinutes: data.requiredMinutes,
-    },
-    create: data,
   });
 
-export const getWeeklyRequirement = (teamId: string, weekStartAt: Date) =>
-  prisma.weeklyRequirement.findUnique({
+  if (existing) {
+    return prisma.weeklyRequirement.update({
+      where: { id: existing.id },
+      data: {
+        weekStartAt: data.weekStartAt,
+        weekEndAt: data.weekEndAt,
+        requiredMinutes: data.requiredMinutes,
+      },
+    });
+  }
+
+  return prisma.weeklyRequirement.create({ data });
+};
+
+export const getWeeklyRequirement = (teamId: string, weekStartAt: Date) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+
+  return prisma.weeklyRequirement.findFirst({
     where: {
-      teamId_weekStartAt: {
-        teamId,
-        weekStartAt,
+      teamId,
+      weekStartAt: {
+        gte: rangeStart,
+        lte: rangeEnd,
       },
     },
   });
+};
 
 export const listWeeklyRequirementsByTeamSince = (teamId: string, weekStartAt: Date) =>
   prisma.weeklyRequirement.findMany({

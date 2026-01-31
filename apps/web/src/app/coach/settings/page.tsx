@@ -21,6 +21,7 @@ type ExemptionItem = {
   athleteId: string;
   athleteName: string;
   reason: string | null;
+  isIndefinite?: boolean;
 };
 
 export default function CoachSettingsPage() {
@@ -42,12 +43,14 @@ export default function CoachSettingsPage() {
   const exemptions: ExemptionItem[] = data?.exemptions ?? [];
   const [selectedAthlete, setSelectedAthlete] = useState("");
   const [exemptionReason, setExemptionReason] = useState("");
+  const [isIndefinite, setIsIndefinite] = useState(false);
 
   const { mutateAsync: saveExemption, isLoading: isSavingExemption } =
     trpc.coach.setExemption.useMutation({
       onSuccess: async () => {
         setSelectedAthlete("");
         setExemptionReason("");
+        setIsIndefinite(false);
         await utils.coach.getWeeklySettings.invalidate();
         await utils.coach.getTeamOverview.invalidate();
       },
@@ -132,6 +135,7 @@ export default function CoachSettingsPage() {
                     athleteId: selectedAthlete,
                     weekStartAt: data.weekStartAt,
                     reason: exemptionReason || undefined,
+                    isIndefinite,
                   })
                   : null
               }
@@ -170,6 +174,18 @@ export default function CoachSettingsPage() {
                     onChange={(event) => setExemptionReason(event.target.value)}
                   />
                 </div>
+                <div className="flex items-center gap-2 pt-2 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="isIndefinite"
+                    checked={isIndefinite}
+                    onChange={(e) => setIsIndefinite(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <Label htmlFor="isIndefinite" className="cursor-pointer text-sm font-medium">
+                    Exempt indefinitely
+                  </Label>
+                </div>
               </div>
               <div className="grid gap-3">
                 {exemptions.length ? (
@@ -179,7 +195,14 @@ export default function CoachSettingsPage() {
                       className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
+                          {exemption.isIndefinite && (
+                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                              Indefinite
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-default-500">{exemption.reason ?? "No reason"}</p>
                       </div>
                       <Button

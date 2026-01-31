@@ -76,7 +76,7 @@ export const coachRouter = router({
   setExemption: coachProcedure
     .input(ExemptionInputSchema)
     .mutation(({ ctx, input }) =>
-      setExemption(ctx.session.user.id, input.athleteId, input.weekStartAt, input.reason ?? null),
+      setExemption(ctx.session.user.id, input.athleteId, input.weekStartAt, input.reason ?? null, input.isIndefinite),
     ),
   removeExemption: coachProcedure
     .input(z.object({ athleteId: z.string(), weekStartAt: z.coerce.date() }))

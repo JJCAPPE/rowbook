@@ -33,11 +33,13 @@ export const setExemption = async (
   athleteId: string,
   weekStartAt: Date,
   reason: string | null,
+  isIndefinite?: boolean,
 ) => {
   const exemption = await upsertExemption({
     athleteId,
     weekStartAt,
     reason,
+    isIndefinite,
     createdBy: actorId,
   });
 

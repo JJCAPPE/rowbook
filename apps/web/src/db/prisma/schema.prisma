@@ -121,6 +121,7 @@ model Exemption {
   athleteId  String
   weekStartAt DateTime
   reason     String?
+  isIndefinite Boolean @default(false)
   createdBy  String
   createdAt  DateTime @default(now())
 

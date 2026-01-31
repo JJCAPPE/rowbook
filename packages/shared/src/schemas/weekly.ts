@@ -36,6 +36,7 @@ export const ExemptionInputSchema = z.object({
   athleteId: z.string(),
   weekStartAt: z.coerce.date(),
   reason: z.string().max(500).nullable().optional(),
+  isIndefinite: z.boolean().optional(),
 });
 export type ExemptionInput = z.infer<typeof ExemptionInputSchema>;
 
