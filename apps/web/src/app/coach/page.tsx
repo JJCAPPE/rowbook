@@ -2,6 +2,8 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { LeaderboardTable } from "@/components/leaderboard/leaderboard-table";
+import { TeamStats } from "@/components/leaderboard/team-stats";
+import { TeamTrendChart } from "@/components/leaderboard/team-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat-tile";
@@ -46,6 +48,20 @@ export default function CoachOverviewPage() {
         <StatTile label="Not met" value={`${data?.summary.notMet ?? 0}`} />
         <StatTile label="Exempt" value={`${data?.summary.exempt ?? 0}`} />
       </div>
+
+      {data && (
+        <div className="space-y-6">
+          <TeamStats
+            totalMinutes={data.teamStats.totalMinutes}
+            totalDistance={data.teamStats.totalDistance}
+            avgHr={data.teamStats.avgHr}
+          />
+          <Card className="p-6">
+            <p className="section-title mb-4">Team Progress (Last 6 Weeks)</p>
+            <TeamTrendChart data={data.teamTrend} />
+          </Card>
+        </div>
+      )}
 
       <Card>
         {isLoading ? (
