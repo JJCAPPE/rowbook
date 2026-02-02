@@ -72,14 +72,6 @@ export default function CoachSettingsPage() {
       },
     });
 
-  const { mutateAsync: updateTeamSettings, isLoading: isUpdatingSettings } =
-    trpc.coach.updateTeamSettings.useMutation({
-      onSuccess: async () => {
-        await utils.coach.getWeeklySettings.invalidate();
-        await utils.coach.getTeamOverview.invalidate(); // To reflect potential week shift
-      },
-    });
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -91,23 +83,8 @@ export default function CoachSettingsPage() {
         }
         actions={
           data ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-default-500">Week boundary:</span>
-              <select
-                className="bg-transparent font-medium text-foreground outline-none cursor-pointer"
-                value={data.weekCutoffHour ?? 18}
-                disabled={isUpdatingSettings}
-                onChange={(e) => updateTeamSettings({
-                  teamId: data.teamId,
-                  weekCutoffHour: Number(e.target.value)
-                })}
-              >
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <option key={i} value={i}>
-                    {i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2 text-sm text-default-500">
+              Week boundary: Sunday 8:00 PM ET
             </div>
           ) : null
         }

@@ -62,7 +62,7 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
         })}
       </div>
       <div className="mt-auto text-xs text-default-500">
-        Sunday cutoff at 6:00 PM ET
+        Sunday cutoff at 8:00 PM ET
       </div>
     </nav>
   );

@@ -1,4 +1,4 @@
-import { getPreviousWeekStartAt, nowInZone } from "@rowbook/shared";
+import { getPreviousWeekStartAt } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import { listTeams } from "@/server/repositories/teams";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";
@@ -30,8 +30,7 @@ export const runWeeklyAggregation = async () => {
   const results: Array<{ teamId: string; aggregateCount: number }> = [];
 
   for (const team of teams) {
-    const cutoffHour = (team as any).weekCutoffHour ?? 18;
-    const weekStartAt = getPreviousWeekStartAt(new Date(), team.timezone, cutoffHour);
+    const weekStartAt = getPreviousWeekStartAt(new Date());
     const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
     const recipients: Array<{ email: string }> = await prisma.user.findMany({
       where: { status: "ACTIVE" },

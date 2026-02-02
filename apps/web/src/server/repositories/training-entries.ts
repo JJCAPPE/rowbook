@@ -99,25 +99,22 @@ export const updateTrainingEntriesByProofImageId = (
 export const listEntriesByAthleteWeek = (
   athleteId: string,
   weekStartAt: Date,
+  weekEndAt: Date,
 ) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
   return prisma.trainingEntry.findMany({
     where: { 
       athleteId, 
-      weekStartAt: { gte: rangeStart, lte: rangeEnd } 
+      weekStartAt: { gte: weekStartAt, lt: weekEndAt },
     },
     include: { proofImages: true },
     orderBy: { date: "desc" },
   });
 };
 
-export const listEntriesByTeamWeek = (teamId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+export const listEntriesByTeamWeek = (teamId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.trainingEntry.findMany({
     where: {
-      weekStartAt: { gte: rangeStart, lte: rangeEnd },
+      weekStartAt: { gte: weekStartAt, lt: weekEndAt },
       athlete: { athleteProfile: { teamId } },
     },
     include: { athlete: true },
@@ -128,11 +125,10 @@ export const listEntriesByTeamSinceWeekStart = (
   teamId: string,
   weekStartAt: Date,
 ) => {
-  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
   return prisma.trainingEntry.findMany({
     where: {
       weekStartAt: {
-        gte: bufferedStart,
+        gte: weekStartAt,
       },
       athlete: { athleteProfile: { teamId } },
     },
@@ -151,12 +147,11 @@ export const listEntriesByAthleteSinceWeekStart = (
   athleteId: string,
   weekStartAt: Date,
 ) => {
-  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
   return prisma.trainingEntry.findMany({
     where: {
       athleteId,
       weekStartAt: {
-        gte: bufferedStart,
+        gte: weekStartAt,
       },
     },
     include: { proofImages: true },
