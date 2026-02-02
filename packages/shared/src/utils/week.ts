@@ -78,3 +78,19 @@ export const isWithinActiveWeek = (
   const activeWeekStart = getWeekStartAt(referenceDate, timeZone, cutoffHour);
   return isWithinWeek(date, activeWeekStart, timeZone);
 };
+
+export const getIsoWeekKey = (
+  date: DateInput,
+  timeZone = DEFAULT_TIMEZONE,
+): string => {
+  // Normalize to UTC Date
+  const d = new Date(toDateTime(date, timeZone).toMillis());
+  
+  // Implementation of ISO week number
+  const day = d.getUTCDay();
+  const diff = (day <= 3 ? day : day - 7) + 3;
+  d.setUTCDate(d.getUTCDate() - diff + 3);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNumber = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+};

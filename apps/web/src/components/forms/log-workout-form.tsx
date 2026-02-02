@@ -183,7 +183,10 @@ export const LogWorkoutForm = () => {
     try {
       await createEntry({
         activityType: values.activityType,
-        date: new Date(values.date),
+        // Pass date as string - the server-side schema properly parses it as New York noon
+        // to avoid timezone issues (new Date("YYYY-MM-DD") interprets as UTC midnight,
+        // which becomes the previous day in EST/EDT)
+        date: values.date as unknown as Date,
         minutes: values.minutes,
         distance: values.distanceKm,
         avgHr: values.avgHr ?? null,

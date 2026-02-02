@@ -54,3 +54,18 @@ export const formatInTimeZone = (
   timeZone = DEFAULT_TIMEZONE,
   format = DEFAULT_TIME_FORMAT,
 ): string => toDateTime(input, timeZone).toFormat(format);
+
+/**
+ * Parse a date-only string (YYYY-MM-DD) as noon in New York timezone.
+ * This avoids timezone shift issues that occur when using `new Date("YYYY-MM-DD")`
+ * which interprets the string as UTC midnight, causing the date to roll back
+ * when converted to EST/EDT.
+ */
+export const parseDateStringAsNewYorkNoon = (dateString: string): Date => {
+  // Parse as noon in New York to avoid any timezone edge cases
+  const dt = DateTime.fromISO(`${dateString}T12:00:00`, { zone: DEFAULT_TIMEZONE });
+  if (!dt.isValid) {
+    throw new Error(`Invalid date string: ${dateString}`);
+  }
+  return dt.toJSDate();
+};

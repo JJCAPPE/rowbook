@@ -99,36 +99,47 @@ export const updateTrainingEntriesByProofImageId = (
 export const listEntriesByAthleteWeek = (
   athleteId: string,
   weekStartAt: Date,
-) =>
-  prisma.trainingEntry.findMany({
-    where: { athleteId, weekStartAt },
+) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+  return prisma.trainingEntry.findMany({
+    where: { 
+      athleteId, 
+      weekStartAt: { gte: rangeStart, lte: rangeEnd } 
+    },
     include: { proofImages: true },
     orderBy: { date: "desc" },
   });
+};
 
-export const listEntriesByTeamWeek = (teamId: string, weekStartAt: Date) =>
-  prisma.trainingEntry.findMany({
+export const listEntriesByTeamWeek = (teamId: string, weekStartAt: Date) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+  return prisma.trainingEntry.findMany({
     where: {
-      weekStartAt,
+      weekStartAt: { gte: rangeStart, lte: rangeEnd },
       athlete: { athleteProfile: { teamId } },
     },
     include: { athlete: true },
   });
+};
 
 export const listEntriesByTeamSinceWeekStart = (
   teamId: string,
   weekStartAt: Date,
-) =>
-  prisma.trainingEntry.findMany({
+) => {
+  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  return prisma.trainingEntry.findMany({
     where: {
       weekStartAt: {
-        gte: weekStartAt,
+        gte: bufferedStart,
       },
       athlete: { athleteProfile: { teamId } },
     },
     include: { athlete: true },
     orderBy: { weekStartAt: "asc" },
   });
+};
 
 export const listEntriesByAthlete = (athleteId: string) =>
   prisma.trainingEntry.findMany({
@@ -139,23 +150,24 @@ export const listEntriesByAthlete = (athleteId: string) =>
 export const listEntriesByAthleteSinceWeekStart = (
   athleteId: string,
   weekStartAt: Date,
-) =>
-  prisma.trainingEntry.findMany({
+) => {
+  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  return prisma.trainingEntry.findMany({
     where: {
       athleteId,
       weekStartAt: {
-        gte: weekStartAt,
+        gte: bufferedStart,
       },
     },
     include: { proofImages: true },
     orderBy: { date: "desc" },
   });
+};
 
 export const listEntriesForReview = (
   teamId: string,
-  weekStartAt: Date,
   statuses: ValidationStatus[],
-  options?: { includeReviewed?: boolean },
+  options?: { includeReviewed?: boolean; dateRange?: { start: Date; end: Date } },
 ) => {
   const orFilters: Prisma.TrainingEntryWhereInput[] = [
     {
@@ -175,7 +187,12 @@ export const listEntriesForReview = (
 
   return prisma.trainingEntry.findMany({
     where: {
-      weekStartAt,
+      ...(options?.dateRange && {
+        date: {
+          gte: options.dateRange.start,
+          lt: options.dateRange.end,
+        },
+      }),
       athlete: {
         athleteProfile: { teamId },
       },

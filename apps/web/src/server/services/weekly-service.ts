@@ -5,6 +5,8 @@ import {
   WeeklyStatus,
   getPreviousWeekStartAt,
   getWeekEndAt,
+  getWeekStartAt,
+  getIsoWeekKey,
 } from "@rowbook/shared";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import { listTeamAthletes } from "@/server/repositories/users";
@@ -159,8 +161,8 @@ export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) =
   return listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt);
 };
 
-export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
-  const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt);
+export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date, timezone = "America/New_York", cutoffHour = 18) => {
+  const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt, timezone, cutoffHour);
   const [aggregatesResult, entriesResult, requirement, exemptionsResult, previousAggregatesResult] = await Promise.all([
     getLeaderboardForWeek(teamId, weekStartAt),
     listEntriesByTeamWeek(teamId, weekStartAt),
@@ -268,10 +270,12 @@ export const getTeamTrend = async (
   teamId: string,
   endWeekStartAt: Date,
   weeks = 6,
+  timezone = "America/New_York",
+  cutoffHour = 18,
 ) => {
   let start = endWeekStartAt;
   for (let i = 0; i < weeks - 1; i++) {
-    start = getPreviousWeekStartAt(start);
+    start = getPreviousWeekStartAt(start, timezone, cutoffHour);
   }
 
   const entries = await listEntriesByTeamSinceWeekStart(teamId, start);
@@ -292,7 +296,7 @@ export const getTeamTrend = async (
   // Safety break to prevent infinite loops if date math is wrong
   let safety = 0;
   while (loopWeek <= endWeekStartAt && safety < 100) {
-    weeksMap.set(loopWeek.toISOString(), {
+    weeksMap.set(getIsoWeekKey(loopWeek), {
       minutes: 0,
       distance: 0,
       hrEntries: [],
@@ -304,7 +308,7 @@ export const getTeamTrend = async (
   }
 
   for (const entry of validEntries) {
-    const key = entry.weekStartAt.toISOString();
+    const key = getIsoWeekKey(entry.weekStartAt);
     const current = weeksMap.get(key);
     if (current) {
       current.minutes += entry.minutes;

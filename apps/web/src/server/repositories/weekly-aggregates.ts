@@ -29,15 +29,16 @@ export const upsertWeeklyAggregate = (data: {
     create: data,
   });
 
-export const getWeeklyAggregate = (athleteId: string, weekStartAt: Date) =>
-  prisma.weeklyAggregate.findUnique({
+export const getWeeklyAggregate = (athleteId: string, weekStartAt: Date) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+  return prisma.weeklyAggregate.findFirst({
     where: {
-      athleteId_weekStartAt: {
-        athleteId,
-        weekStartAt,
-      },
+      athleteId,
+      weekStartAt: { gte: rangeStart, lte: rangeEnd },
     },
   });
+};
 
 export const listWeeklyAggregatesByAthlete = (athleteId: string) =>
   prisma.weeklyAggregate.findMany({
@@ -45,15 +46,21 @@ export const listWeeklyAggregatesByAthlete = (athleteId: string) =>
     orderBy: { weekStartAt: "desc" },
   });
 
-export const listWeeklyAggregatesByTeamWeek = (teamId: string, weekStartAt: Date) =>
-  prisma.weeklyAggregate.findMany({
-    where: { teamId, weekStartAt },
+export const listWeeklyAggregatesByTeamWeek = (teamId: string, weekStartAt: Date) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+  return prisma.weeklyAggregate.findMany({
+    where: { teamId, weekStartAt: { gte: rangeStart, lte: rangeEnd } },
     orderBy: { totalMinutes: "desc" },
   });
+};
 
-export const listWeeklyAggregatesByTeamWeekWithAthlete = (teamId: string, weekStartAt: Date) =>
-  prisma.weeklyAggregate.findMany({
-    where: { teamId, weekStartAt },
+export const listWeeklyAggregatesByTeamWeekWithAthlete = (teamId: string, weekStartAt: Date) => {
+  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+  return prisma.weeklyAggregate.findMany({
+    where: { teamId, weekStartAt: { gte: rangeStart, lte: rangeEnd } },
     include: { athlete: true },
     orderBy: { totalMinutes: "desc" },
   });
+};

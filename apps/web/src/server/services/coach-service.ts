@@ -16,9 +16,9 @@ import { listTeamAthletes, getUserById } from "@/server/repositories/users";
 import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
 import { listExemptionsByWeek } from "@/server/repositories/exemptions";
 import { getProofViewUrl } from "@/server/services/proof-service";
-import { getWeightedAvgHrByWeek } from "@/server/utils/heart-rate";
+import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import { createAuditLog } from "@/server/repositories/audit-logs";
-import { getWeekStartAt } from "@rowbook/shared";
+import { getIsoWeekKey, getWeekStartAt } from "@rowbook/shared";
 
 type TeamLeaderboardRow = {
   id: string;
@@ -90,11 +90,11 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
   const weekEndAt = getWeekEndAt(week, team.timezone);
 
   const [leaderboardResult, entries, requirement, teamStats, teamTrend] = await Promise.all([
-    getTeamLeaderboard(team.id, week),
+    getTeamLeaderboard(team.id, week, team.timezone, cutoffHour),
     listEntriesByTeamWeek(team.id, week),
     getWeeklyRequirement(team.id, week),
     getTeamStats(team.id, week),
-    getTeamTrend(team.id, week),
+    getTeamTrend(team.id, week, 6, team.timezone, cutoffHour),
   ]);
   const leaderboard = leaderboardResult as TeamLeaderboardRow[];
 
@@ -135,17 +135,66 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
     listWeeklyAggregatesByAthlete(athleteId),
   ]);
   const entries = entriesResult as TrainingEntry[];
-  const avgHrByWeek = getWeightedAvgHrByWeek(entries);
-
+  
   const entriesWithProofs = await attachProofs(entries as any[], athleteId, true);
 
   const activityMixMap = new Map<ActivityType, number>();
+  const entriesByIsoWeek = new Map<string, TrainingEntry[]>();
+
   for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") {
-      continue;
-    }
+    if (entry.validationStatus === "REJECTED") continue;
+    
+    // Group for mix
     activityMixMap.set(entry.activityType, (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes);
+    
+    // Group for Weekly HR
+    const key = getIsoWeekKey(entry.weekStartAt);
+    const list = entriesByIsoWeek.get(key) ?? [];
+    list.push(entry);
+    entriesByIsoWeek.set(key, list);
   }
+
+  // Deduplicate weekly aggregates by week range key to handle cases where
+  // weekStartAt timestamps differ slightly but represent the same week
+  const weekMap = new Map<string, {
+    weekStartAt: Date;
+    weekEndAt: Date;
+    totalMinutes: number;
+    avgHr: number | null;
+  }>();
+
+  for (const week of history) {
+    const weekKey = getIsoWeekKey(week.weekStartAt);
+    const existing = weekMap.get(weekKey);
+    
+    // Calculate avgHr for this normalized week from entries
+    const entriesForWeek = entriesByIsoWeek.get(weekKey) ?? [];
+    const entriesAvgHr = entriesForWeek.length > 0 
+      ? getWeightedAvgHr(entriesForWeek.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })))
+      : null;
+
+    if (existing) {
+      existing.totalMinutes += week.totalMinutes;
+      // avgHr is constant for the weekKey (derived from entries), so no update needed
+    } else {
+      weekMap.set(weekKey, {
+        weekStartAt: week.weekStartAt,
+        weekEndAt: week.weekEndAt,
+        totalMinutes: week.totalMinutes,
+        avgHr: entriesAvgHr, // Use entries calculation
+      });
+    }
+  }
+
+  // Convert map back to array
+  const deduplicatedHistory = Array.from(weekMap.values())
+    .map((week) => ({
+      weekStartAt: week.weekStartAt,
+      weekEndAt: week.weekEndAt,
+      totalMinutes: week.totalMinutes,
+      avgHr: week.avgHr,
+    }))
+    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
 
   return {
     athlete: athlete
@@ -160,10 +209,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
         extractedFields: e.proofs[0]?.extractedFields ?? null,
         proofUrl: e.proofs[0]?.url ?? null,
     })),
-    history: history.map((week) => ({
-      ...week,
-      avgHr: avgHrByWeek.get(week.weekStartAt.toISOString()) ?? null,
-    })),
+    history: deduplicatedHistory,
     activityMix: Array.from(activityMixMap.entries()).map(([type, minutes]) => ({
       type,
       minutes,
@@ -183,9 +229,10 @@ export const getReviewQueue = async (
 
   const cutoffHour = (team as any).weekCutoffHour ?? 18;
   const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt, team.timezone, cutoffHour) : getWeekStartAt(new Date(), team.timezone, cutoffHour);
+  const weekEndAt = getWeekEndAt(week, team.timezone);
+
   const entries = (await listEntriesForReview(
     team.id,
-    week,
     Array.from(PENDING_PROOF_STATUSES),
     { includeReviewed: true },
   )) as unknown as ReviewEntry[];

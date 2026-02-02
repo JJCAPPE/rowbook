@@ -84,15 +84,17 @@ export const listExemptionsByWeek = (weekStartAt: Date, teamId?: string) => {
   });
 };
 
-export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Date) =>
-  prisma.exemption.findMany({
+export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Date) => {
+  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
+  return prisma.exemption.findMany({
     where: {
       athleteId,
       weekStartAt: {
-        gte: weekStartAt,
+        gte: bufferedStart,
       },
     },
   });
+};
 
 export const deleteExemption = (athleteId: string, weekStartAt: Date) =>
   prisma.exemption.delete({

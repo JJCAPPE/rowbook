@@ -1,6 +1,7 @@
-import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, nowInZone } from "@rowbook/shared";
+import { getIsoWeekKey, getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, nowInZone } from "@rowbook/shared";
 import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
+import { getTeamById } from "@/server/repositories/teams";
 import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
 import { getWeeklyRequirement, listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
 import { getExemption, listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
@@ -57,8 +58,15 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     throw new Error("Athlete is not assigned to a team.");
   }
 
+  // Fetch team settings for week cutoff hour
+  const team = await getTeamById(teamId);
+  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
+  const timezone = team?.timezone ?? "America/New_York";
+
   const { weekStartAt: normalizedWeekStart, weekEndAt } = getWeekRange(
-    weekStartAt ?? nowInZone(),
+    weekStartAt ?? nowInZone(timezone),
+    timezone,
+    cutoffHour,
   );
 
   const [entries, requirement, exemption, aggregate] = await Promise.all([
@@ -100,9 +108,24 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
 };
 
 export const getAthleteHistory = async (athleteId: string) => {
-  const history = await listWeeklyAggregatesByAthlete(athleteId);
+  const [history, teamId] = await Promise.all([
+    listWeeklyAggregatesByAthlete(athleteId),
+    getTeamIdForAthlete(athleteId),
+  ]);
+  
   if (!history.length) {
     return history;
+  }
+
+  // Fetch team settings for robust week bucketing
+  let cutoffHour = 18;
+  let timezone = "America/New_York";
+  if (teamId) {
+    const team = await getTeamById(teamId);
+    if (team) {
+      cutoffHour = (team as any).weekCutoffHour ?? 18;
+      timezone = team.timezone;
+    }
   }
 
   const earliestWeekStart = history[history.length - 1]?.weekStartAt;
@@ -110,9 +133,12 @@ export const getAthleteHistory = async (athleteId: string) => {
     return history;
   }
 
+  // Calculate buffer start: Earliest week start minus typical buffer to catch all relevant entries
+  const bufferedStart = new Date(earliestWeekStart.getTime() - 12 * 60 * 60 * 1000);
+
   const entries = (await listEntriesByAthleteSinceWeekStart(
     athleteId,
-    earliestWeekStart,
+    bufferedStart,
   )) as Array<{
     weekStartAt: Date;
     minutes: number;
@@ -120,12 +146,70 @@ export const getAthleteHistory = async (athleteId: string) => {
     validationStatus: ValidationStatus;
   }>;
 
-  const avgHrByWeek = getWeightedAvgHrByWeek(entries);
+  // Group entries by ISO week for robust HR calculation
+  const entriesByIsoWeek = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    if (entry.validationStatus === "REJECTED") continue;
+    const key = getIsoWeekKey(entry.weekStartAt);
+    const list = entriesByIsoWeek.get(key) ?? [];
+    list.push(entry);
+    entriesByIsoWeek.set(key, list);
+  }
 
-  return history.map((week) => ({
-    ...week,
-    avgHr: avgHrByWeek.get(week.weekStartAt.toISOString()) ?? null,
-  }));
+  // Deduplicate weekly aggregates by week range key to handle cases where
+  // weekStartAt timestamps differ slightly but represent the same week
+  const weekMap = new Map<string, {
+    athleteId: string;
+    weekStartAt: Date;
+    weekEndAt: Date;
+    totalMinutes: number;
+    activityTypes: any[];
+    hasHrData: boolean;
+    status: any;
+    avgHr: number | null;
+  }>();
+
+  for (const week of history) {
+    const weekKey = getIsoWeekKey(week.weekStartAt);
+    const existing = weekMap.get(weekKey);
+    
+    // Calculate avgHr for this normalized week from entries
+    const entriesForWeek = entriesByIsoWeek.get(weekKey) ?? [];
+    const entriesAvgHr = entriesForWeek.length > 0 
+      ? getWeightedAvgHr(entriesForWeek.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })))
+      : null;
+
+    if (existing) {
+      // Merge: sum minutes
+      existing.totalMinutes += week.totalMinutes;
+      // avgHr is constant for the weekKey
+    } else {
+      weekMap.set(weekKey, {
+        athleteId: week.athleteId,
+        weekStartAt: week.weekStartAt,
+        weekEndAt: week.weekEndAt,
+        totalMinutes: week.totalMinutes,
+        activityTypes: week.activityTypes,
+        hasHrData: week.hasHrData,
+        status: week.status,
+        avgHr: entriesAvgHr,
+      });
+    }
+  }
+
+  // Convert map back to array and compute final avgHr
+  return Array.from(weekMap.values())
+    .map((week) => ({
+      athleteId: week.athleteId,
+      weekStartAt: week.weekStartAt,
+      weekEndAt: week.weekEndAt,
+      totalMinutes: week.totalMinutes,
+      activityTypes: week.activityTypes,
+      hasHrData: week.hasHrData,
+      status: week.status,
+      avgHr: week.avgHr,
+    }))
+    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
 };
 
 export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount = 8) => {
@@ -134,11 +218,16 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
     throw new Error("Athlete is not assigned to a team.");
   }
 
-  const { weekStartAt: currentWeekStart } = getWeekRange(nowInZone());
+  // Fetch team settings for week cutoff hour
+  const team = await getTeamById(teamId);
+  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
+  const timezone = team?.timezone ?? "America/New_York";
+
+  const { weekStartAt: currentWeekStart } = getWeekRange(nowInZone(timezone), timezone, cutoffHour);
   let earliestWeekStart = currentWeekStart;
 
   for (let index = 1; index < weekCount; index += 1) {
-    earliestWeekStart = getPreviousWeekStartAt(earliestWeekStart);
+    earliestWeekStart = getPreviousWeekStartAt(earliestWeekStart, timezone, cutoffHour);
   }
 
   const [entriesResult, requirementsResult, exemptionsResult] = await Promise.all([
@@ -212,7 +301,7 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
 
       return {
         weekStartAt,
-        weekEndAt: getWeekEndAt(weekStartAt),
+        weekEndAt: getWeekEndAt(weekStartAt, timezone),
         totalMinutes,
         status,
         hasHrData,
@@ -232,8 +321,18 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
 };
 
 export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date) => {
-  const normalizedWeekStart = getWeekRange(weekStartAt).weekStartAt;
-  const weekEndAt = getWeekEndAt(normalizedWeekStart);
+  const teamId = await getTeamIdForAthlete(athleteId);
+  if (!teamId) {
+    throw new Error("Athlete is not assigned to a team.");
+  }
+
+  // Fetch team settings for week cutoff hour
+  const team = await getTeamById(teamId);
+  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
+  const timezone = team?.timezone ?? "America/New_York";
+
+  const normalizedWeekStart = getWeekRange(weekStartAt, timezone, cutoffHour).weekStartAt;
+  const weekEndAt = getWeekEndAt(normalizedWeekStart, timezone);
   const entries = (await listEntriesByAthleteWeek(
     athleteId,
     normalizedWeekStart,
@@ -272,12 +371,19 @@ export const getAthleteLeaderboard = async (athleteId: string, weekStartAt?: Dat
     throw new Error("Athlete is not assigned to a team.");
   }
 
-  const week = weekStartAt ? getWeekRange(weekStartAt).weekStartAt : getWeekRange(nowInZone()).weekStartAt;
-  const weekEndAt = getWeekEndAt(week);
+  // Fetch team settings for week cutoff hour
+  const team = await getTeamById(teamId);
+  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
+  const timezone = team?.timezone ?? "America/New_York";
+
+  const week = weekStartAt 
+    ? getWeekRange(weekStartAt, timezone, cutoffHour).weekStartAt 
+    : getWeekRange(nowInZone(timezone), timezone, cutoffHour).weekStartAt;
+  const weekEndAt = getWeekEndAt(week, timezone);
   const [leaderboard, teamStats, teamTrend] = await Promise.all([
-    getTeamLeaderboard(teamId, week),
+    getTeamLeaderboard(teamId, week, timezone, cutoffHour),
     getTeamStats(teamId, week),
-    getTeamTrend(teamId, week),
+    getTeamTrend(teamId, week, 6, timezone, cutoffHour),
   ]);
 
   return {

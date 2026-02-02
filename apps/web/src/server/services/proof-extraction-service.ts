@@ -25,7 +25,15 @@ export const setGenAI = (instance: GoogleGenerativeAI) => {
 
 const getGenAI = () => {
   if (genAI) return genAI;
-  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("GEMINI_API_KEY is missing in environment variables!");
+    throw new Error("Server configuration error: GEMINI_API_KEY is missing.");
+  }
+
+  console.log(`Initializing Gemini Client with key length: ${apiKey.length}`);
+  genAI = new GoogleGenerativeAI(apiKey);
   return genAI;
 };
 
@@ -92,15 +100,23 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
     - RejectionReason: If confidence is low, explain why. For example: "Image is too blurry", "Image is of a landscape, not a workout", "No workout data visible".
   `;
 
-  const result = await model.generateContent([
-    prompt,
-    {
-      inlineData: {
-        data: imageBuffer.toString("base64"),
-        mimeType: "image/jpeg",
+  let result;
+  try {
+    result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: imageBuffer.toString("base64"),
+          mimeType: "image/jpeg",
+        },
       },
-    },
-  ]);
+    ]);
+  } catch (e: any) {
+    console.error("Gemini API Error during generateContent:", e);
+    const hasKey = !!process.env.GEMINI_API_KEY;
+    const keyLen = process.env.GEMINI_API_KEY?.length;
+    throw new Error(`Gemini API Error: ${e.message}. Key Present: ${hasKey} (Len: ${keyLen})`);
+  }
 
   const text = result.response.text();
   console.log("Gemini extraction result:", text);
@@ -113,8 +129,17 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
       confidence: number;
       rejectionReason: string | null;
     };
-  } catch (e) {
     console.error("Failed to parse Gemini response:", text);
     throw new Error("Invalid response from Gemini");
+  } catch (e: any) {
+    // Check for 403 or other API errors that might be thrown by the library
+    console.error("Gemini API Error:", e);
+    const hasKey = !!process.env.GEMINI_API_KEY;
+    const keyLen = process.env.GEMINI_API_KEY?.length;
+    
+    if (e.message?.includes("403") || e.toString().includes("403")) {
+       throw new Error(`Gemini API 403 Forbidden. Env Key Present: ${hasKey}, Length: ${keyLen}. Details: ${e.message}`);
+    }
+    throw e;
   }
 };

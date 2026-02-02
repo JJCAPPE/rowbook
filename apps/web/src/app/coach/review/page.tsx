@@ -1,6 +1,8 @@
 "use client";
 
 import { PENDING_PROOF_STATUSES, ProofExtractionStatus, ValidationStatus } from "@rowbook/shared";
+import { Spinner } from "@heroui/react";
+import { CheckCircleIcon } from "@heroicons/react/24/solid";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +15,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatFullDate, formatMinutes, formatDistance, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useTransition } from "react";
 
 type ReviewEntry = {
   id: string;
@@ -35,10 +37,15 @@ type ReviewEntry = {
   extractedFields: unknown | null;
 };
 
+type EntryStatus = "idle" | "loading" | "success";
+
 export default function CoachReviewQueuePage() {
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
   const [showReviewed, setShowReviewed] = useState(false);
+  const [entryStatuses, setEntryStatuses] = useState<Record<string, EntryStatus>>({});
+  const [, startTransition] = useTransition();
+
   const weekStartParam = searchParams.get("weekStartAt");
   const weekStartAt = useMemo(() => {
     if (!weekStartParam) {
@@ -51,37 +58,40 @@ export default function CoachReviewQueuePage() {
   const reviewQueueInput = weekStartAt ? { weekStartAt } : undefined;
   const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery(reviewQueueInput);
   const entries: ReviewEntry[] = data?.entries ?? [];
-  const { mutateAsync: overrideStatus, isLoading: isUpdating } =
+
+  const { mutateAsync: overrideStatus } =
     trpc.coach.overrideValidationStatus.useMutation({
-      onMutate: async ({ entryId }) => {
-        await utils.coach.getReviewQueue.cancel(reviewQueueInput);
-        const previous = utils.coach.getReviewQueue.getData(reviewQueueInput);
-
-        utils.coach.getReviewQueue.setData(reviewQueueInput, (current) => {
-          if (!current) {
-            return current;
-          }
-          return {
-            ...current,
-            entries: current.entries.filter((entry) => entry.id !== entryId),
-          };
+      onSuccess: () => {
+        // Defer the invalidation to not block the UI
+        startTransition(() => {
+          utils.coach.getReviewQueue.invalidate();
+          utils.coach.getTeamOverview.invalidate();
         });
-
-        return { previous };
-      },
-      onError: (_error, _variables, context) => {
-        if (context?.previous) {
-          utils.coach.getReviewQueue.setData(reviewQueueInput, context.previous);
-        }
-      },
-      onSuccess: async () => {
-        await utils.coach.getReviewQueue.invalidate();
-        await utils.coach.getTeamOverview.invalidate();
-      },
-      onSettled: async () => {
-        await utils.coach.getReviewQueue.invalidate();
       },
     });
+
+  const handleAction = useCallback(
+    async (entryId: string, status: "VERIFIED" | "REJECTED", rejectionNote?: string) => {
+      setEntryStatuses((prev) => ({ ...prev, [entryId]: "loading" }));
+
+      try {
+        await overrideStatus({ entryId, status, rejectionNote });
+        setEntryStatuses((prev) => ({ ...prev, [entryId]: "success" }));
+
+        // Remove from view after a brief success indicator
+        setTimeout(() => {
+          setEntryStatuses((prev) => {
+            const next = { ...prev };
+            delete next[entryId];
+            return next;
+          });
+        }, 1500);
+      } catch {
+        setEntryStatuses((prev) => ({ ...prev, [entryId]: "idle" }));
+      }
+    },
+    [overrideStatus],
+  );
 
   const isOcrReviewed = (entry: ReviewEntry) =>
     entry.proofExtractionStatus === "COMPLETED"
@@ -90,7 +100,7 @@ export default function CoachReviewQueuePage() {
 
   const visibleEntries = showReviewed
     ? entries
-    : entries.filter((entry) => !isOcrReviewed(entry));
+    : entries.filter((entry) => !isOcrReviewed(entry) && entryStatuses[entry.id] !== "success");
 
   return (
     <div className="space-y-6">
@@ -112,6 +122,7 @@ export default function CoachReviewQueuePage() {
           <p className="text-sm text-rose-500">Unable to load review queue.</p>
         ) : visibleEntries.length ? (
           visibleEntries.map((entry) => {
+            const status = entryStatuses[entry.id] ?? "idle";
             const isProcessing =
               entry.proofExtractionStatus === "PROCESSING"
               || entry.proofExtractionStatus === "PENDING";
@@ -131,94 +142,110 @@ export default function CoachReviewQueuePage() {
             return (
               <div
                 key={entry.id}
-                className="rounded-2xl border border-divider/40 bg-content2/70 p-3 sm:p-4"
+                className={[
+                  "rounded-2xl border p-3 sm:p-4 transition-all duration-300",
+                  status === "success"
+                    ? "border-success bg-success/10"
+                    : "border-divider/40 bg-content2/70",
+                ].join(" ")}
               >
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">
-                      {entry.activityType} • {formatMinutes(entry.minutes)}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-default-500">
-                      <span>{formatFullDate(entry.date)}</span>
-                      {entry.athleteName ? (
-                        <>
-                          <span className="text-default-400">•</span>
-                          <span>Athlete: {entry.athleteName}</span>
-                        </>
-                      ) : null}
-                    </div>
+                {status === "success" ? (
+                  <div className="flex items-center justify-center gap-2 py-4 text-success">
+                    <CheckCircleIcon className="h-6 w-6" />
+                    <span className="font-medium">Reviewed successfully</span>
                   </div>
-                  <div className="flex flex-wrap items-start gap-2 md:justify-end">
-                    {isProcessing ? (
-                      <Badge tone="pending">Supabase OCR job running</Badge>
-                    ) : null}
-                    {isFailed ? (
-                      <Badge tone="danger">OCR failed • manual review</Badge>
-                    ) : null}
-                    {needsManualAfterOcr ? (
-                      <Badge tone="info">OCR incomplete • manual review</Badge>
-                    ) : null}
-                    {ocrVerified ? <Badge tone="success">OCR verified</Badge> : null}
-                    {ocrRejected ? <Badge tone="danger">OCR rejected</Badge> : null}
-                    <StatusBadge status={entry.validationStatus} />
-                    {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
-                      <div className="mt-1 text-[10px] text-rose-500 max-w-[200px] text-right">
-                        Reason: {entry.rejectionNote}
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {entry.activityType} • {formatMinutes(entry.minutes)}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-default-500">
+                          <span>{formatFullDate(entry.date)}</span>
+                          {entry.athleteName ? (
+                            <>
+                              <span className="text-default-400">•</span>
+                              <span>Athlete: {entry.athleteName}</span>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                  <div className="space-y-2">
-                    <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-2 md:grid-cols-3">
-                      <span>Distance: {formatDistance(entry.distance)}</span>
-                      <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace) ?? "—"}</span>
-                      {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && (
-                        <span>Watts: {formatWatts(entry.avgWatts) ?? "—"}</span>
-                      )}
-                      <span>Avg HR: {entry.avgHr ?? "—"}</span>
-                      <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
+                      <div className="flex flex-wrap items-start gap-2 md:justify-end">
+                        {isProcessing ? (
+                          <Badge tone="pending">Supabase OCR job running</Badge>
+                        ) : null}
+                        {isFailed ? (
+                          <Badge tone="danger">OCR failed • manual review</Badge>
+                        ) : null}
+                        {needsManualAfterOcr ? (
+                          <Badge tone="info">OCR incomplete • manual review</Badge>
+                        ) : null}
+                        {ocrVerified ? <Badge tone="success">OCR verified</Badge> : null}
+                        {ocrRejected ? <Badge tone="danger">OCR rejected</Badge> : null}
+                        <StatusBadge status={entry.validationStatus} />
+                        {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
+                          <div className="mt-1 text-[10px] text-rose-500 max-w-[200px] text-right">
+                            Reason: {entry.rejectionNote}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {entry.extractedFields ? (
-                      <ProofExtractionFeedback fields={entry.extractedFields} />
-                    ) : null}
-                    {entry.proofUrl ? (
-                      <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
-                    ) : (
-                      <p className="text-xs text-default-500">Proof not available.</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 md:justify-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() =>
-                        overrideStatus({ entryId: entry.id, status: "VERIFIED" })
-                      }
-                    >
-                      Mark verified
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() => {
-                        const note = window.prompt("Reason for rejection:");
-                        if (note === null) return;
-                        overrideStatus({
-                          entryId: entry.id,
-                          status: "REJECTED",
-                          rejectionNote: note,
-                        });
-                      }}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                      <div className="space-y-2">
+                        <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-2 md:grid-cols-3">
+                          <span>Distance: {formatDistance(entry.distance)}</span>
+                          <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace) ?? "—"}</span>
+                          {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && (
+                            <span>Watts: {formatWatts(entry.avgWatts) ?? "—"}</span>
+                          )}
+                          <span>Avg HR: {entry.avgHr ?? "—"}</span>
+                          <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
+                        </div>
+                        {entry.extractedFields ? (
+                          <ProofExtractionFeedback fields={entry.extractedFields} />
+                        ) : null}
+                        {entry.proofUrl ? (
+                          <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
+                        ) : (
+                          <p className="text-xs text-default-500">Proof not available.</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 md:justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          disabled={status === "loading"}
+                          onClick={() => handleAction(entry.id, "VERIFIED")}
+                        >
+                          {status === "loading" ? (
+                            <Spinner size="sm" color="current" />
+                          ) : (
+                            "Mark verified"
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          disabled={status === "loading"}
+                          onClick={() => {
+                            const note = window.prompt("Reason for rejection:");
+                            if (note === null) return;
+                            handleAction(entry.id, "REJECTED", note);
+                          }}
+                        >
+                          {status === "loading" ? (
+                            <Spinner size="sm" color="current" />
+                          ) : (
+                            "Reject"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })

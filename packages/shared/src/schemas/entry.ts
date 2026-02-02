@@ -10,10 +10,29 @@ import {
   OptionalNotesSchema,
 } from "./common";
 import { ProofOcrResultSchema } from "./proof";
+import { parseDateStringAsNewYorkNoon } from "../utils/time";
+
+/**
+ * Custom date schema that handles date strings properly to avoid timezone issues.
+ * When a date string like "2026-02-02" is passed, it parses it as noon in New York
+ * timezone to avoid the date rolling back when interpreted as UTC midnight.
+ */
+const NewYorkDateSchema = z.preprocess((val) => {
+  // If it's a Date, pass through
+  if (val instanceof Date) {
+    return val;
+  }
+  // If it's a date-only string (YYYY-MM-DD), parse it as noon in New York
+  if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return parseDateStringAsNewYorkNoon(val);
+  }
+  // Otherwise try standard coercion
+  return val;
+}, z.coerce.date());
 
 export const TrainingEntryInputSchema = z.object({
   activityType: ActivityTypeSchema,
-  date: z.coerce.date(),
+  date: NewYorkDateSchema,
   minutes: MinutesSchema,
   distance: DistanceSchema,
   avgHr: HeartRateSchema.optional().nullable(),
@@ -28,7 +47,7 @@ export type TrainingEntryInput = z.infer<typeof TrainingEntryInputSchema>;
 export const TrainingEntryUpdateSchema = z.object({
   id: z.string(),
   activityType: ActivityTypeSchema.optional(),
-  date: z.coerce.date().optional(),
+  date: NewYorkDateSchema.optional(),
   minutes: MinutesSchema.optional(),
   distance: DistanceSchema.optional(),
   avgHr: HeartRateSchema.optional().nullable(),
