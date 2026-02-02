@@ -29,13 +29,11 @@ export const upsertWeeklyAggregate = (data: {
     create: data,
   });
 
-export const getWeeklyAggregate = (athleteId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+export const getWeeklyAggregate = (athleteId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.weeklyAggregate.findFirst({
     where: {
       athleteId,
-      weekStartAt: { gte: rangeStart, lte: rangeEnd },
+      weekStartAt: { gte: weekStartAt, lt: weekEndAt },
     },
   });
 };
@@ -46,20 +44,16 @@ export const listWeeklyAggregatesByAthlete = (athleteId: string) =>
     orderBy: { weekStartAt: "desc" },
   });
 
-export const listWeeklyAggregatesByTeamWeek = (teamId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+export const listWeeklyAggregatesByTeamWeek = (teamId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.weeklyAggregate.findMany({
-    where: { teamId, weekStartAt: { gte: rangeStart, lte: rangeEnd } },
+    where: { teamId, weekStartAt: { gte: weekStartAt, lt: weekEndAt } },
     orderBy: { totalMinutes: "desc" },
   });
 };
 
-export const listWeeklyAggregatesByTeamWeekWithAthlete = (teamId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
+export const listWeeklyAggregatesByTeamWeekWithAthlete = (teamId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.weeklyAggregate.findMany({
-    where: { teamId, weekStartAt: { gte: rangeStart, lte: rangeEnd } },
+    where: { teamId, weekStartAt: { gte: weekStartAt, lt: weekEndAt } },
     include: { athlete: true },
     orderBy: { totalMinutes: "desc" },
   });

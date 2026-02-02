@@ -4,11 +4,9 @@ import {
   ProofExtractionStatus,
   ValidationStatus,
   getWeekEndAt,
-  getWeekRange,
-  nowInZone,
 } from "@rowbook/shared";
 import type { TrainingEntry } from "@rowbook/shared";
-import { getDefaultTeam, getTeamById, updateTeam } from "@/server/repositories/teams";
+import { getDefaultTeam, getTeamById } from "@/server/repositories/teams";
 import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
 import { listEntriesByAthlete, listEntriesByTeamWeek, listEntriesForReview } from "@/server/repositories/training-entries";
 import { listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
@@ -17,8 +15,7 @@ import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements"
 import { listExemptionsByWeek } from "@/server/repositories/exemptions";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
-import { createAuditLog } from "@/server/repositories/audit-logs";
-import { getIsoWeekKey, getWeekStartAt } from "@rowbook/shared";
+import { getWeekStartAt } from "@rowbook/shared";
 
 type TeamLeaderboardRow = {
   id: string;
@@ -85,16 +82,15 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
     throw new Error("Team not found.");
   }
 
-  const cutoffHour = (team as any).weekCutoffHour ?? 18;
-  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt, team.timezone, cutoffHour) : getWeekStartAt(new Date(), team.timezone, cutoffHour);
-  const weekEndAt = getWeekEndAt(week, team.timezone);
+  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt) : getWeekStartAt(new Date());
+  const weekEndAt = getWeekEndAt(week);
 
   const [leaderboardResult, entries, requirement, teamStats, teamTrend] = await Promise.all([
-    getTeamLeaderboard(team.id, week, team.timezone, cutoffHour),
-    listEntriesByTeamWeek(team.id, week),
-    getWeeklyRequirement(team.id, week),
+    getTeamLeaderboard(team.id, week),
+    listEntriesByTeamWeek(team.id, week, weekEndAt),
+    getWeeklyRequirement(team.id, week, weekEndAt),
     getTeamStats(team.id, week),
-    getTeamTrend(team.id, week, 6, team.timezone, cutoffHour),
+    getTeamTrend(team.id, week, 6),
   ]);
   const leaderboard = leaderboardResult as TeamLeaderboardRow[];
 
@@ -148,7 +144,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
     activityMixMap.set(entry.activityType, (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes);
     
     // Group for Weekly HR
-    const key = getIsoWeekKey(entry.weekStartAt);
+    const key = entry.weekStartAt.toISOString();
     const list = entriesByIsoWeek.get(key) ?? [];
     list.push(entry);
     entriesByIsoWeek.set(key, list);
@@ -164,7 +160,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
   }>();
 
   for (const week of history) {
-    const weekKey = getIsoWeekKey(week.weekStartAt);
+    const weekKey = week.weekStartAt.toISOString();
     const existing = weekMap.get(weekKey);
     
     // Calculate avgHr for this normalized week from entries
@@ -227,9 +223,8 @@ export const getReviewQueue = async (
     throw new Error("Team not found.");
   }
 
-  const cutoffHour = (team as any).weekCutoffHour ?? 18;
-  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt, team.timezone, cutoffHour) : getWeekStartAt(new Date(), team.timezone, cutoffHour);
-  const weekEndAt = getWeekEndAt(week, team.timezone);
+  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt) : getWeekStartAt(new Date());
+  const weekEndAt = getWeekEndAt(week);
 
   const entries = (await listEntriesForReview(
     team.id,
@@ -263,15 +258,12 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
   const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
   if (!team) throw new Error("Team not found");
 
-  // Cast team to any to access weekCutoffHour until types are fully regenerated
-  const cutoffHour = (team as any).weekCutoffHour ?? 18;
-
-  const effectiveWeekStartAt = getWeekStartAt(inputWeekStartAt ?? new Date(), team.timezone, cutoffHour);
-  const weekEndAt = getWeekEndAt(effectiveWeekStartAt, team.timezone);
+  const effectiveWeekStartAt = getWeekStartAt(inputWeekStartAt ?? new Date());
+  const weekEndAt = getWeekEndAt(effectiveWeekStartAt);
 
   const [requirement, exemptions, activeAthletes] = await Promise.all([
-    getWeeklyRequirement(team.id, effectiveWeekStartAt),
-    listExemptionsByWeek(effectiveWeekStartAt, team.id),
+    getWeeklyRequirement(team.id, effectiveWeekStartAt, weekEndAt),
+    listExemptionsByWeek(effectiveWeekStartAt, weekEndAt, team.id),
     listTeamAthletes(team.id),
   ]);
 
@@ -279,7 +271,6 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
     teamId: team.id,
     weekStartAt: effectiveWeekStartAt,
     weekEndAt,
-    weekCutoffHour: cutoffHour as number,
     requiredMinutes: requirement?.requiredMinutes,
     exemptions: exemptions.map((e) => ({
       id: e.id,
@@ -293,22 +284,4 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
       name: a.name ?? "Unknown",
     })),
   };
-};
-
-export const updateTeamSettings = async (
-  actorId: string,
-  teamId: string,
-  settings: { weekCutoffHour: number },
-) => {
-  await updateTeam(teamId, settings);
-  
-  await createAuditLog({
-    actorId,
-    entityType: "TEAM_SETTINGS",
-    entityId: teamId,
-    action: "UPDATE",
-    after: settings,
-  });
-  
-  return { success: true };
 };

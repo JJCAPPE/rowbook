@@ -25,24 +25,21 @@ export const upsertExemption = (data: {
     },
   });
 
-export const getExemption = (athleteId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-
+export const getExemption = (athleteId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.exemption.findFirst({
     where: {
       athleteId,
       OR: [
         {
           weekStartAt: {
-            gte: rangeStart,
-            lte: rangeEnd,
+            gte: weekStartAt,
+            lt: weekEndAt,
           },
         },
         {
           isIndefinite: true,
           weekStartAt: {
-            lte: rangeEnd,
+            lt: weekEndAt,
           },
         },
       ],
@@ -50,23 +47,20 @@ export const getExemption = (athleteId: string, weekStartAt: Date) => {
   });
 };
 
-export const listExemptionsByWeek = (weekStartAt: Date, teamId?: string) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-
+export const listExemptionsByWeek = (weekStartAt: Date, weekEndAt: Date, teamId?: string) => {
   return prisma.exemption.findMany({
     where: {
       OR: [
         {
           weekStartAt: {
-            gte: rangeStart,
-            lte: rangeEnd,
+            gte: weekStartAt,
+            lt: weekEndAt,
           },
         },
         {
           isIndefinite: true,
           weekStartAt: {
-            lte: rangeEnd,
+            lt: weekEndAt,
           },
         },
       ],
@@ -85,12 +79,11 @@ export const listExemptionsByWeek = (weekStartAt: Date, teamId?: string) => {
 };
 
 export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Date) => {
-  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
   return prisma.exemption.findMany({
     where: {
       athleteId,
       weekStartAt: {
-        gte: bufferedStart,
+        gte: weekStartAt,
       },
     },
   });

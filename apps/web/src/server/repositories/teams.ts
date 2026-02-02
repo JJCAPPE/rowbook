@@ -6,9 +6,3 @@ export const getTeamById = (id: string) =>
   prisma.team.findUnique({ where: { id } });
 
 export const getDefaultTeam = () => prisma.team.findFirst();
-
-export const updateTeam = (id: string, data: { weekCutoffHour: number }) =>
-  prisma.team.update({
-    where: { id },
-    data,
-  });

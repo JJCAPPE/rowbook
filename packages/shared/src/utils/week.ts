@@ -1,12 +1,11 @@
 import { DateInput, DEFAULT_TIMEZONE, toDateTime } from "./time";
 
-export const WEEK_START_HOUR = 18;
+export const WEEK_START_HOUR = 20;
 export const WEEK_START_MINUTE = 0;
 
 export const getWeekStartAt = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
-  cutoffHour = WEEK_START_HOUR,
 ): Date => {
   const zoned = toDateTime(date, timeZone);
   const daysSinceSunday = zoned.weekday % 7;
@@ -14,7 +13,7 @@ export const getWeekStartAt = (
   let weekStart = zoned
     .minus({ days: daysSinceSunday })
     .set({
-      hour: cutoffHour,
+      hour: WEEK_START_HOUR,
       minute: WEEK_START_MINUTE,
       second: 0,
       millisecond: 0,
@@ -38,21 +37,19 @@ export const getWeekEndAt = (
 export const getPreviousWeekStartAt = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
-  cutoffHour = WEEK_START_HOUR,
 ): Date => {
-  const currentWeekStart = getWeekStartAt(date, timeZone, cutoffHour);
+  const currentWeekStart = getWeekStartAt(date, timeZone);
   return toDateTime(currentWeekStart, timeZone).minus({ weeks: 1 }).toUTC().toJSDate();
 };
 
 export const getWeekRange = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
-  cutoffHour = WEEK_START_HOUR,
 ): {
   weekStartAt: Date;
   weekEndAt: Date;
 } => {
-  const weekStartAt = getWeekStartAt(date, timeZone, cutoffHour);
+  const weekStartAt = getWeekStartAt(date, timeZone);
   return { weekStartAt, weekEndAt: getWeekEndAt(weekStartAt, timeZone) };
 };
 
@@ -73,24 +70,7 @@ export const isWithinActiveWeek = (
   date: DateInput,
   timeZone = DEFAULT_TIMEZONE,
   referenceDate: DateInput = new Date(),
-  cutoffHour = WEEK_START_HOUR,
 ): boolean => {
-  const activeWeekStart = getWeekStartAt(referenceDate, timeZone, cutoffHour);
+  const activeWeekStart = getWeekStartAt(referenceDate, timeZone);
   return isWithinWeek(date, activeWeekStart, timeZone);
-};
-
-export const getIsoWeekKey = (
-  date: DateInput,
-  timeZone = DEFAULT_TIMEZONE,
-): string => {
-  // Normalize to UTC Date
-  const d = new Date(toDateTime(date, timeZone).toMillis());
-  
-  // Implementation of ISO week number
-  const day = d.getUTCDay();
-  const diff = (day <= 3 ? day : day - 7) + 3;
-  d.setUTCDate(d.getUTCDate() - diff + 3);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNumber = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
 };

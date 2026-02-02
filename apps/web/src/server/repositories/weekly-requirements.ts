@@ -6,15 +6,12 @@ export const upsertWeeklyRequirement = async (data: {
   weekEndAt: Date;
   requiredMinutes: number;
 }) => {
-  const rangeStart = new Date(data.weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(data.weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-
   const existing = await prisma.weeklyRequirement.findFirst({
     where: {
       teamId: data.teamId,
       weekStartAt: {
-        gte: rangeStart,
-        lte: rangeEnd,
+        gte: data.weekStartAt,
+        lt: data.weekEndAt,
       },
     },
   });
@@ -33,28 +30,24 @@ export const upsertWeeklyRequirement = async (data: {
   return prisma.weeklyRequirement.create({ data });
 };
 
-export const getWeeklyRequirement = (teamId: string, weekStartAt: Date) => {
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-
+export const getWeeklyRequirement = (teamId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.weeklyRequirement.findFirst({
     where: {
       teamId,
       weekStartAt: {
-        gte: rangeStart,
-        lte: rangeEnd,
+        gte: weekStartAt,
+        lt: weekEndAt,
       },
     },
   });
 };
 
 export const listWeeklyRequirementsByTeamSince = (teamId: string, weekStartAt: Date) => {
-  const bufferedStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
   return prisma.weeklyRequirement.findMany({
     where: {
       teamId,
       weekStartAt: {
-        gte: bufferedStart,
+        gte: weekStartAt,
       },
     },
   });

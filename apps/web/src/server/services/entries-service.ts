@@ -4,11 +4,7 @@ import {
   ValidationStatus,
   calculatePaceSeconds,
   calculateWatts,
-  ProofExtractionStatus,
   ProofOcrResult,
-  resolveValidationStatus,
-  shouldAutoVerifyProof,
-  summarizeExtractedFields,
   nowInZone,
 } from "@rowbook/shared";
 import {
@@ -19,7 +15,6 @@ import {
   updateTrainingEntry,
 } from "@/server/repositories/training-entries";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { getTeamById, getDefaultTeam } from "@/server/repositories/teams";
 import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
 import { upsertProofExtractionJobResult } from "@/server/repositories/proof-extraction-jobs";
 import { createAuditLog } from "@/server/repositories/audit-logs";
@@ -45,16 +40,11 @@ export const createEntry = async (athleteId: string, input: {
   proofImageIds: string[];
   proofOcr?: ProofOcrResult | null; // TODO: Multiple OCR results support? For now assuming frontend sends one or logic handles separately. But really, we should likely rely on backend extraction per image.
 }) => {
-  // Fetch team settings to use configured week cutoff hour
-  const teamId = await getTeamIdForAthlete(athleteId);
-  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
-  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
-  const timezone = team?.timezone ?? "America/New_York";
+  const now = nowInZone();
+  const { weekStartAt: activeWeekStartAt, weekEndAt } = getWeekRange(now);
+  const { weekStartAt } = getWeekRange(input.date);
 
-  const now = nowInZone(timezone);
-  const { weekStartAt, weekEndAt } = getWeekRange(now, timezone, cutoffHour);
-
-  if (!isWithinWeek(input.date, weekStartAt, timezone)) {
+  if (!isWithinWeek(input.date, activeWeekStartAt)) {
     throw new Error("Entry date must be within the active week.");
   }
   if (input.date.getTime() > now.toMillis()) {
@@ -162,26 +152,19 @@ export const updateEntry = async (athleteId: string, input: {
     throw new Error("Entry not found.");
   }
 
-  // Get team info for cutoff hour
-  const teamId = await getTeamIdForAthlete(athleteId);
-  const team = teamId ? await getTeamById(teamId) : null;
-  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
-  const timezone = team?.timezone;
-
   const now = nowInZone();
-  const { weekStartAt, weekEndAt } = getWeekRange(now, timezone, cutoffHour);
+  const { weekStartAt, weekEndAt } = getWeekRange(now);
   
-  // Use range-based comparison for locked check (±12 hours)
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-  const entryInCurrentWeek = entry.weekStartAt.getTime() >= rangeStart.getTime() && entry.weekStartAt.getTime() <= rangeEnd.getTime();
+  const entryInCurrentWeek =
+    entry.weekStartAt.getTime() >= weekStartAt.getTime() &&
+    entry.weekStartAt.getTime() < weekEndAt.getTime();
   
   if (entry.entryStatus === "LOCKED" || !entryInCurrentWeek) {
     throw new Error("Entry is locked.");
   }
 
   if (input.date) {
-    if (!isWithinWeek(input.date, weekStartAt, timezone)) {
+    if (!isWithinWeek(input.date, weekStartAt)) {
       throw new Error("Entry date must be within the active week.");
     }
     if (input.date.getTime() > now.toMillis()) {
@@ -235,19 +218,11 @@ export const deleteEntry = async (athleteId: string, entryId: string) => {
     throw new Error("Entry not found.");
   }
 
-  // Get team info for cutoff hour
-  const teamId = await getTeamIdForAthlete(athleteId);
-  const team = teamId ? await getTeamById(teamId) : null;
-  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
-  const timezone = team?.timezone;
-
   const now = nowInZone();
-  const { weekStartAt } = getWeekRange(now, timezone, cutoffHour);
-  
-  // Use range-based comparison for locked check (±12 hours)
-  const rangeStart = new Date(weekStartAt.getTime() - 12 * 60 * 60 * 1000);
-  const rangeEnd = new Date(weekStartAt.getTime() + 12 * 60 * 60 * 1000);
-  const entryInCurrentWeek = entry.weekStartAt.getTime() >= rangeStart.getTime() && entry.weekStartAt.getTime() <= rangeEnd.getTime();
+  const { weekStartAt, weekEndAt } = getWeekRange(now);
+  const entryInCurrentWeek =
+    entry.weekStartAt.getTime() >= weekStartAt.getTime() &&
+    entry.weekStartAt.getTime() < weekEndAt.getTime();
   
   if (entry.entryStatus === "LOCKED" || !entryInCurrentWeek) {
     throw new Error("Entry is locked.");
@@ -267,12 +242,6 @@ export const deleteEntry = async (athleteId: string, entryId: string) => {
 };
 
 export const listEntriesForActiveWeek = async (athleteId: string) => {
-  // Get team info for cutoff hour
-  const teamId = await getTeamIdForAthlete(athleteId);
-  const team = teamId ? await getTeamById(teamId) : null;
-  const cutoffHour = (team as any)?.weekCutoffHour ?? 18;
-  const timezone = team?.timezone;
-
-  const { weekStartAt } = getWeekRange(nowInZone(), timezone, cutoffHour);
-  return listEntriesByAthleteWeek(athleteId, weekStartAt);
+  const { weekStartAt, weekEndAt } = getWeekRange(nowInZone());
+  return listEntriesByAthleteWeek(athleteId, weekStartAt, weekEndAt);
 };

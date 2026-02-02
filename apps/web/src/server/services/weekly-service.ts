@@ -5,8 +5,6 @@ import {
   WeeklyStatus,
   getPreviousWeekStartAt,
   getWeekEndAt,
-  getWeekStartAt,
-  getIsoWeekKey,
 } from "@rowbook/shared";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import { listTeamAthletes } from "@/server/repositories/users";
@@ -59,9 +57,9 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
   const weekEndAt = getWeekEndAt(weekStartAt);
   const [athletes, entriesResult, requirement, exemptionsResult] = await Promise.all([
     listTeamAthletes(teamId),
-    listEntriesByTeamWeek(teamId, weekStartAt),
-    getWeeklyRequirement(teamId, weekStartAt),
-    listExemptionsByWeek(weekStartAt, teamId),
+    listEntriesByTeamWeek(teamId, weekStartAt, weekEndAt),
+    getWeeklyRequirement(teamId, weekStartAt, weekEndAt),
+    listExemptionsByWeek(weekStartAt, weekEndAt, teamId),
   ]);
   const entries = entriesResult as Array<{
     athleteId: string;
@@ -111,9 +109,9 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
 export const aggregateWeekForAthlete = async (teamId: string, athleteId: string, weekStartAt: Date) => {
   const weekEndAt = getWeekEndAt(weekStartAt);
   const [entries, requirement, exemption] = await Promise.all([
-    listEntriesByAthleteWeek(athleteId, weekStartAt),
-    getWeeklyRequirement(teamId, weekStartAt),
-    getExemption(athleteId, weekStartAt),
+    listEntriesByAthleteWeek(athleteId, weekStartAt, weekEndAt),
+    getWeeklyRequirement(teamId, weekStartAt, weekEndAt),
+    getExemption(athleteId, weekStartAt, weekEndAt),
   ]);
 
   let totalMinutes = 0;
@@ -152,22 +150,24 @@ export const aggregateWeekForAthlete = async (teamId: string, athleteId: string,
 };
 
 export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) => {
-  const aggregates = await listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt);
+  const weekEndAt = getWeekEndAt(weekStartAt);
+  const aggregates = await listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt, weekEndAt);
   if (aggregates.length > 0) {
     return aggregates;
   }
 
   await aggregateWeekForTeam(teamId, weekStartAt);
-  return listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt);
+  return listWeeklyAggregatesByTeamWeekWithAthlete(teamId, weekStartAt, weekEndAt);
 };
 
-export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date, timezone = "America/New_York", cutoffHour = 18) => {
-  const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt, timezone, cutoffHour);
+export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
+  const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt);
+  const weekEndAt = getWeekEndAt(weekStartAt);
   const [aggregatesResult, entriesResult, requirement, exemptionsResult, previousAggregatesResult] = await Promise.all([
     getLeaderboardForWeek(teamId, weekStartAt),
-    listEntriesByTeamWeek(teamId, weekStartAt),
-    getWeeklyRequirement(teamId, weekStartAt),
-    listExemptionsByWeek(weekStartAt, teamId),
+    listEntriesByTeamWeek(teamId, weekStartAt, weekEndAt),
+    getWeeklyRequirement(teamId, weekStartAt, weekEndAt),
+    listExemptionsByWeek(weekStartAt, weekEndAt, teamId),
     getLeaderboardForWeek(teamId, previousWeekStartAt),
   ]);
   const aggregates = aggregatesResult as Array<{
@@ -250,7 +250,8 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date, time
 };
 
 export const getTeamStats = async (teamId: string, weekStartAt: Date) => {
-  const entries = await listEntriesByTeamWeek(teamId, weekStartAt);
+  const weekEndAt = getWeekEndAt(weekStartAt);
+  const entries = await listEntriesByTeamWeek(teamId, weekStartAt, weekEndAt);
   const validEntries = entries.filter((e) => e.validationStatus !== "REJECTED");
 
   const totalMinutes = validEntries.reduce((sum, e) => sum + e.minutes, 0);
@@ -270,12 +271,10 @@ export const getTeamTrend = async (
   teamId: string,
   endWeekStartAt: Date,
   weeks = 6,
-  timezone = "America/New_York",
-  cutoffHour = 18,
 ) => {
   let start = endWeekStartAt;
   for (let i = 0; i < weeks - 1; i++) {
-    start = getPreviousWeekStartAt(start, timezone, cutoffHour);
+    start = getPreviousWeekStartAt(start);
   }
 
   const entries = await listEntriesByTeamSinceWeekStart(teamId, start);
@@ -296,7 +295,7 @@ export const getTeamTrend = async (
   // Safety break to prevent infinite loops if date math is wrong
   let safety = 0;
   while (loopWeek <= endWeekStartAt && safety < 100) {
-    weeksMap.set(getIsoWeekKey(loopWeek), {
+    weeksMap.set(loopWeek.toISOString(), {
       minutes: 0,
       distance: 0,
       hrEntries: [],
@@ -308,7 +307,7 @@ export const getTeamTrend = async (
   }
 
   for (const entry of validEntries) {
-    const key = getIsoWeekKey(entry.weekStartAt);
+    const key = entry.weekStartAt.toISOString();
     const current = weeksMap.get(key);
     if (current) {
       current.minutes += entry.minutes;
