@@ -250,7 +250,7 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
   const weeksByKey = new Map<string, { weekStartAt: Date; entries: TrainingEntry[] }>();
 
   for (const entry of entries) {
-    const key = entry.weekStartAt.toISOString();
+    const key = getIsoWeekKey(entry.weekStartAt);
     const current = weeksByKey.get(key);
     if (current) {
       current.entries.push(entry);
