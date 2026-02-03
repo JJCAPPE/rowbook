@@ -29,6 +29,7 @@
         "bcryptjs": "^2.4.3",
         "clsx": "^2.1.1",
         "cookie": "^0.6.0",
+        "dotenv": "^17.2.3",
         "framer-motion": "^12.29.0",
         "lucide-react": "^0.471.0",
         "nanoid": "^5.0.7",
