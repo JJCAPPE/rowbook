@@ -230,7 +230,7 @@ export default function AthleteDashboardPage() {
               {entry.extractedFields && (
                 <details className="mt-2 text-[10px] text-default-500">
                   <summary className="cursor-pointer select-none hover:text-foreground">
-                    View details from Gemini extraction
+                    View details from AI extraction
                   </summary>
                   <ProofExtractionFeedback fields={entry.extractedFields} />
                 </details>

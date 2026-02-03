@@ -63,7 +63,7 @@ const processJob = async (jobId: string, proofImageId: string) => {
   try {
     extractedData = await extractProofWithGemini(buffer);
   } catch (error) {
-     const message = error instanceof Error ? error.message : "Gemini extraction failed";
+     const message = error instanceof Error ? error.message : "AI Extraction failed";
      await markProofExtractionJobFailed(jobId, message);
      return { proofImageId, status: "FAILED", reason: "extraction_error" };
   }

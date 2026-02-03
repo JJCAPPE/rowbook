@@ -119,7 +119,7 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
   }
 
   const text = result.response.text();
-  console.log("Gemini extraction result:", text);
+  console.log("AI extraction result:", text);
   try {
     return JSON.parse(text) as {
       date: string | null;
