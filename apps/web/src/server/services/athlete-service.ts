@@ -51,6 +51,9 @@ const computeTotals = (entries: Array<{
   return { totalMinutes, hasHrData };
 };
 
+const getNormalizedWeekStart = (date: Date) => getWeekRange(date).weekStartAt;
+const getWeekKey = (date: Date) => getNormalizedWeekStart(date).toISOString();
+
 export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date) => {
   const teamId = await getTeamIdForAthlete(athleteId);
   if (!teamId) {
@@ -128,7 +131,7 @@ export const getAthleteHistory = async (athleteId: string) => {
   const entriesByWeek = new Map<string, typeof entries>();
   for (const entry of entries) {
     if (entry.validationStatus === "REJECTED") continue;
-    const key = entry.weekStartAt.toISOString();
+    const key = getWeekKey(entry.weekStartAt);
     const list = entriesByWeek.get(key) ?? [];
     list.push(entry);
     entriesByWeek.set(key, list);
@@ -148,7 +151,8 @@ export const getAthleteHistory = async (athleteId: string) => {
   }>();
 
   for (const week of history) {
-    const weekKey = week.weekStartAt.toISOString();
+    const normalizedWeekStart = getNormalizedWeekStart(week.weekStartAt);
+    const weekKey = normalizedWeekStart.toISOString();
     const existing = weekMap.get(weekKey);
     
     // Calculate avgHr for this normalized week from entries
@@ -160,12 +164,22 @@ export const getAthleteHistory = async (athleteId: string) => {
     if (existing) {
       // Merge: sum minutes
       existing.totalMinutes += week.totalMinutes;
+      existing.hasHrData = existing.hasHrData || week.hasHrData;
+      existing.activityTypes = Array.from(
+        new Set([...existing.activityTypes, ...week.activityTypes]),
+      );
+      existing.status =
+        existing.status === "EXEMPT" || week.status === "EXEMPT"
+          ? "EXEMPT"
+          : existing.status === "MET" || week.status === "MET"
+            ? "MET"
+            : "NOT_MET";
       // avgHr is constant for the weekKey
     } else {
       weekMap.set(weekKey, {
         athleteId: week.athleteId,
-        weekStartAt: week.weekStartAt,
-        weekEndAt: week.weekEndAt,
+        weekStartAt: normalizedWeekStart,
+        weekEndAt: getWeekEndAt(normalizedWeekStart),
         totalMinutes: week.totalMinutes,
         activityTypes: week.activityTypes,
         hasHrData: week.hasHrData,

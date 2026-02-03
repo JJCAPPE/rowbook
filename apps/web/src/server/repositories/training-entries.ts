@@ -140,6 +140,7 @@ export const listEntriesByTeamSinceWeekStart = (
 export const listEntriesByAthlete = (athleteId: string) =>
   prisma.trainingEntry.findMany({
     where: { athleteId },
+    include: { proofImages: true },
     orderBy: { date: "desc" },
   });
 

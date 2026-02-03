@@ -9,7 +9,15 @@ const handler = async (req: Request) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const result = await runWeeklyAggregation();
+  const url = new URL(req.url);
+  const weeksParam = url.searchParams.get("weeks");
+  const rebuild = url.searchParams.get("rebuild") === "1";
+  const weeks = weeksParam ? Math.max(1, Number(weeksParam)) : 6;
+
+  const result = await runWeeklyAggregation({
+    weeks: Number.isFinite(weeks) ? weeks : 6,
+    sendEmails: !rebuild,
+  });
   return Response.json({ ok: true, result });
 };
 

@@ -4,6 +4,23 @@ import { listTeams } from "@/server/repositories/teams";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";
 import { sendEmail } from "@/server/services/email-service";
 
+type WeeklyAggregationOptions = {
+  weeks?: number;
+  sendEmails?: boolean;
+};
+
+const buildWeekStarts = (weeks: number) => {
+  const weekStarts: Date[] = [];
+  let current = getPreviousWeekStartAt(new Date());
+
+  for (let index = 0; index < weeks; index += 1) {
+    weekStarts.push(current);
+    current = getPreviousWeekStartAt(current);
+  }
+
+  return weekStarts;
+};
+
 const buildLeaderboardHtml = (teamName: string, rows: Array<{
   athleteId: string;
   totalMinutes: number;
@@ -25,27 +42,38 @@ const buildLeaderboardHtml = (teamName: string, rows: Array<{
   `;
 };
 
-export const runWeeklyAggregation = async () => {
+export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {}) => {
+  const weeks = Math.max(1, options.weeks ?? 1);
+  const sendEmails = options.sendEmails ?? true;
+  const weekStarts = buildWeekStarts(weeks);
+  const latestWeekStart = weekStarts[0];
   const teams = await listTeams();
-  const results: Array<{ teamId: string; aggregateCount: number }> = [];
+  const results: Array<{ teamId: string; aggregateCount: number; weeks: number }> = [];
 
   for (const team of teams) {
-    const weekStartAt = getPreviousWeekStartAt(new Date());
-    const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
-    const recipients: Array<{ email: string }> = await prisma.user.findMany({
-      where: { status: "ACTIVE" },
-      select: { email: true },
-    });
+    let aggregateCount = 0;
 
-    if (recipients.length > 0) {
-      await sendEmail({
-        to: recipients.map((user) => user.email),
-        subject: `${team.name} weekly recap`,
-        html: buildLeaderboardHtml(team.name, aggregates),
-      });
+    for (const weekStartAt of weekStarts) {
+      const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
+      aggregateCount += aggregates.length;
+
+      if (sendEmails && weekStartAt.getTime() === latestWeekStart.getTime()) {
+        const recipients: Array<{ email: string }> = await prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { email: true },
+        });
+
+        if (recipients.length > 0) {
+          await sendEmail({
+            to: recipients.map((user) => user.email),
+            subject: `${team.name} weekly recap`,
+            html: buildLeaderboardHtml(team.name, aggregates),
+          });
+        }
+      }
     }
 
-    results.push({ teamId: team.id, aggregateCount: aggregates.length });
+    results.push({ teamId: team.id, aggregateCount, weeks });
   }
 
   return { results };

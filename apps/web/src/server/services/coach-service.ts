@@ -136,6 +136,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
 
   const activityMixMap = new Map<ActivityType, number>();
   const entriesByIsoWeek = new Map<string, TrainingEntry[]>();
+  const getNormalizedWeekStart = (date: Date) => getWeekStartAt(date);
 
   for (const entry of entries) {
     if (entry.validationStatus === "REJECTED") continue;
@@ -144,7 +145,7 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
     activityMixMap.set(entry.activityType, (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes);
     
     // Group for Weekly HR
-    const key = entry.weekStartAt.toISOString();
+    const key = getNormalizedWeekStart(entry.weekStartAt).toISOString();
     const list = entriesByIsoWeek.get(key) ?? [];
     list.push(entry);
     entriesByIsoWeek.set(key, list);
@@ -160,7 +161,8 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
   }>();
 
   for (const week of history) {
-    const weekKey = week.weekStartAt.toISOString();
+    const normalizedWeekStart = getNormalizedWeekStart(week.weekStartAt);
+    const weekKey = normalizedWeekStart.toISOString();
     const existing = weekMap.get(weekKey);
     
     // Calculate avgHr for this normalized week from entries
@@ -174,8 +176,8 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
       // avgHr is constant for the weekKey (derived from entries), so no update needed
     } else {
       weekMap.set(weekKey, {
-        weekStartAt: week.weekStartAt,
-        weekEndAt: week.weekEndAt,
+        weekStartAt: normalizedWeekStart,
+        weekEndAt: getWeekEndAt(normalizedWeekStart),
         totalMinutes: week.totalMinutes,
         avgHr: entriesAvgHr, // Use entries calculation
       });

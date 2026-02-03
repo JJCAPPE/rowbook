@@ -18,12 +18,13 @@ export const formatShortDate = (date: Date) => shortDateFormatter.format(date);
 export const formatFullDate = (date: Date) => fullDateFormatter.format(date);
 
 export const formatMinutes = (minutes: number) => {
-  if (minutes < 60) {
-    return `${minutes} min`;
+  const rounded = Math.round(minutes);
+  if (rounded < 60) {
+    return `${rounded} min`;
   }
 
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 };
 

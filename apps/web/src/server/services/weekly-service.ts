@@ -24,12 +24,13 @@ const computeAggregate = (entries: Array<{
   athleteId: string;
   activityType: ActivityType;
   minutes: number;
+  distance: number;
   avgHr: number | null;
   validationStatus: ValidationStatus;
 }>) => {
   const totals = new Map<
     string,
-    { totalMinutes: number; activityTypes: Set<ActivityType>; hasHrData: boolean }
+    { totalMinutes: number; totalDistance: number; activityTypes: Set<ActivityType>; hasHrData: boolean }
   >();
 
   for (const entry of entries) {
@@ -39,10 +40,12 @@ const computeAggregate = (entries: Array<{
     const current =
       totals.get(entry.athleteId) ?? {
         totalMinutes: 0,
+        totalDistance: 0,
         activityTypes: new Set<ActivityType>(),
         hasHrData: false,
       };
     current.totalMinutes += entry.minutes;
+    current.totalDistance += entry.distance;
     current.activityTypes.add(entry.activityType);
     if (entry.avgHr !== null && entry.avgHr !== undefined) {
       current.hasHrData = true;
@@ -65,6 +68,7 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
     athleteId: string;
     activityType: ActivityType;
     minutes: number;
+    distance: number;
     avgHr: number | null;
     validationStatus: ValidationStatus;
   }>;
@@ -79,6 +83,7 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
   for (const athlete of athletes) {
     const athleteTotals = totals.get(athlete.id) ?? {
       totalMinutes: 0,
+      totalDistance: 0,
       activityTypes: new Set<ActivityType>(),
       hasHrData: false,
     };
@@ -95,6 +100,7 @@ export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) =>
       weekStartAt,
       weekEndAt,
       totalMinutes: athleteTotals.totalMinutes,
+      totalDistance: athleteTotals.totalDistance,
       activityTypes: Array.from(athleteTotals.activityTypes),
       hasHrData: athleteTotals.hasHrData,
       status,
@@ -115,6 +121,7 @@ export const aggregateWeekForAthlete = async (teamId: string, athleteId: string,
   ]);
 
   let totalMinutes = 0;
+  let totalDistance = 0;
   const activityTypes = new Set<ActivityType>();
   let hasHrData = false;
 
@@ -123,6 +130,7 @@ export const aggregateWeekForAthlete = async (teamId: string, athleteId: string,
       continue;
     }
     totalMinutes += entry.minutes;
+    totalDistance += entry.distance;
     activityTypes.add(entry.activityType);
     if (entry.avgHr !== null && entry.avgHr !== undefined) {
       hasHrData = true;
@@ -143,6 +151,7 @@ export const aggregateWeekForAthlete = async (teamId: string, athleteId: string,
     weekStartAt,
     weekEndAt,
     totalMinutes,
+    totalDistance,
     activityTypes: Array.from(activityTypes),
     hasHrData,
     status,
@@ -171,8 +180,10 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     getLeaderboardForWeek(teamId, previousWeekStartAt),
   ]);
   const aggregates = aggregatesResult as Array<{
+    id: string;
     athleteId: string;
     totalMinutes: number;
+    totalDistance: number;
     status: WeeklyStatus;
     activityTypes: ActivityType[];
     hasHrData: boolean;
@@ -181,6 +192,7 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
   const previousAggregates = previousAggregatesResult as Array<{
     athleteId: string;
     totalMinutes: number;
+    totalDistance: number;
   }>;
   const entries = entriesResult as Array<{
     athleteId: string;
@@ -211,7 +223,7 @@ export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
     
     // Calculate Stats
     const validEntries = athleteEntries.filter(e => e.validationStatus !== "REJECTED");
-    const totalDistance = validEntries.reduce((sum, e) => sum + e.distance, 0);
+    const totalDistance = aggregate.totalDistance > 0 ? aggregate.totalDistance : validEntries.reduce((sum, e) => sum + e.distance, 0);
     const avgHr = getWeightedAvgHr(validEntries.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })));
     const previousWeekMinutes = previousMinutesByAthlete.get(aggregate.athleteId) ?? 0;
 

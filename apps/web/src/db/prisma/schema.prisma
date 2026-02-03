@@ -192,6 +192,7 @@ model WeeklyAggregate {
   weekStartAt  DateTime
   weekEndAt    DateTime
   totalMinutes Int
+  totalDistance Float    @default(0)
   activityTypes ActivityType[]
   hasHrData    Boolean
   status       WeeklyStatus

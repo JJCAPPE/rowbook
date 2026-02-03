@@ -475,13 +475,6 @@ export const LogWorkoutForm = () => {
         <Textarea id="notes" placeholder="Optional notes" {...register("notes")} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving..." : "Submit workout"}
-        </Button>
-        <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
-      </div>
-
       {isSaving ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-default-500">
@@ -496,6 +489,13 @@ export const LogWorkoutForm = () => {
           </div>
         </div>
       ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : "Submit workout"}
+        </Button>
+        <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
+      </div>
 
       {submitError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

@@ -7,6 +7,7 @@ export const upsertWeeklyAggregate = (data: {
   weekStartAt: Date;
   weekEndAt: Date;
   totalMinutes: number;
+  totalDistance: number;
   activityTypes: ActivityType[];
   hasHrData: boolean;
   status: WeeklyStatus;
@@ -22,6 +23,7 @@ export const upsertWeeklyAggregate = (data: {
       teamId: data.teamId,
       weekEndAt: data.weekEndAt,
       totalMinutes: data.totalMinutes,
+      totalDistance: data.totalDistance,
       activityTypes: data.activityTypes,
       hasHrData: data.hasHrData,
       status: data.status,

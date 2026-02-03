@@ -78,7 +78,7 @@ export const calculateWatts = (
   if (activityType === "CYCLE") {
     // For CYCLE: pace is per km, but formula uses per 1000m (same thing)
     // watts = 2.8 / (split/1000)³ where split is in seconds per 1000m
-    const splitRatio = paceSeconds / 1000;
+    const splitRatio = paceSeconds / 500;
     return 2.8 / Math.pow(splitRatio, 3);
   }
 
