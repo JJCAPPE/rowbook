@@ -1,8 +1,9 @@
-import { getPreviousWeekStartAt } from "@rowbook/shared";
+import { getPreviousWeekStartAt, getWeekStartAt } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import { listTeams } from "@/server/repositories/teams";
 import { aggregateWeekForTeam } from "@/server/services/weekly-service";
 import { sendEmail } from "@/server/services/email-service";
+import { DateTime } from "luxon";
 
 type WeeklyAggregationOptions = {
   weeks?: number;
@@ -11,7 +12,7 @@ type WeeklyAggregationOptions = {
 
 const buildWeekStarts = (weeks: number) => {
   const weekStarts: Date[] = [];
-  let current = getPreviousWeekStartAt(new Date());
+  let current = getWeekStartAt(new Date());
 
   for (let index = 0; index < weeks; index += 1) {
     weekStarts.push(current);
@@ -43,12 +44,17 @@ const buildLeaderboardHtml = (teamName: string, rows: Array<{
 };
 
 export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {}) => {
-  const weeks = Math.max(1, options.weeks ?? 1);
+  const weeks = Math.max(1, options.weeks ?? 6);
   const sendEmails = options.sendEmails ?? true;
   const weekStarts = buildWeekStarts(weeks);
-  const latestWeekStart = weekStarts[0];
+  const recapWeekStart = getPreviousWeekStartAt(new Date());
+  
   const teams = await listTeams();
   const results: Array<{ teamId: string; aggregateCount: number; weeks: number }> = [];
+
+  // Recaps are only sent on Sunday at 8 PM America/New_York
+  const now = DateTime.now().setZone("America/New_York");
+  const isEmailWindow = now.weekday === 7 && now.hour === 20;
 
   for (const team of teams) {
     let aggregateCount = 0;
@@ -57,9 +63,17 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
       const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
       aggregateCount += aggregates.length;
 
-      if (sendEmails && weekStartAt.getTime() === latestWeekStart.getTime()) {
+      const isRecapWeek = weekStartAt.getTime() === recapWeekStart.getTime();
+
+      if (sendEmails && isRecapWeek && isEmailWindow) {
         const recipients: Array<{ email: string }> = await prisma.user.findMany({
-          where: { status: "ACTIVE" },
+          where: { 
+            status: "ACTIVE",
+            OR: [
+              { athleteProfile: { teamId: team.id } },
+              { role: "COACH" } // Coaches usually want to see the recap too
+            ]
+          },
           select: { email: true },
         });
 
@@ -78,3 +92,4 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
 
   return { results };
 };
+
