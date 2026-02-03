@@ -1,6 +1,6 @@
-import { getPreviousWeekStartAt } from "@rowbook/shared";
+import { getWeekStartAt } from "@rowbook/shared";
 import { PrismaClient } from "@prisma/client";
-import { getTeamLeaderboard, getTeamStats } from "../server/services/weekly-service";
+import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "../server/services/weekly-service";
 import { buildLeaderboardEmailHtml } from "../server/jobs/weekly-aggregation";
 import * as fs from "fs";
 import * as path from "path";
@@ -23,15 +23,20 @@ async function main() {
   const team = teams[0]!;
   console.log(`Using team: ${team.name} (${team.id})`);
 
-  const recapWeekStart = getPreviousWeekStartAt(new Date());
-  console.log(`Recap week start: ${recapWeekStart.toISOString()}`);
+  // Use current week (same as app leaderboard page)
+  const weekStart = getWeekStartAt(new Date());
+  console.log(`Week start: ${weekStart.toISOString()}`);
 
-  const [leaderboard, teamStats] = await Promise.all([
-    getTeamLeaderboard(team.id, recapWeekStart),
-    getTeamStats(team.id, recapWeekStart),
+  const [leaderboard, teamStats, teamTrend] = await Promise.all([
+    getTeamLeaderboard(team.id, weekStart),
+    getTeamStats(team.id, weekStart),
+    getTeamTrend(team.id, weekStart, 6),
   ]);
 
-  const html = buildLeaderboardEmailHtml(team.name, leaderboard, teamStats);
+  console.log(`Leaderboard rows: ${leaderboard.length}`);
+  console.log(`Team stats: ${JSON.stringify(teamStats)}`);
+
+  const html = buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, teamTrend);
   
   const outputPath = path.join(__dirname, "test-recap-output.html");
   fs.writeFileSync(outputPath, html);

@@ -63,8 +63,7 @@ const getTrend = (current: number, previous: number) => {
   };
 };
 
-const formatDistance = (meters: number) => {
-  const km = meters / 1000;
+const formatDistance = (km: number) => {
   return `${km.toFixed(1)} km`;
 };
 
@@ -131,25 +130,23 @@ export const buildLeaderboardEmailHtml = (
         .join(" ");
 
       return `
-        <div style="background-color: ${statusBackgrounds[row.status]}; border-radius: 12px; padding: 16px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-weight: 600; color: #71717a; font-size: 14px;">#${index + 1}</span>
+        <div style="background-color: ${statusBackgrounds[row.status]}; border-radius: 16px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(0,0,0,0.03);">
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <span style="font-weight: 600; color: #a1a1aa; font-size: 14px; min-width: 24px;">#${index + 1}</span>
             <div>
-              <div style="font-weight: 600; color: #18181b; font-size: 14px;">${row.name}</div>
-              <div style="font-size: 12px; color: #71717a; margin-top: 4px;">
+              <div style="font-weight: 600; color: #18181b; font-size: 15px;">${row.name}</div>
+              <div style="font-size: 13px; color: #71717a; margin-top: 4px;">
                 <span style="font-weight: 600; color: #18181b;">${row.totalMinutes} min</span>
                 ${trendHtml}
-                <span style="margin: 0 6px;">•</span>
-                <span>${formatDistance(row.totalDistance)}</span>
-                <span style="margin: 0 6px;">•</span>
+                <span style="margin: 0 8px; color: #e4e4e7;">•</span>
                 <span>${row.avgHr ? `${Math.round(row.avgHr)} bpm` : "— bpm"}</span>
               </div>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 16px;">${activityIconsHtml}</span>
-            <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; color: white; background-color: ${statusColors[row.status]};">
-              ${statusLabels[row.status]}
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 16px; opacity: 0.8;">${activityIconsHtml}</span>
+            <span style="display: inline-block; padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: ${row.status === 'MET' ? '#065F46' : row.status === 'NOT_MET' ? '#9F1239' : '#3F3F46'}; background-color: ${row.status === 'MET' ? '#D1FAE5' : row.status === 'NOT_MET' ? '#FFE4E6' : '#F4F4F5'};">
+              ${statusLabels[row.status].split(" ")[1] /* Just get "Met" or "Not" text part mostly, or keep icon */}
             </span>
           </div>
         </div>
@@ -170,36 +167,31 @@ export const buildLeaderboardEmailHtml = (
         <p style="margin: 0 0 24px 0; color: #71717a;">See how the team performed this week.</p>
 
         <!-- Team Stats -->
-        <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 12px; color: #71717a; text-transform: uppercase; margin-bottom: 4px;">Minutes</div>
-            <div style="font-size: 24px; font-weight: 700; color: #18181b;">${teamStats.totalMinutes.toLocaleString()} min</div>
+        <div style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Minutes</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${teamStats.totalMinutes.toLocaleString()} <span style="font-size: 16px; font-weight: 400; color: #71717a;">min</span></div>
           </div>
-          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 12px; color: #71717a; text-transform: uppercase; margin-bottom: 4px;">Distance</div>
-            <div style="font-size: 24px; font-weight: 700; color: #18181b;">${formatDistance(teamStats.totalDistance)}</div>
+          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Distance</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${formatDistance(teamStats.totalDistance).replace(" km", "")} <span style="font-size: 16px; font-weight: 400; color: #71717a;">km</span></div>
           </div>
-          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 12px; color: #71717a; text-transform: uppercase; margin-bottom: 4px;">Avg HR</div>
-            <div style="font-size: 24px; font-weight: 700; color: #18181b;">${teamStats.avgHr ? `${Math.round(teamStats.avgHr)} bpm` : "—"}</div>
+          <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Avg HR</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${teamStats.avgHr ? Math.round(teamStats.avgHr) : "—"} <span style="font-size: 16px; font-weight: 400; color: #71717a;">bpm</span></div>
           </div>
         </div>
-
-        ${trendSummary ? `
-        <!-- Team Progress -->
-        <div style="background-color: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-          <div style="font-size: 12px; color: #71717a; text-transform: uppercase; margin-bottom: 8px;">Team Progress (Last ${teamTrend?.length || 6} Weeks)</div>
-          <div style="font-size: 13px; color: #52525b;">${trendSummary}</div>
-        </div>
-        ` : ""}
 
         <!-- Leaderboard -->
         <div style="margin-bottom: 24px;">
-          <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #18181b;">Weekly Leaderboard</h2>
+          <h2 style="margin: 0 0 20px 0; font-size: 18px; font-weight: 600; color: #18181b;">Weekly Leaderboard</h2>
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+             <!-- Legend/Badges mockup could go here if needed, but skipping for cleanliness -->
+          </div>
           ${athleteRows}
         </div>
 
-        <p style="margin: 24px 0 0 0; font-size: 12px; color: #a1a1aa; text-align: center;">
+        <p style="margin: 32px 0 0 0; font-size: 12px; color: #a1a1aa; text-align: center; border-top: 1px solid #e4e4e7; padding-top: 24px;">
           This is an automated weekly recap from RowBook.
         </p>
       </div>

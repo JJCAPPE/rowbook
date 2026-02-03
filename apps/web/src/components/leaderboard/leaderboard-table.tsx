@@ -118,8 +118,6 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
                       )}
                     </div>
                     <span>•</span>
-                    <span>{(row.totalDistance / 1000).toFixed(1)} km</span>
-                    <span>•</span>
                     <span>{row.avgHr ? `${Math.round(row.avgHr)} bpm` : "- bpm"}</span>
                   </div>
                 </div>
