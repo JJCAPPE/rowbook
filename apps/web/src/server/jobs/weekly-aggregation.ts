@@ -101,6 +101,7 @@ export const buildLeaderboardEmailHtml = (
   teamName: string,
   rows: LeaderboardRow[],
   teamStats: TeamStats,
+  previousTeamStats: TeamStats,
   teamTrend?: TeamTrend,
 ) => {
   // Filter out exempt athletes for the main list (matching page behavior when "Hide exempt" is on)
@@ -163,22 +164,47 @@ export const buildLeaderboardEmailHtml = (
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5; padding: 20px; margin: 0;">
       <div style="max-width: 700px; margin: 0 auto; background-color: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <h1 style="margin: 0 0 8px 0; font-size: 24px; color: #18181b;">${teamName} Weekly Recap</h1>
-        <p style="margin: 0 0 24px 0; color: #71717a;">See how the team performed this week.</p>
+        <h1 style="margin: 0 0 8px 0; font-size: 24px; color: #18181b; text-align: center;">${teamName} Weekly Recap</h1>
+        <p style="margin: 0 0 24px 0; color: #71717a; text-align: center;">See how the team performed this week.</p>
 
         <!-- Team Stats -->
         <div style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
-            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Minutes</div>
-            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${teamStats.totalMinutes.toLocaleString()} <span style="font-size: 16px; font-weight: 400; color: #71717a;">min</span></div>
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Total Minutes</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">
+              ${teamStats.totalMinutes.toLocaleString()} <span style="font-size: 16px; font-weight: 400; color: #71717a;">min</span>
+            </div>
+            ${(() => {
+              const trend = getTrend(teamStats.totalMinutes, previousTeamStats.totalMinutes);
+              if (trend.direction === "neutral") return "";
+              const color = trend.direction === "up" ? "#10b981" : "#f43f5e";
+              return `<div style="color: ${color}; font-size: 13px; font-weight: 600; margin-top: 4px;">${trend.direction === "up" ? "▲" : "▼"} ${trend.percent}%</div>`;
+            })()}
           </div>
           <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
-            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Distance</div>
-            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${formatDistance(teamStats.totalDistance).replace(" km", "")} <span style="font-size: 16px; font-weight: 400; color: #71717a;">km</span></div>
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Total Distance</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">
+              ${formatDistance(teamStats.totalDistance).replace(" km", "")} <span style="font-size: 16px; font-weight: 400; color: #71717a;">km</span>
+            </div>
+            ${(() => {
+              const trend = getTrend(teamStats.totalDistance, previousTeamStats.totalDistance);
+              if (trend.direction === "neutral") return "";
+              const color = trend.direction === "up" ? "#10b981" : "#f43f5e";
+              return `<div style="color: ${color}; font-size: 13px; font-weight: 600; margin-top: 4px;">${trend.direction === "up" ? "▲" : "▼"} ${trend.percent}%</div>`;
+            })()}
           </div>
           <div style="flex: 1; min-width: 150px; background-color: #f4f4f5; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid rgba(228, 228, 231, 0.4);">
-            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">Avg HR</div>
-            <div style="font-size: 30px; font-weight: 600; color: #18181b;">${teamStats.avgHr ? Math.round(teamStats.avgHr) : "—"} <span style="font-size: 16px; font-weight: 400; color: #71717a;">bpm</span></div>
+            <div style="font-size: 11px; color: #71717a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.2em; font-weight: 600;">AVG HR</div>
+            <div style="font-size: 30px; font-weight: 600; color: #18181b;">
+              ${teamStats.avgHr ? Math.round(teamStats.avgHr) : "—"} <span style="font-size: 16px; font-weight: 400; color: #71717a;">bpm</span>
+            </div>
+            ${(() => {
+              if (!teamStats.avgHr || !previousTeamStats.avgHr) return "";
+              const trend = getTrend(teamStats.avgHr, previousTeamStats.avgHr);
+              if (trend.direction === "neutral") return "";
+              const color = trend.direction === "up" ? "#10b981" : "#f43f5e";
+              return `<div style="color: ${color}; font-size: 13px; font-weight: 600; margin-top: 4px;">${trend.direction === "up" ? "▲" : "▼"} ${trend.percent}%</div>`;
+            })()}
           </div>
         </div>
 
@@ -236,16 +262,17 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
 
         if (recipients.length > 0) {
           // Use the same data fetching as the leaderboard page
-          const [leaderboard, teamStats, teamTrend] = await Promise.all([
+          const [leaderboard, teamStats, previousTeamStats, teamTrend] = await Promise.all([
             getTeamLeaderboard(team.id, recapWeekStart),
             getTeamStats(team.id, recapWeekStart),
+            getTeamStats(team.id, getPreviousWeekStartAt(recapWeekStart)),
             getTeamTrend(team.id, recapWeekStart, 6),
           ]);
 
           await sendEmail({
             to: recipients.map((user) => user.email),
             subject: `${team.name} weekly recap`,
-            html: buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, teamTrend),
+            html: buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, previousTeamStats, teamTrend),
           });
         }
       }

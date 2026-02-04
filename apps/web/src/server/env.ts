@@ -15,7 +15,15 @@ const EnvSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
-  SMTP_SECURE: z.coerce.boolean().optional(),
+  SMTP_SECURE: z
+    .preprocess((val) => {
+      if (typeof val === "string") {
+        if (val.toLowerCase() === "true") return true;
+        if (val.toLowerCase() === "false") return false;
+      }
+      return val;
+    }, z.boolean())
+    .optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   POSTMARK_API_KEY: z.string().min(1).optional(),
 });
