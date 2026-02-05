@@ -39,7 +39,12 @@ const schema = z.object({
     .refine((value) => !Number.isNaN(new Date(value).getTime()), "Select a valid date")
     .refine((value) => value <= getTodayString(), "Date cannot be in the future"),
   minutes: z.coerce.number().min(1, "Enter minutes"),
-  distanceKm: z.coerce.number().nonnegative().min(0.1, "Enter distance"),
+  distanceKm: z
+    .coerce
+    .number()
+    .nonnegative()
+    .min(0.1, "Enter distance")
+    .max(500, "Distance looks too large — reminder: enter kilometers (km), not meters (m)."),
   avgHr: optionalNumber,
   notes: z.string().max(280).optional(),
   proof: z.custom<FileList | null>().optional(), // Handled by separate state
@@ -458,7 +463,7 @@ export const LogWorkoutForm = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="distanceKm">Distance (km)</Label>
-          <Input id="distanceKm" type="number" step="0.1" {...register("distanceKm")} />
+          <Input id="distanceKm" type="number" step="0.1" max={500} {...register("distanceKm")} />
           {errors.distanceKm ? (
             <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
           ) : null}
