@@ -44,7 +44,7 @@ const schema = z.object({
     .number()
     .nonnegative()
     .min(0.1, "Enter distance")
-    .max(500, "Distance looks too large — reminder: enter kilometers (km), not meters (m)."),
+    .max(500, "Distance looks too large. Enter kilometers (km), not meters (m)."),
   avgHr: optionalNumber,
   notes: z.string().max(280).optional(),
   proof: z.custom<FileList | null>().optional(), // Handled by separate state
