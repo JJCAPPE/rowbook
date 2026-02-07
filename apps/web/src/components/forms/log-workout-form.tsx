@@ -279,18 +279,21 @@ export const LogWorkoutForm = () => {
               console.log("Setting date to:", extracted.date);
               setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
             }
-            if (extracted.minutes) {
-              const flooredMinutes = Math.floor(extracted.minutes);
+            const extractedMinutes = parseNumberValue(extracted.minutes);
+            if (extractedMinutes !== null) {
+              const flooredMinutes = Math.floor(extractedMinutes);
               console.log("Setting minutes to:", flooredMinutes);
               setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
             }
-            if (extracted.distance) {
-              console.log("Setting distance to:", extracted.distance);
-              setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
+            const extractedDistance = parseNumberValue(extracted.distance);
+            if (extractedDistance !== null) {
+              console.log("Setting distance to:", extractedDistance);
+              setValue("distanceKm", extractedDistance, { shouldValidate: true, shouldDirty: true });
             }
-            if (extracted.avgHr) {
-              console.log("Setting avgHr to:", extracted.avgHr);
-              setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
+            const extractedAvgHr = parseNumberValue(extracted.avgHr);
+            if (extractedAvgHr !== null) {
+              console.log("Setting avgHr to:", extractedAvgHr);
+              setValue("avgHr", extractedAvgHr, { shouldValidate: true, shouldDirty: true });
             }
 
             if (extractInterval) clearInterval(extractInterval);
@@ -463,7 +466,7 @@ export const LogWorkoutForm = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="distanceKm">Distance (km)</Label>
-          <Input id="distanceKm" type="number" step="0.1" max={500} {...register("distanceKm")} />
+          <Input id="distanceKm" type="number" step="any" max={500} {...register("distanceKm")} />
           {errors.distanceKm ? (
             <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
           ) : null}
