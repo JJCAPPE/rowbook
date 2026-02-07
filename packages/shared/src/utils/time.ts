@@ -49,6 +49,17 @@ export const toZonedDateTime = (
 export const nowInZone = (timeZone = DEFAULT_TIMEZONE): DateTime =>
   DateTime.now().setZone(timeZone);
 
+/**
+ * Compare calendar dates only (ignores time-of-day).
+ */
+export const isDateInFuture = (
+  date: DateInput,
+  referenceDate: DateInput = nowInZone(),
+  timeZone = DEFAULT_TIMEZONE,
+): boolean =>
+  toDateTime(date, timeZone).startOf("day").toMillis()
+  > toDateTime(referenceDate, timeZone).startOf("day").toMillis();
+
 export const formatInTimeZone = (
   input: DateInput,
   timeZone = DEFAULT_TIMEZONE,

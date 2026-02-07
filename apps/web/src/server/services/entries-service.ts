@@ -6,6 +6,7 @@ import {
   calculateWatts,
   ProofOcrResult,
   nowInZone,
+  isDateInFuture,
 } from "@rowbook/shared";
 import {
   createTrainingEntry,
@@ -47,7 +48,7 @@ export const createEntry = async (athleteId: string, input: {
   if (!isWithinWeek(input.date, activeWeekStartAt)) {
     throw new Error("Entry date must be within the active week.");
   }
-  if (input.date.getTime() > now.toMillis()) {
+  if (isDateInFuture(input.date, now)) {
     throw new Error("Entry date cannot be in the future.");
   }
 
@@ -167,7 +168,7 @@ export const updateEntry = async (athleteId: string, input: {
     if (!isWithinWeek(input.date, weekStartAt)) {
       throw new Error("Entry date must be within the active week.");
     }
-    if (input.date.getTime() > now.toMillis()) {
+    if (isDateInFuture(input.date, now)) {
       throw new Error("Entry date cannot be in the future.");
     }
   }
