@@ -14,7 +14,7 @@ so that multiple agents can work in parallel without conflict:
 - Database must be Supabase Postgres
 - ORM must be Prisma
 - Deployment must be on Vercel
-- Week boundary: Sunday 6:00 PM America/New_York
+- Week boundary: Sunday 8:00 PM America/New_York
 - Proof images are required on upload but not validated yet
 - Proof images are deleted 7 days after weekly cutoff
 

@@ -16,12 +16,12 @@ This document covers Supabase, Vercel, storage, cron, and environment setup.
 - Deploy the Next.js app to Vercel
 - Configure environment variables from `.env.example`
 - Use Vercel Cron for scheduled jobs:
-  - Weekly aggregation and email at Sunday 6:00 PM America/New_York
+  - Weekly aggregation and email at Sunday 8:00 PM America/New_York
   - Daily proof cleanup
 
 ## Cron Schedule
 
-- `0 18 * * 0` (Sunday 6:00 PM ET)
+- `0 20 * * 0` (Sunday 8:00 PM ET)
 - `0 3 * * *` (Daily cleanup, 3:00 AM ET)
 
 These times should be configured in Vercel with timezone handling or

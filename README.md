@@ -14,7 +14,7 @@ Provide a lightweight, mobile-first web application for a rowing team to log wee
 - Athletes can only see and edit their own training entries; editing locks at the weekly cutoff.
 - Coaches/admins can see all training data, all proofs, and full weekly history per athlete.
 - Coaches/admins can exempt an athlete from minutes for a specific week.
-- Week boundary: Sunday at 6:00 PM America/New_York; the week runs from Sunday 6:00 PM to the following Sunday 6:00 PM. The weekly email sends at this cutoff, and entries created after 6:00 PM count toward the following week.
+- Week boundary: Sunday at 8:00 PM America/New_York; the week runs from Sunday 8:00 PM to the following Sunday 8:00 PM. The weekly email sends at this cutoff, and entries created after 8:00 PM count toward the following week.
 - Proof validation is strict: inputs must match the proof image; distance is compared at 0.1 km precision with proof values truncated (e.g., 12.591 → 12.5; 12.4/12.6 are mismatches for 12.5).
 - If proof extraction is incomplete, keep the image, accept the manual input, and flag the entry as extraction-incomplete (not an error).
 - Proof images are retained for 7 days after the weekly cutoff, then deleted.
@@ -95,7 +95,7 @@ The application should be mobile-first, fast to load, and usable on desktop.
 
 #### 1.8 Coach: Weekly Settings
 - Set/adjust weekly required minutes.
-- Week boundary is fixed to Sunday 6:00 PM America/New_York.
+- Week boundary is fixed to Sunday 8:00 PM America/New_York.
 - Mark exemptions for specific athletes.
 
 #### 1.9 Shared UI Components
@@ -122,8 +122,8 @@ The application should be mobile-first, fast to load, and usable on desktop.
 
 ### 4) Training Entry Service
 - Create/edit/delete entries by the athlete who owns them.
-- Edit window is limited to the active week; entries lock at Sunday 6:00 PM America/New_York.
-- Entries are assigned to weeks based on submission time relative to the Sunday 6:00 PM cutoff.
+- Edit window is limited to the active week; entries lock at Sunday 8:00 PM America/New_York.
+- Entries are assigned to weeks based on submission time relative to the Sunday 8:00 PM cutoff.
 - Store:
   - Activity type
   - Date
@@ -162,7 +162,7 @@ Purpose: confirm the manual input aligns with proof image data.
 - Determine status: met / not met / exempt.
 - Aggregate activity icons (unique types done that week).
 - Aggregate HR indicator (whether HR data is present).
-- Enforce weekly boundary at Sunday 6:00 PM America/New_York (Sunday → Sunday).
+- Enforce weekly boundary at Sunday 8:00 PM America/New_York (Sunday → Sunday).
 
 ### 7) Weekly Requirements & Exemptions
 - Store weekly required minutes per team.
@@ -171,7 +171,7 @@ Purpose: confirm the manual input aligns with proof image data.
 
 ### 8) Notifications & Email
 - Weekly leaderboard email generation:
-  - Every Sunday at 6:00 PM America/New_York (weekly cutoff).
+  - Every Sunday at 8:00 PM America/New_York (weekly cutoff).
   - Table of athletes, minutes, activity icons, HR indicator.
   - Color-coded row status.
 - Opt-in/out rules if required.
@@ -213,7 +213,7 @@ Purpose: confirm the manual input aligns with proof image data.
 - notes
 - proof_image_id
 - validation_status
-- week_start_at (Sunday 6:00 PM boundary)
+- week_start_at (Sunday 8:00 PM boundary)
 - locked_at
 - created_at, updated_at
 
@@ -240,7 +240,7 @@ Purpose: confirm the manual input aligns with proof image data.
 1. Athlete enters activity details and uploads proof.
 2. Entry is stored as “pending verification” (or confirmed with an extraction-incomplete flag if proof extraction fails).
 3. Validation pipeline runs with strict matching and flags extraction-incomplete if needed.
-4. Entry is assigned to the week based on submission time; edits lock at Sunday 6:00 PM.
+4. Entry is assigned to the week based on submission time; edits lock at Sunday 8:00 PM.
 
 ### Coach Reviews Proof
 1. Coach opens review queue.
@@ -250,7 +250,7 @@ Purpose: confirm the manual input aligns with proof image data.
 ### Weekly Recap Email
 1. Weekly aggregation computes totals.
 2. Leaderboard is generated and sorted.
-3. Email sends to all roster emails at Sunday 6:00 PM America/New_York.
+3. Email sends to all roster emails at Sunday 8:00 PM America/New_York.
 
 ## UI Content Requirements
 
@@ -287,7 +287,7 @@ These should be finalized before implementation:
 - Mobile-first performance and minimal steps to log a workout.
 - Secure access to proof images.
 - Fast weekly aggregation for leaderboard and email.
-- Reliable scheduled job execution at 6:00 PM Sunday (America/New_York).
+- Reliable scheduled job execution at 8:00 PM Sunday (America/New_York).
 - Automated image deletion 7 days after weekly cutoff.
 - Simple onboarding/offboarding managed manually in Supabase.
 

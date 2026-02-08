@@ -5,10 +5,7 @@ import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  ACTIVITY_TYPE_LABELS,
-  ActivityTypeValues,
-} from "@rowbook/shared";
+import { ACTIVITY_TYPE_LABELS, ActivityTypeValues } from "@rowbook/shared";
 
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { Button } from "@/components/ui/button";
@@ -36,23 +33,32 @@ const schema = z.object({
   date: z
     .string()
     .min(1, "Select a date")
-    .refine((value) => !Number.isNaN(new Date(value).getTime()), "Select a valid date")
-    .refine((value) => value <= getTodayString(), "Date cannot be in the future"),
+    .refine(
+      (value) => !Number.isNaN(new Date(value).getTime()),
+      "Select a valid date",
+    )
+    .refine(
+      (value) => value <= getTodayString(),
+      "Date cannot be in the future",
+    ),
   minutes: z.coerce.number().min(1, "Enter minutes"),
-  distanceKm: z
-    .coerce
+  distanceKm: z.coerce
     .number()
     .nonnegative()
     .min(0.1, "Enter distance")
-    .max(500, "Distance looks too large. Enter kilometers (km), not meters (m)."),
+    .max(
+      500,
+      "Distance looks too large. Enter kilometers (km), not meters (m).",
+    ),
   avgHr: optionalNumber,
   notes: z.string().max(280).optional(),
   proof: z.custom<FileList | null>().optional(), // Handled by separate state
-  proofImageIds: z.array(z.string()).min(1, "At least one proof image is required"),
+  proofImageIds: z
+    .array(z.string())
+    .min(1, "At least one proof image is required"),
 });
 
 type FormValues = z.infer<typeof schema>;
-
 
 const defaultValues: FormValues = {
   activityType: "ERG",
@@ -138,19 +144,25 @@ export const LogWorkoutForm = () => {
 
   const utils = trpc.useUtils();
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { mutateAsync: createUploadUrl } = trpc.proof.createUploadUrl.useMutation();
+  const { mutateAsync: createUploadUrl } =
+    trpc.proof.createUploadUrl.useMutation();
   const { mutateAsync: confirmUpload } = trpc.proof.confirmUpload.useMutation();
-  const { mutateAsync: extractFromProof } = trpc.proof.extractFromProof.useMutation();
+  const { mutateAsync: extractFromProof } =
+    trpc.proof.extractFromProof.useMutation();
   const { mutateAsync: createEntry } = trpc.athlete.createEntry.useMutation();
 
   const proof = watch("proof");
   const activityType = watch("activityType");
   const proofRegister = register("proof");
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
-  const [firstExtractedFields, setFirstExtractedFields] = useState<any | null>(null);
+  const [firstExtractedFields, setFirstExtractedFields] = useState<any | null>(
+    null,
+  );
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
-  const simulateProgress = (setProgress: (val: number | ((prev: number) => number)) => void) => {
+  const simulateProgress = (
+    setProgress: (val: number | ((prev: number) => number)) => void,
+  ) => {
     setProgress(0);
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -163,13 +175,10 @@ export const LogWorkoutForm = () => {
     return interval;
   };
 
-
-
   // Removed standard preview effect as we handle files manually now
   useEffect(() => {
     setValue("proofImageIds", uploadedIds, { shouldValidate: true });
   }, [uploadedIds, setValue]);
-
 
   const onSubmit = async (values: FormValues) => {
     setSubmitted(false);
@@ -183,7 +192,8 @@ export const LogWorkoutForm = () => {
     }
 
     setIsSaving(true);
-    let progressInterval: NodeJS.Timeout | null = simulateProgress(setSaveProgress);
+    let progressInterval: NodeJS.Timeout | null =
+      simulateProgress(setSaveProgress);
 
     try {
       await createEntry({
@@ -197,14 +207,16 @@ export const LogWorkoutForm = () => {
         avgHr: values.avgHr ?? null,
         notes: values.notes?.trim() || undefined,
         proofImageIds: uploadedIds,
-        proofOcr: firstExtractedFields ? { extractedFields: firstExtractedFields } : null,
+        proofOcr: firstExtractedFields
+          ? { extractedFields: firstExtractedFields }
+          : null,
       });
 
       if (progressInterval) clearInterval(progressInterval);
       progressInterval = null;
       setSaveProgress(100);
       // Brief delay to show 100%
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 400));
 
       await Promise.all([
         utils.athlete.getDashboard.invalidate(),
@@ -269,37 +281,55 @@ export const LogWorkoutForm = () => {
         // Let's do first file for now to populate form
         if (i === 0) {
           setIsExtracting(true);
-          let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
+          let extractInterval: NodeJS.Timeout | null = simulateProgress(
+            setExtractionProgress,
+          );
           try {
-            const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
+            const extracted = await extractFromProof({
+              proofImageId: upload.proofImageId,
+            });
             console.log("Extracted Data for Form Population:", extracted);
             setFirstExtractedFields(extracted);
 
             if (extracted.date) {
               console.log("Setting date to:", extracted.date);
-              setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
+              setValue("date", extracted.date, {
+                shouldValidate: true,
+                shouldDirty: true,
+              });
             }
             if (extracted.minutes) {
               const flooredMinutes = Math.floor(extracted.minutes);
               console.log("Setting minutes to:", flooredMinutes);
-              setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
+              setValue("minutes", flooredMinutes, {
+                shouldValidate: true,
+                shouldDirty: true,
+              });
             }
             if (extracted.distance) {
               console.log("Setting distance to:", extracted.distance);
-              setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
+              setValue("distanceKm", extracted.distance, {
+                shouldValidate: true,
+                shouldDirty: true,
+              });
             }
             if (extracted.avgHr) {
               console.log("Setting avgHr to:", extracted.avgHr);
-              setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
+              setValue("avgHr", extracted.avgHr, {
+                shouldValidate: true,
+                shouldDirty: true,
+              });
             }
 
             if (extractInterval) clearInterval(extractInterval);
             extractInterval = null;
             setExtractionProgress(100);
-            await new Promise(r => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 400));
           } catch (e) {
             console.error("Extraction failed", e);
-            setSubmitError("Auto-extraction failed. Please enter details manually.");
+            setSubmitError(
+              "Auto-extraction failed. Please enter details manually.",
+            );
           } finally {
             if (extractInterval) clearInterval(extractInterval);
             setIsExtracting(false);
@@ -310,7 +340,6 @@ export const LogWorkoutForm = () => {
 
       setUploadedIds([...currentIds, ...newIds]);
       setPreviewUrls([...currentUrls, ...newUrls]);
-
     } catch (e) {
       setSubmitError("Failed to upload image(s).");
     } finally {
@@ -336,7 +365,9 @@ export const LogWorkoutForm = () => {
               key={type}
               type="button"
               isActive={activityType === type}
-              onClick={() => setValue("activityType", type, { shouldValidate: true })}
+              onClick={() =>
+                setValue("activityType", type, { shouldValidate: true })
+              }
             >
               <ActivityIcon type={type} />
               {ACTIVITY_TYPE_LABELS[type]}
@@ -349,7 +380,9 @@ export const LogWorkoutForm = () => {
       </div>
 
       <div className="space-y-3">
-        <Label htmlFor="proof">Proof of workout (select multiple if needed)</Label>
+        <Label htmlFor="proof">
+          Proof of workout (select multiple if needed)
+        </Label>
         <input
           key={`camera-${proofInputKey}`}
           ref={cameraInputRef}
@@ -396,7 +429,11 @@ export const LogWorkoutForm = () => {
           </Button>
         </div>
 
-        {errors.proofImageIds ? <p className="text-xs text-rose-500">{errors.proofImageIds.message}</p> : null}
+        {errors.proofImageIds ? (
+          <p className="text-xs text-rose-500">
+            {errors.proofImageIds.message}
+          </p>
+        ) : null}
         {previewUrls.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 w-full rounded-2xl border border-divider/40 bg-content2/70 p-3">
             {previewUrls.map((url, index) => (
@@ -413,7 +450,10 @@ export const LogWorkoutForm = () => {
             ))}
           </div>
         ) : (
-          <p className="text-xs text-default-500">Take photos of your screen, or upload screenshots from Strava, Garmin, Polar, etc.</p>
+          <p className="text-xs text-default-500">
+            Take photos of your screen, or upload screenshots from Strava,
+            Garmin, Polar, etc.
+          </p>
         )}
 
         {isUploading ? (
@@ -445,14 +485,15 @@ export const LogWorkoutForm = () => {
             </div>
           </div>
         ) : null}
-
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="date">Date</Label>
           <Input id="date" type="date" max={today} {...register("date")} />
-          {errors.date ? <p className="text-xs text-rose-500">{errors.date.message}</p> : null}
+          {errors.date ? (
+            <p className="text-xs text-rose-500">{errors.date.message}</p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="minutes">Minutes</Label>
@@ -463,21 +504,39 @@ export const LogWorkoutForm = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="distanceKm">Distance (km)</Label>
-          <Input id="distanceKm" type="number" step="0.1" max={500} {...register("distanceKm")} />
+          <Input
+            id="distanceKm"
+            type="number"
+            step="0.1"
+            max={500}
+            {...register("distanceKm")}
+          />
           {errors.distanceKm ? (
             <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
           ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="avgHr">Average HR</Label>
-          <Input id="avgHr" type="number" min={30} max={220} {...register("avgHr")} />
-          {errors.avgHr ? <p className="text-xs text-rose-500">{errors.avgHr.message}</p> : null}
+          <Input
+            id="avgHr"
+            type="number"
+            min={30}
+            max={220}
+            {...register("avgHr")}
+          />
+          {errors.avgHr ? (
+            <p className="text-xs text-rose-500">{errors.avgHr.message}</p>
+          ) : null}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="notes">Notes</Label>
-        <Textarea id="notes" placeholder="Optional notes" {...register("notes")} />
+        <Textarea
+          id="notes"
+          placeholder="Optional notes"
+          {...register("notes")}
+        />
       </div>
 
       {isSaving ? (
@@ -499,7 +558,9 @@ export const LogWorkoutForm = () => {
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Saving..." : "Submit workout"}
         </Button>
-        <p className="text-xs text-default-500">Entries lock every Sunday at 6:00 PM ET.</p>
+        <p className="text-xs text-default-500">
+          Entries lock every Sunday at 8:00 PM ET.
+        </p>
       </div>
 
       {submitError ? (

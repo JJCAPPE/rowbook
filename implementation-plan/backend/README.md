@@ -124,8 +124,8 @@ America/New_York. All entry creation and aggregation uses this utility.
 
 Rules:
 
-- A week starts Sunday 6:00 PM ET
-- Entries created after 6:00 PM count toward the next week
+- A week starts Sunday 8:00 PM ET
+- Entries created after 8:00 PM count toward the next week
 - Edits lock at the boundary of the active week
 
 ## API Design (tRPC Routers)
@@ -170,7 +170,7 @@ The OCR pipeline is intentionally a stub. A later phase will replace
 
 ## Weekly Jobs (Vercel Cron)
 
-1. Sunday 6:00 PM ET
+1. Sunday 8:00 PM ET
    - Compute weekly aggregates
    - Generate leaderboard email
 2. Daily cleanup

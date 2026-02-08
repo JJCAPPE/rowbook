@@ -4,7 +4,7 @@ Quality strategy to keep both UI and backend stable as the app grows.
 
 ## Unit Tests
 
-- Week boundary calculations (Sunday 6:00 PM ET)
+- Week boundary calculations (Sunday 8:00 PM ET)
 - Validation rules (distance truncation, HR handling)
 - Aggregation functions (weekly totals, status)
 
