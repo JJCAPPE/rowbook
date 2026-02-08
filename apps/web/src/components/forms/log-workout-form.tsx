@@ -53,6 +53,13 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+type ExtractedProofFields = {
+  date?: string | null;
+  minutes?: number | null;
+  distance?: number | null;
+  avgHr?: number | null;
+};
+
 
 const defaultValues: FormValues = {
   activityType: "ERG",
@@ -147,7 +154,7 @@ export const LogWorkoutForm = () => {
   const activityType = watch("activityType");
   const proofRegister = register("proof");
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
-  const [firstExtractedFields, setFirstExtractedFields] = useState<any | null>(null);
+  const [firstExtractedFields, setFirstExtractedFields] = useState<ExtractedProofFields | null>(null);
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
   const simulateProgress = (setProgress: (val: number | ((prev: number) => number)) => void) => {
@@ -161,6 +168,48 @@ export const LogWorkoutForm = () => {
       });
     }, 100);
     return interval;
+  };
+
+  const applyExtractedFieldsToForm = (allExtractedFields: ExtractedProofFields[]) => {
+    if (!allExtractedFields.length) {
+      return;
+    }
+
+    const extractedDates = allExtractedFields
+      .map((fields) => fields.date?.trim())
+      .filter((date): date is string => Boolean(date));
+
+    const uniqueDates = [...new Set(extractedDates)];
+    const hasDateMismatch = uniqueDates.length > 1;
+
+    if (hasDateMismatch) {
+      setSubmitError("Uploaded proof images have different dates. Please verify your entry date manually.");
+    } else if (uniqueDates[0]) {
+      setValue("date", uniqueDates[0], { shouldValidate: true, shouldDirty: true });
+    }
+
+    const totalExtractedMinutes = allExtractedFields.reduce((total, fields) => {
+      const numericMinutes = parseNumberValue(fields.minutes);
+      return total + (numericMinutes ?? 0);
+    }, 0);
+
+    if (totalExtractedMinutes > 0) {
+      setValue("minutes", Math.floor(totalExtractedMinutes), { shouldValidate: true, shouldDirty: true });
+    }
+
+    const firstDistance = allExtractedFields
+      .map((fields) => parseNumberValue(fields.distance))
+      .find((value): value is number => value !== null);
+    if (firstDistance !== undefined) {
+      setValue("distanceKm", firstDistance, { shouldValidate: true, shouldDirty: true });
+    }
+
+    const firstAvgHr = allExtractedFields
+      .map((fields) => parseNumberValue(fields.avgHr))
+      .find((value): value is number => value !== null);
+    if (firstAvgHr !== undefined) {
+      setValue("avgHr", firstAvgHr, { shouldValidate: true, shouldDirty: true });
+    }
   };
 
 
@@ -240,6 +289,7 @@ export const LogWorkoutForm = () => {
 
     const newIds: string[] = [];
     const newUrls: string[] = [];
+    const extractedResults: ExtractedProofFields[] = [];
 
     // Keep existing
     const currentIds = [...uploadedIds];
@@ -265,47 +315,27 @@ export const LogWorkoutForm = () => {
         await confirmUpload({ proofImageId: upload.proofImageId });
         newIds.push(upload.proofImageId);
 
-        // Trigger extraction for the first file only (or all and aggregate?)
-        // Let's do first file for now to populate form
-        if (i === 0) {
-          setIsExtracting(true);
-          let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
-          try {
-            const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
-            console.log("Extracted Data for Form Population:", extracted);
-            setFirstExtractedFields(extracted);
-
-            if (extracted.date) {
-              console.log("Setting date to:", extracted.date);
-              setValue("date", extracted.date, { shouldValidate: true, shouldDirty: true });
-            }
-            if (extracted.minutes) {
-              const flooredMinutes = Math.floor(extracted.minutes);
-              console.log("Setting minutes to:", flooredMinutes);
-              setValue("minutes", flooredMinutes, { shouldValidate: true, shouldDirty: true });
-            }
-            if (extracted.distance) {
-              console.log("Setting distance to:", extracted.distance);
-              setValue("distanceKm", extracted.distance, { shouldValidate: true, shouldDirty: true });
-            }
-            if (extracted.avgHr) {
-              console.log("Setting avgHr to:", extracted.avgHr);
-              setValue("avgHr", extracted.avgHr, { shouldValidate: true, shouldDirty: true });
-            }
-
-            if (extractInterval) clearInterval(extractInterval);
-            extractInterval = null;
-            setExtractionProgress(100);
-            await new Promise(r => setTimeout(r, 400));
-          } catch (e) {
-            console.error("Extraction failed", e);
-            setSubmitError("Auto-extraction failed. Please enter details manually.");
-          } finally {
-            if (extractInterval) clearInterval(extractInterval);
-            setIsExtracting(false);
-            setExtractionProgress(0);
-          }
+        setIsExtracting(true);
+        let extractInterval: NodeJS.Timeout | null = simulateProgress(setExtractionProgress);
+        try {
+          const extracted = await extractFromProof({ proofImageId: upload.proofImageId });
+          extractedResults.push(extracted);
+        } catch (e) {
+          console.error("Extraction failed", e);
+          setSubmitError("Auto-extraction failed for one or more images. Please enter details manually.");
+        } finally {
+          if (extractInterval) clearInterval(extractInterval);
+          extractInterval = null;
+          setExtractionProgress(100);
+          await new Promise(r => setTimeout(r, 200));
+          setIsExtracting(false);
+          setExtractionProgress(0);
         }
+      }
+
+      if (extractedResults.length > 0) {
+        setFirstExtractedFields(extractedResults[0] ?? null);
+        applyExtractedFieldsToForm(extractedResults);
       }
 
       setUploadedIds([...currentIds, ...newIds]);

@@ -240,15 +240,31 @@ export const getReviewQueue = async (
     teamId: team.id,
     weekStartAt: week,
     entries: entriesWithProofs.map(({ athlete, proofs, ...rest }: any) => {
+      const proofStatuses = (rest.proofImages ?? [])
+        .map((proof: any) => proof.proofExtractionJob?.status)
+        .filter((status: ProofExtractionStatus | null | undefined): status is ProofExtractionStatus => Boolean(status));
+
+      const hasPendingProof = proofStatuses.some((status: ProofExtractionStatus) => status === "PENDING" || status === "PROCESSING");
+      const hasFailedProof = proofStatuses.some((status: ProofExtractionStatus) => status === "FAILED");
+      const allCompletedProofs = proofStatuses.length > 0 && proofStatuses.every((status: ProofExtractionStatus) => status === "COMPLETED");
+
+      const proofExtractionStatus: ProofExtractionStatus | null = hasPendingProof
+        ? "PROCESSING"
+        : hasFailedProof
+          ? "FAILED"
+          : allCompletedProofs
+            ? "COMPLETED"
+            : null;
+
+      const anyProofReviewedById = (rest.proofImages ?? []).find((proof: any) => Boolean(proof.reviewedById))?.reviewedById ?? null;
       const rejectionNote = rest.rejectionNote;
       return {
         ...rest,
         proofs,
         rejectionNote,
         athleteName: athlete?.name ?? athlete?.email ?? null,
-        // Use first proof for these or expose array to frontend?
-        proofExtractionStatus: rest.proofImages?.[0]?.proofExtractionJob?.status ?? null,
-        proofReviewedById: rest.proofImages?.[0]?.reviewedById ?? null,
+        proofExtractionStatus,
+        proofReviewedById: anyProofReviewedById,
         extractedFields: proofs[0]?.extractedFields ?? null,
         proofUrl: proofs[0]?.url ?? null,
       };

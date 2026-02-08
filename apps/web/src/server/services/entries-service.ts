@@ -66,16 +66,10 @@ export const createEntry = async (athleteId: string, input: {
   // For now let's just create the entry, assuming IDs are valid from earlier upload step.
   // But wait, checking upload status is important.
   
-  const proofImageId = input.proofImageIds[0]; // Use first for primary checks for now or iterate
-  
-  // Note: Previous logic validated single image. Now we should ideally validate all.
-  // But let's simplify transition by validating at least one, or relying on `create` to fail if IDs invalid?
-  // Prisma `connect` will fail if ID not found. That's good enough for existence.
-  // Ownership check is still good practice.
-  
-  const proofImage = await getProofImageById(proofImageId);
-  if (!proofImage || proofImage.athleteId !== athleteId) {
-    throw new Error("Proof image not found for athlete.");
+  const proofImages = await Promise.all(input.proofImageIds.map((proofImageId) => getProofImageById(proofImageId)));
+  const hasInvalidProof = proofImages.some((proofImage) => !proofImage || proofImage.athleteId !== athleteId || !proofImage.uploadedAt);
+  if (hasInvalidProof) {
+    throw new Error("One or more proof images are invalid or not uploaded.");
   }
   
   // Logic for extraction status etc. needs to adapt to multiple images.
@@ -121,7 +115,7 @@ export const createEntry = async (athleteId: string, input: {
   });
 
   if (input.proofOcr?.extractedFields) {
-      await updateProofImageIfPending(proofImageId, {
+      await updateProofImageIfPending(input.proofImageIds[0]!, {
         extractedFields: input.proofOcr.extractedFields,
         validationStatus: validationStatus, // Match the entry status
       });
