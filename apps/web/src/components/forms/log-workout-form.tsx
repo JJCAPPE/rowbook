@@ -463,7 +463,7 @@ export const LogWorkoutForm = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="distanceKm">Distance (km)</Label>
-          <Input id="distanceKm" type="number" step="0.1" max={500} {...register("distanceKm")} />
+          <Input id="distanceKm" type="number" step="any" max={500} {...register("distanceKm")} />
           {errors.distanceKm ? (
             <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
           ) : null}
