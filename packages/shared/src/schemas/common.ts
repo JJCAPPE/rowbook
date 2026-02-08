@@ -11,5 +11,14 @@ export const DistanceSchema = z
   .number()
   .nonnegative()
   .max(500, "Distance looks too large — reminder: enter kilometers (km), not meters (m).");
-export const HeartRateSchema = z.number().int().positive();
+export const HeartRateSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return value;
+    }
+    // OCR can return decimal bpm values; normalize before integer validation.
+    return Math.round(value);
+  },
+  z.number().int().positive(),
+);
 export const OptionalNotesSchema = z.string().max(1000).optional().nullable();
