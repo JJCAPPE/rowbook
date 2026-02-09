@@ -12,8 +12,6 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  const targetEmail = "bujack@bu.edu";
-
   console.log("Starting email recap test script...");
   
   const teams = await listTeams();
@@ -33,11 +31,26 @@ async function main() {
     getTeamStats(team.id, getPreviousWeekStartAt(recapWeekStart)),
   ]);
 
-  console.log(`Sending test email to: ${targetEmail}`);
+  const recipients = await prisma.user.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [{ athleteProfile: { teamId: team.id } }, { role: "COACH" }],
+    },
+    select: { email: true },
+  });
+
+  const recipientEmails = [...new Set(recipients.map((user) => user.email))];
+
+  if (recipientEmails.length === 0) {
+    console.error("No active athlete/coach recipients found");
+    return;
+  }
+
+  console.log(`Sending final recap email to ${recipientEmails.length} recipients`);
 
   const result = await sendEmail({
-    to: [targetEmail],
-    subject: `[TEST] ${team.name} Weekly Recap as of ${recapWeekStart.toISOString().split("T")[0]}`,
+    to: recipientEmails,
+    subject: `${team.name} Weekly Recap as of ${recapWeekStart.toISOString().split("T")[0]}`,
     html: buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, previousTeamStats),
   });
 
