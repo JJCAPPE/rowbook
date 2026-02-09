@@ -16,8 +16,7 @@ import {
   updateTrainingEntry,
 } from "@/server/repositories/training-entries";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
-import { upsertProofExtractionJobResult } from "@/server/repositories/proof-extraction-jobs";
+import { getProofImageById, updateProofImage, updateProofImageIfPending, updateProofImagesByEntryId } from "@/server/repositories/proof-images";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 import { aggregateWeekForAthlete } from "@/server/services/weekly-service";
 import { evaluateAutoVerification } from "@/server/services/validation-logic";
@@ -173,32 +172,70 @@ export const updateEntry = async (athleteId: string, input: {
     }
   }
 
-  // Recalculate pace and watts if activity type, distance, or time changed
+  // Resolve final values after patch-style update input.
   const activityType = input.activityType ?? entry.activityType;
+  const date = input.date ?? entry.date;
   const minutes = input.minutes ?? entry.minutes;
   const distance = input.distance ?? entry.distance;
-  const needsRecalculation = input.activityType !== undefined 
-    || input.minutes !== undefined 
-    || input.distance !== undefined;
+  const avgPace = calculatePaceSeconds(activityType, distance, minutes);
+  const avgWatts = calculateWatts(activityType, avgPace);
 
-  let avgPace: number | null | undefined;
-  let avgWatts: number | null | undefined;
-
-  if (needsRecalculation) {
-    avgPace = calculatePaceSeconds(activityType, distance, minutes);
-    avgWatts = calculateWatts(activityType, avgPace);
-  }
+  const proofs = (entry.proofImages ?? []) as Array<{ extractedFields: any }>;
+  const proofEvaluations = proofs.map((proof) => {
+    const extracted = proof.extractedFields as { date?: string | null; minutes?: number | null } | null;
+    return extracted
+      ? {
+          date: extracted.date ?? null,
+          minutes: extracted.minutes ?? null,
+        }
+      : null;
+  });
+  const { autoVerified, validationStatus } = evaluateAutoVerification(
+    { date, minutes },
+    proofEvaluations,
+  );
 
   const updated = await updateTrainingEntry(entry.id, {
     activityType: input.activityType,
     date: input.date,
     minutes: input.minutes,
     distance: input.distance,
-    avgHr: input.avgHr ?? undefined,
+    avgHr: "avgHr" in input ? (input.avgHr ?? null) : undefined,
     avgPace,
     avgWatts,
-    notes: input.notes ?? undefined,
+    notes: "notes" in input ? (input.notes ?? null) : undefined,
+    validationStatus,
+    rejectionNote: null,
   });
+
+  if (proofs.length > 0) {
+    if (autoVerified) {
+      await updateProofImagesByEntryId(entry.id, {
+        validationStatus: "VERIFIED",
+        reviewedById: null,
+      });
+    } else {
+      await Promise.all(
+        (entry.proofImages ?? []).map((proof) => {
+          const extracted = proof.extractedFields as { date?: string | null; minutes?: number | null } | null;
+          const nextStatus: ValidationStatus =
+            extracted?.date != null && extracted?.minutes != null
+              ? "PENDING"
+              : "EXTRACTION_INCOMPLETE";
+          return updateProofImage(proof.id, {
+            validationStatus: nextStatus,
+            reviewedById: null,
+          });
+        }),
+      );
+    }
+  } else if (entry.proofImageId) {
+    // Legacy fallback during single-image migration.
+    await updateProofImage(entry.proofImageId, {
+      validationStatus: autoVerified ? "VERIFIED" : "PENDING",
+      reviewedById: null,
+    });
+  }
 
   await createAuditLog({
     actorId: athleteId,
