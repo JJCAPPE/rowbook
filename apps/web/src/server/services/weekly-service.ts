@@ -312,9 +312,8 @@ export const getTeamTrend = async (
       distance: 0,
       hrEntries: [],
     });
-    const next = new Date(loopWeek);
-    next.setDate(next.getDate() + 7);
-    loopWeek = next;
+    // Step week boundaries using shared week utilities to avoid DST drift.
+    loopWeek = getWeekEndAt(loopWeek);
     safety++;
   }
 
@@ -331,20 +330,16 @@ export const getTeamTrend = async (
   }
 
   const trend = [];
-  let cumulativeMinutes = 0;
-  let cumulativeDistance = 0;
 
   const sortedKeys = Array.from(weeksMap.keys()).sort();
 
   for (const key of sortedKeys) {
     const data = weeksMap.get(key)!;
-    cumulativeMinutes += data.minutes;
-    cumulativeDistance += data.distance;
 
     trend.push({
       weekStartAt: new Date(key),
-      minutes: cumulativeMinutes,
-      distance: cumulativeDistance,
+      minutes: data.minutes,
+      distance: data.distance,
       avgHr: getWeightedAvgHr(data.hrEntries),
     });
   }
