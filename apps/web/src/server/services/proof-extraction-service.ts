@@ -93,9 +93,9 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
       If "yesterday", use the date before ${today}.
       If "today", use ${today}.
       If year is missing, assume the current year, but ensure the resulting date is not in the future.
-    - Minutes: Total duration of the workout in minutes.
-    - Distance: Total distance covered in KILOMETERS. If the value is in meters, divide by 1000.
-    - AvgHr: Average heart rate in beats per minute (bpm).
+    - Minutes: Total duration of the workout in minutes. Beware of some screens showing Total time inclusing resting time.
+    - Distance: Total distance covered in KILOMETERS. If the value is in meters, divide by 1000. To three decimal places (eg 12.124)
+    - AvgHr: Average heart rate in beats per minute (bpm). Beware of not selecting stroke rate instead. Heart rate ranges typically are above 100 bpm. Make sure is says bpm and not rpm or s/m.
     - Confidence: A score (0.0 to 1.0) indicating if this image looks like a legitimate workout screen (e.g. Concept2 PM5, Apple Watch, Strava, etc.). Low confidence if it's a random image.
     - RejectionReason: If confidence is low, explain why. For example: "Image is too blurry", "Image is of a landscape, not a workout", "No workout data visible".
   `;

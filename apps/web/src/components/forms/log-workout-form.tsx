@@ -45,7 +45,7 @@ const schema = z.object({
   distanceKm: z.coerce
     .number()
     .nonnegative()
-    .min(0.1, "Enter distance")
+    .min(0.001, "Enter distance")
     .max(
       500,
       "Distance looks too large. Enter kilometers (km), not meters (m).",
@@ -507,7 +507,8 @@ export const LogWorkoutForm = () => {
           <Input
             id="distanceKm"
             type="number"
-            step="0.1"
+            min={0.001}
+            step="0.001"
             max={500}
             {...register("distanceKm")}
           />
