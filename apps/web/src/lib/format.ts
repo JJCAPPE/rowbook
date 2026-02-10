@@ -12,6 +12,10 @@ const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   timeZone: TIME_ZONE,
 });
+const distanceFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 3,
+});
 
 export const formatShortDate = (date: Date) => shortDateFormatter.format(date);
 
@@ -32,7 +36,7 @@ export const formatDistance = (distanceKm: number | null) => {
   if (distanceKm === null) {
     return "—";
   }
-  return `${distanceKm.toFixed(1)} km`;
+  return `${distanceFormatter.format(distanceKm)} km`;
 };
 
 export const formatWeekRange = (start: Date, end: Date) => {
@@ -42,4 +46,3 @@ export const formatWeekRange = (start: Date, end: Date) => {
 
 // Re-export pace and watts formatting from shared package
 export { formatPace, formatPaceWithUnit, formatWatts } from "@rowbook/shared";
-

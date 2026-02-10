@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
-import type { ActivityType } from "@rowbook/shared";
-import { Trash2 } from "lucide-react";
+import type { ActivityType, TrainingEntry } from "@rowbook/shared";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { ActivityIcon } from "@/components/ui/activity-icon";
@@ -19,15 +19,19 @@ import { useDisclosure } from "@heroui/react";
 import { formatFullDate, formatMinutes, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { getWeekKey } from "@/lib/week-options";
+import { EditWorkoutModal } from "@/components/forms/edit-workout-modal";
 
 type HistoryFilter = "ALL" | ActivityType | "HR_PRESENT" | "MIN_30";
 
 export default function AthleteHistoryPage() {
   const disclosure = useDisclosure();
+  const editDisclosure = useDisclosure();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<TrainingEntry | null>(null);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
   const history = useMemo(() => data ?? [], [data]);
+  const { data: dashboard } = trpc.athlete.getDashboard.useQuery();
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>("ALL");
   const { mutateAsync: deleteEntry, isLoading: isDeleting } =
     trpc.athlete.deleteEntry.useMutation({
@@ -94,6 +98,21 @@ export default function AthleteHistoryPage() {
     await deleteEntry({ id: deletingId });
   };
 
+  const activeWeekStartAt = dashboard?.weekStartAt ? new Date(dashboard.weekStartAt) : null;
+  const activeWeekKey = activeWeekStartAt ? getWeekKey(activeWeekStartAt) : null;
+
+  const isEditableWeek = (weekStartAt: Date) => {
+    if (!activeWeekKey) {
+      return false;
+    }
+    return getWeekKey(weekStartAt) === activeWeekKey;
+  };
+
+  const handleEdit = (entry: TrainingEntry) => {
+    setEditingEntry(entry);
+    editDisclosure.onOpen();
+  };
+
   return (
     <div className="space-y-6">
       <ConfirmModal
@@ -106,6 +125,20 @@ export default function AthleteHistoryPage() {
       >
         Are you sure you want to remove this entry? This action cannot be undone.
       </ConfirmModal>
+      <EditWorkoutModal
+        entry={editingEntry}
+        isOpen={editDisclosure.isOpen}
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            editDisclosure.onOpen();
+            return;
+          }
+          editDisclosure.onClose();
+          if (!isOpen) {
+            setEditingEntry(null);
+          }
+        }}
+      />
       <PageHeader
         title="Weekly history"
         subtitle="Review totals, proof status, and weekly requirements."
@@ -184,6 +217,19 @@ export default function AthleteHistoryPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <StatusBadge status={entry.validationStatus} />
+                          {isEditableWeek(week.weekStartAt) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              isIconOnly
+                              aria-label="Edit entry"
+                              className="h-8 w-8 min-w-0 text-default-500"
+                              disabled={isDeleting}
+                              onClick={() => handleEdit(entry)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="sm"

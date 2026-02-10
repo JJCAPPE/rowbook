@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
 import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,13 @@ import { ActivityIcon } from "@/components/ui/activity-icon";
 import { useDisclosure } from "@heroui/react";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { EditWorkoutModal } from "@/components/forms/edit-workout-modal";
 
 export default function AthleteDashboardPage() {
   const disclosure = useDisclosure();
+  const editDisclosure = useDisclosure();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<TrainingEntry | null>(null);
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
   const weekStartParam = searchParams.get("weekStartAt");
@@ -84,6 +87,11 @@ export default function AthleteDashboardPage() {
     setDeletingId(entryId);
     disclosure.onOpen();
   };
+  
+  const handleEdit = (entry: TrainingEntry) => {
+    setEditingEntry(entry);
+    editDisclosure.onOpen();
+  };
 
   const confirmDelete = async () => {
     if (!deletingId) return;
@@ -120,6 +128,20 @@ export default function AthleteDashboardPage() {
       >
         Are you sure you want to remove this entry? This action cannot be undone.
       </ConfirmModal>
+      <EditWorkoutModal
+        entry={editingEntry}
+        isOpen={editDisclosure.isOpen}
+        onOpenChange={(isOpen) => {
+          if (isOpen) {
+            editDisclosure.onOpen();
+            return;
+          }
+          editDisclosure.onClose();
+          if (!isOpen) {
+            setEditingEntry(null);
+          }
+        }}
+      />
       <PageHeader
         title="Dashboard"
         subtitle={
@@ -197,6 +219,17 @@ export default function AthleteDashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={entry.validationStatus} />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    isIconOnly
+                    aria-label="Edit entry"
+                    className="h-8 w-8 min-w-0 text-default-500"
+                    disabled={isDeleting}
+                    onClick={() => handleEdit(entry)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

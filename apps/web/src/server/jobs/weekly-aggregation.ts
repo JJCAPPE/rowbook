@@ -64,7 +64,10 @@ const getTrend = (current: number, previous: number) => {
 };
 
 const formatDistance = (km: number) => {
-  return `${km.toFixed(1)} km`;
+  return `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 3,
+  }).format(km)} km`;
 };
 
 const statusLabels: Record<WeeklyStatus, string> = {
@@ -283,4 +286,3 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
 
   return { results };
 };
-
