@@ -31,6 +31,7 @@ type ReviewEntry = {
   validationStatus: ValidationStatus;
   rejectionNote: string | null;
   proofUrl: string | null;
+  proofs?: Array<{ id: string; url: string; extractedFields: unknown }>;
   athleteName: string | null;
   proofExtractionStatus: ProofExtractionStatus | null;
   proofReviewedById: string | null;
@@ -205,7 +206,15 @@ export default function CoachReviewQueuePage() {
                         {entry.extractedFields ? (
                           <ProofExtractionFeedback fields={entry.extractedFields} />
                         ) : null}
-                        {entry.proofUrl ? (
+                        {entry.proofs && entry.proofs.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {entry.proofs.map((proof, index) => (
+                              <div key={proof.id} className="w-full sm:w-[48%] lg:w-full xl:w-[48%]">
+                                <ProofImageViewer src={proof.url} alt={`Workout proof ${index + 1}`} />
+                              </div>
+                            ))}
+                          </div>
+                        ) : entry.proofUrl ? (
                           <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                         ) : (
                           <p className="text-xs text-default-500">Proof not available.</p>
