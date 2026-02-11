@@ -40,6 +40,16 @@ export const ExemptionInputSchema = z.object({
 });
 export type ExemptionInput = z.infer<typeof ExemptionInputSchema>;
 
+export const AthleteWeeklyRequirementOverrideInputSchema = z.object({
+  athleteId: z.string(),
+  weekStartAt: z.coerce.date(),
+  requiredMinutes: z.number().int().nonnegative(),
+  reason: z.string().max(500).nullable().optional(),
+});
+export type AthleteWeeklyRequirementOverrideInput = z.infer<
+  typeof AthleteWeeklyRequirementOverrideInputSchema
+>;
+
 export const WeeklyAggregateSchema = WeekRangeSchema.extend({
   athleteId: z.string(),
   totalMinutes: z.number().int().nonnegative(),

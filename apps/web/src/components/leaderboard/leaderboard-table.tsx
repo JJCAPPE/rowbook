@@ -13,6 +13,8 @@ type LeaderboardRow = {
   name: string;
   totalMinutes: number;
   status: WeeklyStatus;
+  requiredMinutes?: number;
+  requirementSource?: "TEAM_DEFAULT" | "ATHLETE_OVERRIDE" | "EXEMPT_WEEK" | "EXEMPT_INDEFINITE";
   activityTypes: ActivityType[];
   hasHr: boolean;
   missingProof?: boolean;
@@ -129,6 +131,11 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
                   ))}
                 </div>
                 <WeeklyStatusBadge status={row.status} />
+                {row.requirementSource === "ATHLETE_OVERRIDE" && row.status === "MET" ? (
+                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                    Modified target{typeof row.requiredMinutes === "number" ? ` ${row.requiredMinutes} min` : ""}
+                  </span>
+                ) : null}
               </div>
             </div>
           )
