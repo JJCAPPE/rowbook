@@ -128,12 +128,17 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
                   <span>Notes: {entry.notes ?? "—"}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {entry.proofs && entry.proofs.length > 0 ? (
-                    entry.proofs.map((proof: any) => (
-                      <div key={proof.id} className="w-full sm:w-[48%] lg:w-full xl:w-[48%]">
-                         <ProofImageViewer src={proof.url} alt="Workout proof" />
-                      </div>
-                    ))
+                  {entry.proofs && entry.proofs.some((proof: { url?: string }) => Boolean(proof.url)) ? (
+                    <ProofImageViewer
+                      images={(entry.proofs as Array<{ id: string; url: string }>)
+                        .filter((proof) => Boolean(proof.url))
+                        .map((proof, index) => ({
+                          id: proof.id,
+                          src: proof.url,
+                          alt: `Workout proof ${index + 1}`,
+                        }))}
+                      alt="Workout proof"
+                    />
                   ) : entry.proofUrl ? (
                     <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                   ) : (

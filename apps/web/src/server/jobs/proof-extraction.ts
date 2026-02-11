@@ -1,8 +1,8 @@
 import {
-  PENDING_PROOF_STATUSES,
-  ValidationStatus,
-} from "@rowbook/shared";
-import { getProofImageById, updateProofImageIfPending } from "@/server/repositories/proof-images";
+  getProofImageById,
+  updateProofImageIfPending,
+  updateProofImagesByEntryId,
+} from "@/server/repositories/proof-images";
 import {
   lockNextProofExtractionJob,
   markProofExtractionJobCompleted,
@@ -46,7 +46,9 @@ const processJob = async (jobId: string, proofImageId: string) => {
     return { proofImageId, status: "FAILED", reason: "missing" };
   }
 
-  if (proofImage.validationStatus === "VERIFIED" || proofImage.validationStatus === "REJECTED") {
+  const alreadyManuallyReviewed =
+    proofImage.reviewedById !== null || proofImage.validationStatus === "REJECTED";
+  if (alreadyManuallyReviewed) {
     await markProofExtractionJobFailed(jobId, "Manual review already completed.");
     return { proofImageId, status: "SKIPPED", reason: "reviewed" };
   }
@@ -119,14 +121,22 @@ const processJob = async (jobId: string, proofImageId: string) => {
       { date: entry.date, minutes: entry.minutes },
       proofsState
     );
-       
-    if (PENDING_PROOF_STATUSES.has(entry.validationStatus)) {
-      await updateTrainingEntry(entry.id, { validationStatus: entryValidationStatus as ValidationStatus });
-      
-      // Also update all images for this entry to match the entry's verified status if it passed
+
+    const hasManualReview = allProofs.some((proof: any) => proof.reviewedById !== null);
+    if (!hasManualReview) {
+      if (
+        entry.validationStatus !== entryValidationStatus &&
+        entry.validationStatus !== "REJECTED"
+      ) {
+        await updateTrainingEntry(entry.id, { validationStatus: entryValidationStatus });
+      }
+
+      // If all proof images now satisfy the aggregate check, keep all proofs in sync.
       if (autoVerified) {
-        const { updateProofImagesByEntryId } = await import("@/server/repositories/proof-images");
-        await updateProofImagesByEntryId(entry.id, { validationStatus: "VERIFIED" });
+        await updateProofImagesByEntryId(entry.id, {
+          validationStatus: "VERIFIED",
+          reviewedById: null,
+        });
       }
     }
   }

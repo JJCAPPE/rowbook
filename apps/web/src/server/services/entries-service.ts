@@ -16,7 +16,12 @@ import {
   updateTrainingEntry,
 } from "@/server/repositories/training-entries";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
-import { getProofImageById, updateProofImage, updateProofImageIfPending, updateProofImagesByEntryId } from "@/server/repositories/proof-images";
+import {
+  getProofImageById,
+  updateProofImage,
+  updateProofImageIfPending,
+  updateProofImagesByEntryId,
+} from "@/server/repositories/proof-images";
 import { createAuditLog } from "@/server/repositories/audit-logs";
 import { aggregateWeekForAthlete } from "@/server/services/weekly-service";
 import { evaluateAutoVerification } from "@/server/services/validation-logic";
@@ -51,49 +56,41 @@ export const createEntry = async (athleteId: string, input: {
     throw new Error("Entry date cannot be in the future.");
   }
 
-  // Validate all proof images
-  // We assume frontend uploads valid images.
-  // But strictly we should check ownership.
-  // With multiple images, we iterate.
-  
   if (!input.proofImageIds.length) {
-     throw new Error("At least one proof image is required.");
+    throw new Error("At least one proof image is required.");
   }
 
-  // Optimization: Check first or all. Checking all is safer.
-  // We can just rely on FK constraint or simple check if needed.
-  // For now let's just create the entry, assuming IDs are valid from earlier upload step.
-  // But wait, checking upload status is important.
-  
-  const proofImageId = input.proofImageIds[0]; // Use first for primary checks for now or iterate
-  
-  // Note: Previous logic validated single image. Now we should ideally validate all.
-  // But let's simplify transition by validating at least one, or relying on `create` to fail if IDs invalid?
-  // Prisma `connect` will fail if ID not found. That's good enough for existence.
-  // Ownership check is still good practice.
-  
-  const proofImage = await getProofImageById(proofImageId);
-  if (!proofImage || proofImage.athleteId !== athleteId) {
-    throw new Error("Proof image not found for athlete.");
+  const uniqueProofImageIds = Array.from(new Set(input.proofImageIds));
+  if (uniqueProofImageIds.length !== input.proofImageIds.length) {
+    throw new Error("Duplicate proof images are not allowed.");
   }
-  
-  // Logic for extraction status etc. needs to adapt to multiple images.
-  // If we upload multiple, we likely want to start extraction for ALL of them.
-  // The 'proofOcr' input was from client-side OCR (Tesseract) which we are deprecating/removing in favor of Gemini.
-  // So we can arguably ignore `proofOcr` or apply it only to primary.
-  
-  // Let's adopt a "Pending Extraction" stance for all images.
-  // The Gemini extraction is triggered via jobs or immediate call? 
-  // It seems `proof-extraction.ts` is a job processor.
-  // AND `log-workout-form.tsx` just uploads.
-  // The extraction job should be triggered.
-  
+
+  const proofImages = await Promise.all(
+    uniqueProofImageIds.map((proofImageId) => getProofImageById(proofImageId)),
+  );
+  const hasMissingOrForeignProof = proofImages.some(
+    (proofImage) => !proofImage || proofImage.athleteId !== athleteId,
+  );
+  if (hasMissingOrForeignProof) {
+    throw new Error("One or more proof images are invalid for this athlete.");
+  }
+  const hasUnconfirmedProof = proofImages.some((proofImage) => !proofImage?.uploadedAt);
+  if (hasUnconfirmedProof) {
+    throw new Error("All proof images must be uploaded before submitting.");
+  }
+
+  const primaryProofImageId = uniqueProofImageIds[0] as string;
+  const inlineExtractedFields =
+    uniqueProofImageIds.length === 1
+      ? input.proofOcr?.extractedFields ?? null
+      : null;
+
   let validationStatus: ValidationStatus = "NOT_CHECKED";
-  
-  if (input.proofOcr?.extractedFields) {
-    const { autoVerified, validationStatus: evaluatedStatus } = evaluateAutoVerification(
+
+  if (inlineExtractedFields) {
+    const { validationStatus: evaluatedStatus } = evaluateAutoVerification(
       { date: input.date, minutes: input.minutes },
-      [input.proofOcr.extractedFields as any]
+      [inlineExtractedFields as any],
     );
     validationStatus = evaluatedStatus;
   }
@@ -112,18 +109,18 @@ export const createEntry = async (athleteId: string, input: {
     avgPace,
     avgWatts,
     notes: input.notes ?? null,
-    proofImageIds: input.proofImageIds,
+    proofImageIds: uniqueProofImageIds,
     validationStatus,
     entryStatus: "ACTIVE",
     weekStartAt,
     lockedAt: null,
   });
 
-  if (input.proofOcr?.extractedFields) {
-      await updateProofImageIfPending(proofImageId, {
-        extractedFields: input.proofOcr.extractedFields,
-        validationStatus: validationStatus, // Match the entry status
-      });
+  if (inlineExtractedFields) {
+    await updateProofImageIfPending(primaryProofImageId, {
+      extractedFields: inlineExtractedFields,
+      validationStatus,
+    });
   }
 
   await createAuditLog({

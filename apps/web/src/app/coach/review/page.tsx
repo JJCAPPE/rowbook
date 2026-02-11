@@ -139,6 +139,13 @@ export default function CoachReviewQueuePage() {
               completed
               && !entry.proofReviewedById
               && entry.validationStatus === "REJECTED";
+            const proofImages = (entry.proofs ?? [])
+              .filter((proof) => Boolean(proof.url))
+              .map((proof, index) => ({
+                id: proof.id,
+                src: proof.url,
+                alt: `Workout proof ${index + 1}`,
+              }));
 
             return (
               <div
@@ -206,14 +213,8 @@ export default function CoachReviewQueuePage() {
                         {entry.extractedFields ? (
                           <ProofExtractionFeedback fields={entry.extractedFields} />
                         ) : null}
-                        {entry.proofs && entry.proofs.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {entry.proofs.map((proof, index) => (
-                              <div key={proof.id} className="w-full sm:w-[48%] lg:w-full xl:w-[48%]">
-                                <ProofImageViewer src={proof.url} alt={`Workout proof ${index + 1}`} />
-                              </div>
-                            ))}
-                          </div>
+                        {proofImages.length > 0 ? (
+                          <ProofImageViewer images={proofImages} alt="Workout proof" />
                         ) : entry.proofUrl ? (
                           <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                         ) : (
