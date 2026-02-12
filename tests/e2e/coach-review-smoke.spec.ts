@@ -24,7 +24,7 @@ test.describe("@smoke coach review queue", () => {
   test("coach can review a pending entry", async ({ page }) => {
     await page.goto("/coach/review");
 
-    await expect(page.getByText("Review queue")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Mark verified" }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "Mark verified" }).first().click();
