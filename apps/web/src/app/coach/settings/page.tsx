@@ -1,27 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WeeklyTargetsTable } from "@/components/coach/weekly-targets-table";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FilterChip } from "@/components/ui/filter-chip";
 import { formatWeekRange } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { Badge } from "@/components/ui/badge";
 
-type AthleteOption = {
-  id: string;
-  name: string;
+type ExemptionMode = "NONE" | "WEEK" | "INDEFINITE";
+
+type DraftState = {
+  customMinutes: string;
+  exemptionMode: ExemptionMode;
+  reason: string;
 };
 
-type ExemptionItem = {
-  id: string;
-  athleteId: string;
-  athleteName: string;
-  reason: string | null;
-  isIndefinite?: boolean;
+const getRowToneClass = (draft: DraftState) => {
+  if (draft.exemptionMode === "INDEFINITE") {
+    return "bg-rose-500/5";
+  }
+
+  if (draft.exemptionMode === "WEEK") {
+    return "bg-amber-500/5";
+  }
+
+  if (draft.customMinutes.trim() !== "") {
+    return "bg-green-500/5";
+  }
+
+  return "";
+};
+
+const getExemptionMode = (target: {
+  exemption: { isIndefinite: boolean } | null;
+}): ExemptionMode => {
+  if (!target.exemption) {
+    return "NONE";
+  }
+  return target.exemption.isIndefinite ? "INDEFINITE" : "WEEK";
 };
 
 export default function CoachSettingsPage() {
@@ -39,38 +60,196 @@ export default function CoachSettingsPage() {
   const { data, isLoading, error } = trpc.coach.getWeeklySettings.useQuery(
     weekStartAt ? { weekStartAt } : undefined,
   );
-  const athletes: AthleteOption[] = data?.athletes ?? [];
-  const exemptions: ExemptionItem[] = data?.exemptions ?? [];
-  const [selectedAthlete, setSelectedAthlete] = useState("");
-  const [exemptionReason, setExemptionReason] = useState("");
-  const [isIndefinite, setIsIndefinite] = useState(false);
 
-  const { mutateAsync: saveExemption, isLoading: isSavingExemption } =
-    trpc.coach.setExemption.useMutation({
-      onSuccess: async () => {
-        setSelectedAthlete("");
-        setExemptionReason("");
-        setIsIndefinite(false);
-        await utils.coach.getWeeklySettings.invalidate();
-        await utils.coach.getTeamOverview.invalidate();
-      },
-    });
+  const [draftByAthleteId, setDraftByAthleteId] = useState<Record<string, DraftState>>({});
+  const [savingAthleteId, setSavingAthleteId] = useState<string | null>(null);
+  const [nameQuery, setNameQuery] = useState("");
+  const [filterExempt, setFilterExempt] = useState(false);
+  const [filterWeeklyExempt, setFilterWeeklyExempt] = useState(false);
+  const [filterCustomMinutes, setFilterCustomMinutes] = useState(false);
 
-  const { mutateAsync: removeExemption, isLoading: isRemovingExemption } =
-    trpc.coach.removeExemption.useMutation({
-      onSuccess: async () => {
-        await utils.coach.getWeeklySettings.invalidate();
-        await utils.coach.getTeamOverview.invalidate();
-      },
-    });
+  useEffect(() => {
+    if (!data?.athleteTargets) {
+      return;
+    }
 
-  const { mutateAsync: saveRequirement, isLoading: isSavingRequirement } =
-    trpc.coach.setWeeklyRequirement.useMutation({
-      onSuccess: async () => {
-        await utils.coach.getWeeklySettings.invalidate();
-        await utils.coach.getTeamOverview.invalidate();
-      },
+    const next: Record<string, DraftState> = {};
+
+    for (const target of data.athleteTargets) {
+      next[target.athleteId] = {
+        customMinutes:
+          typeof target.override?.requiredMinutes === "number"
+            ? String(target.override.requiredMinutes)
+            : "",
+        exemptionMode: getExemptionMode(target),
+        reason: target.override?.reason ?? target.exemption?.reason ?? "",
+      };
+    }
+
+    setDraftByAthleteId(next);
+  }, [data]);
+
+  const { mutateAsync: setExemption } = trpc.coach.setExemption.useMutation();
+  const { mutateAsync: removeExemption } = trpc.coach.removeExemption.useMutation();
+  const { mutateAsync: setOverride } =
+    trpc.coach.setAthleteWeeklyRequirementOverride.useMutation();
+  const { mutateAsync: removeOverride } =
+    trpc.coach.removeAthleteWeeklyRequirementOverride.useMutation();
+
+  const setDraft = (
+    athleteId: string,
+    updater: (current: DraftState) => DraftState,
+  ) => {
+    setDraftByAthleteId((prev) => {
+      const current =
+        prev[athleteId] ?? {
+          customMinutes: "",
+          exemptionMode: "NONE",
+          reason: "",
+        };
+      return {
+        ...prev,
+        [athleteId]: updater(current),
+      };
     });
+  };
+
+  const getInitialState = (target: {
+    override: { requiredMinutes: number; reason: string | null } | null;
+    exemption: { isIndefinite: boolean; reason: string | null } | null;
+  }): DraftState => ({
+    customMinutes:
+      typeof target.override?.requiredMinutes === "number"
+        ? String(target.override.requiredMinutes)
+        : "",
+    exemptionMode: getExemptionMode(target),
+    reason: target.override?.reason ?? target.exemption?.reason ?? "",
+  });
+
+  const isRowDirty = (
+    target: {
+      athleteId: string;
+      override: { requiredMinutes: number; reason: string | null } | null;
+      exemption: { isIndefinite: boolean; reason: string | null } | null;
+    },
+    draft: DraftState,
+  ) => {
+    const initial = getInitialState(target);
+    return (
+      initial.customMinutes !== draft.customMinutes ||
+      initial.exemptionMode !== draft.exemptionMode ||
+      initial.reason.trim() !== draft.reason.trim()
+    );
+  };
+
+  const getPreview = (
+    target: { teamRequiredMinutes: number },
+    draft: DraftState,
+  ) => {
+    if (draft.exemptionMode !== "NONE") {
+      return "Exempt";
+    }
+
+    const parsed = Number.parseInt(draft.customMinutes, 10);
+    if (!Number.isNaN(parsed) && draft.customMinutes.trim() !== "") {
+      return `${parsed} min`;
+    }
+
+    return `${target.teamRequiredMinutes} min`;
+  };
+
+  const saveAthleteTarget = async (target: {
+    athleteId: string;
+    override: { id: string } | null;
+    exemption: { id: string } | null;
+  }) => {
+    if (!data) {
+      return;
+    }
+
+    const draft = draftByAthleteId[target.athleteId];
+    if (!draft) {
+      return;
+    }
+
+    const reason = draft.reason.trim();
+    const reasonValue = reason.length > 0 ? reason : undefined;
+
+    setSavingAthleteId(target.athleteId);
+
+    try {
+      if (draft.exemptionMode === "NONE") {
+        if (target.exemption?.id) {
+          await removeExemption({ exemptionId: target.exemption.id });
+        }
+
+        const parsedCustomMinutes = Number.parseInt(draft.customMinutes, 10);
+        const hasCustomMinutes =
+          draft.customMinutes.trim() !== "" && !Number.isNaN(parsedCustomMinutes);
+
+        if (hasCustomMinutes) {
+          if (!data.isCurrentWeek) {
+            throw new Error("Custom minutes can only be set for the current week.");
+          }
+          await setOverride({
+            athleteId: target.athleteId,
+            weekStartAt: data.weekStartAt,
+            requiredMinutes: parsedCustomMinutes,
+            reason: reasonValue,
+          });
+        } else if (target.override?.id) {
+          await removeOverride({ overrideId: target.override.id });
+        }
+      } else {
+        if (target.override?.id) {
+          await removeOverride({ overrideId: target.override.id });
+        }
+
+        await setExemption({
+          athleteId: target.athleteId,
+          weekStartAt: data.weekStartAt,
+          reason: reasonValue,
+          isIndefinite: draft.exemptionMode === "INDEFINITE",
+        });
+      }
+
+      await Promise.all([
+        utils.coach.getWeeklySettings.invalidate(),
+        utils.coach.getTeamOverview.invalidate(),
+      ]);
+    } finally {
+      setSavingAthleteId(null);
+    }
+  };
+
+  const filteredAthleteTargets = useMemo(() => {
+    const targets = data?.athleteTargets ?? [];
+    const query = nameQuery.trim().toLowerCase();
+    const hasTypeFilter = filterExempt || filterWeeklyExempt || filterCustomMinutes;
+
+    return targets.filter((target) => {
+      const draft = draftByAthleteId[target.athleteId] ?? getInitialState(target);
+      const isExempt = draft.exemptionMode !== "NONE";
+      const isWeeklyExempt = draft.exemptionMode === "WEEK";
+      const hasCustom = draft.exemptionMode === "NONE" && draft.customMinutes.trim() !== "";
+
+      const typeMatch =
+        !hasTypeFilter ||
+        (filterExempt && isExempt) ||
+        (filterWeeklyExempt && isWeeklyExempt) ||
+        (filterCustomMinutes && hasCustom);
+
+      const nameMatch = !query || target.athleteName.toLowerCase().includes(query);
+      return typeMatch && nameMatch;
+    });
+  }, [
+    data?.athleteTargets,
+    draftByAthleteId,
+    filterCustomMinutes,
+    filterExempt,
+    filterWeeklyExempt,
+    nameQuery,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -79,7 +258,7 @@ export default function CoachSettingsPage() {
         subtitle={
           data
             ? `Week of ${formatWeekRange(data.weekStartAt, data.weekEndAt)}`
-            : "Set weekly requirements and exemptions."
+            : "Set weekly requirements and athlete exceptions."
         }
         actions={
           data ? (
@@ -90,7 +269,7 @@ export default function CoachSettingsPage() {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      
         <div className="space-y-6">
           {data && <WeeklyTargetsTable teamId={data.teamId} />}
         </div>
@@ -98,114 +277,162 @@ export default function CoachSettingsPage() {
         <Card className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="section-title">Exemptions</p>
-              <p className="text-sm text-default-500">Athletes excluded from weekly totals.</p>
+              <p className="section-title">Athlete exceptions</p>
+              <p className="text-sm text-default-500">
+                Set exemptions for this week or indefinitely, and custom minutes for the current week.
+              </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              disabled={!selectedAthlete || !data || isSavingExemption}
-              onClick={() =>
-                data
-                  ? saveExemption({
-                    athleteId: selectedAthlete,
-                    weekStartAt: data.weekStartAt,
-                    reason: exemptionReason || undefined,
-                    isIndefinite,
-                  })
-                  : null
-              }
-            >
-              {isSavingExemption ? "Saving..." : "Add exemption"}
-            </Button>
+            {data?.isCurrentWeek ? (
+              <Badge tone="info">Current week</Badge>
+            ) : (
+              <Badge tone="pending">Past week</Badge>
+            )}
           </div>
+
+          {!data?.isCurrentWeek ? (
+            <p className="text-xs text-default-500">
+              Custom minutes can only be edited for the current week. Exemptions can still be updated.
+            </p>
+          ) : null}
+
+          {data ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={nameQuery}
+                onChange={(event) => setNameQuery(event.target.value)}
+                placeholder="Search by athlete name"
+                className="min-w-[220px] max-w-[320px]"
+              />
+              <FilterChip isActive={filterExempt} onClick={() => setFilterExempt((prev) => !prev)}>
+                Exempt
+              </FilterChip>
+              <FilterChip
+                isActive={filterWeeklyExempt}
+                onClick={() => setFilterWeeklyExempt((prev) => !prev)}
+              >
+                Weekly exempt
+              </FilterChip>
+              <FilterChip
+                isActive={filterCustomMinutes}
+                onClick={() => setFilterCustomMinutes((prev) => !prev)}
+              >
+                Custom minutes
+              </FilterChip>
+            </div>
+          ) : null}
+
           {isLoading ? (
             <p className="text-sm text-default-500">Loading weekly settings...</p>
           ) : error ? (
             <p className="text-sm text-rose-500">Unable to load settings.</p>
           ) : data ? (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="exemptionAthlete">Athlete</Label>
-                  <select
-                    id="exemptionAthlete"
-                    value={selectedAthlete}
-                    onChange={(event) => setSelectedAthlete(event.target.value)}
-                    className="input-field"
-                  >
-                    <option value="">Select athlete</option>
-                    {athletes.map((athlete) => (
-                      <option key={athlete.id} value={athlete.id}>
-                        {athlete.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="exemptionReason">Reason (optional)</Label>
-                  <Input
-                    id="exemptionReason"
-                    value={exemptionReason}
-                    onChange={(event) => setExemptionReason(event.target.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-2 md:col-span-2">
-                  <input
-                    type="checkbox"
-                    id="isIndefinite"
-                    checked={isIndefinite}
-                    onChange={(e) => setIsIndefinite(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <Label htmlFor="isIndefinite" className="cursor-pointer text-sm font-medium">
-                    Exempt indefinitely
-                  </Label>
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {exemptions.length ? (
-                  exemptions.map((exemption) => (
-                    <div
-                      key={exemption.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-divider/40 bg-content2/70 px-4 py-3"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground">{exemption.athleteName}</p>
-                          {exemption.isIndefinite && (
-                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                              Indefinite
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-default-500">{exemption.reason ?? "No reason"}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        disabled={isRemovingExemption}
-                        onClick={() =>
-                          removeExemption({
-                            athleteId: exemption.athleteId,
-                            weekStartAt: data.weekStartAt,
-                          })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-default-500">No exemptions yet.</p>
-                )}
-              </div>
-            </>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-default-50 text-default-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Athlete</th>
+                    <th className="px-3 py-2 font-medium">Team target</th>
+                    <th className="px-3 py-2 font-medium">Custom minutes</th>
+                    <th className="px-3 py-2 font-medium">Exemption</th>
+                    <th className="px-3 py-2 font-medium">Reason</th>
+                    <th className="px-3 py-2 font-medium">Effective target</th>
+                    <th className="px-3 py-2 font-medium text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-divider">
+                  {filteredAthleteTargets.map((target) => {
+                    const draft =
+                      draftByAthleteId[target.athleteId] ?? getInitialState(target);
+                    const isSaving = savingAthleteId === target.athleteId;
+                    const dirty = isRowDirty(target, draft);
+                    const preview = getPreview(target, draft);
+                    const rowToneClass = getRowToneClass(draft);
+                    const customDisabled =
+                      draft.exemptionMode !== "NONE" || !data.isCurrentWeek;
+
+                    return (
+                      <tr key={target.athleteId} className={rowToneClass}>
+                        <td className="px-3 py-2 font-medium text-foreground">
+                          {target.athleteName}
+                        </td>
+                        <td className="px-3 py-2 text-default-700">
+                          {target.teamRequiredMinutes} min
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            className="max-w-[120px] input-no-spinner"
+                            value={draft.customMinutes}
+                            disabled={customDisabled}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setDraft(target.athleteId, (current) => ({
+                                ...current,
+                                customMinutes: value,
+                                exemptionMode:
+                                  value.trim() === "" ? current.exemptionMode : "NONE",
+                              }));
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            className="input-field min-w-[150px]"
+                            value={draft.exemptionMode}
+                            onChange={(event) => {
+                              const mode = event.target.value as ExemptionMode;
+                              setDraft(target.athleteId, (current) => ({
+                                ...current,
+                                exemptionMode: mode,
+                                customMinutes:
+                                  mode === "NONE" ? current.customMinutes : "",
+                              }));
+                            }}
+                          >
+                            <option value="NONE">None</option>
+                            <option value="WEEK">This week</option>
+                            <option value="INDEFINITE">Indefinite</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            value={draft.reason}
+                            className="min-w-[180px]"
+                            onChange={(event) =>
+                              setDraft(target.athleteId, (current) => ({
+                                ...current,
+                                reason: event.target.value,
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-medium text-foreground">{preview}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!dirty || isSaving}
+                            onClick={() => saveAthleteTarget(target)}
+                          >
+                            {isSaving ? "Saving..." : "Save"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredAthleteTargets.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-6 text-center text-sm text-default-500" colSpan={7}>
+                        No athletes match this filter.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </Card>
-      </div>
     </div>
   );
 }

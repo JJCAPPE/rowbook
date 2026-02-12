@@ -1,10 +1,17 @@
 import { z } from "zod";
-import { ExemptionInputSchema, ValidationStatusSchema, WeeklyRequirementInputSchema } from "@rowbook/shared";
+import {
+  AthleteWeeklyRequirementOverrideInputSchema,
+  ExemptionInputSchema,
+  ValidationStatusSchema,
+  WeeklyRequirementInputSchema,
+} from "@rowbook/shared";
 import { coachProcedure, router } from "@/server/trpc";
 import { getAthleteDetail, getReviewQueue, getTeamOverview, getWeeklySettings } from "@/server/services/coach-service";
 import {
+  removeAthleteWeeklyRequirementOverride,
   getWeeklyRequirementsRange,
   removeExemption,
+  setAthleteWeeklyRequirementOverride,
   setExemption,
   setWeeklyRequirement,
   setWeeklyRequirements,
@@ -66,11 +73,23 @@ export const coachRouter = router({
     .mutation(({ ctx, input }) =>
       setExemption(ctx.session.user.id, input.athleteId, input.weekStartAt, input.reason ?? null, input.isIndefinite),
     ),
-  removeExemption: coachProcedure
-    .input(z.object({ athleteId: z.string(), weekStartAt: z.coerce.date() }))
+  setAthleteWeeklyRequirementOverride: coachProcedure
+    .input(AthleteWeeklyRequirementOverrideInputSchema)
     .mutation(({ ctx, input }) =>
-      removeExemption(ctx.session.user.id, input.athleteId, input.weekStartAt),
+      setAthleteWeeklyRequirementOverride(
+        ctx.session.user.id,
+        input.athleteId,
+        input.weekStartAt,
+        input.requiredMinutes,
+        input.reason ?? null,
+      ),
     ),
+  removeAthleteWeeklyRequirementOverride: coachProcedure
+    .input(z.object({ overrideId: z.string() }))
+    .mutation(({ ctx, input }) => removeAthleteWeeklyRequirementOverride(ctx.session.user.id, input.overrideId)),
+  removeExemption: coachProcedure
+    .input(z.object({ exemptionId: z.string() }))
+    .mutation(({ ctx, input }) => removeExemption(ctx.session.user.id, input.exemptionId)),
   overrideValidationStatus: coachProcedure
     .input(z.object({ entryId: z.string(), status: ValidationStatusSchema, rejectionNote: z.string().optional().nullable() }))
     .mutation(({ ctx, input }) =>

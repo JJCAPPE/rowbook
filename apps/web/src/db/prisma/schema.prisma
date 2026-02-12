@@ -72,6 +72,8 @@ model User {
   auditLogs         AuditLog[]      @relation("AuditActor")
   exemptions        Exemption[]     @relation("ExemptionAthlete")
   exemptionsCreated Exemption[]     @relation("ExemptionCreator")
+  weeklyRequirementOverrides        AthleteWeeklyRequirementOverride[] @relation("WeeklyRequirementOverrideAthlete")
+  weeklyRequirementOverridesCreated AthleteWeeklyRequirementOverride[] @relation("WeeklyRequirementOverrideCreator")
   weeklyAggregates  WeeklyAggregate[] @relation("WeeklyAggregateAthlete")
 }
 
@@ -128,6 +130,23 @@ model Exemption {
   createdByUser User @relation("ExemptionCreator", fields: [createdBy], references: [id])
 
   @@unique([athleteId, weekStartAt])
+}
+
+model AthleteWeeklyRequirementOverride {
+  id              String   @id @default(cuid())
+  athleteId       String
+  weekStartAt     DateTime
+  requiredMinutes Int
+  reason          String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  athlete       User @relation("WeeklyRequirementOverrideAthlete", fields: [athleteId], references: [id])
+  createdByUser User @relation("WeeklyRequirementOverrideCreator", fields: [createdBy], references: [id])
+
+  @@unique([athleteId, weekStartAt])
+  @@index([weekStartAt])
 }
 
 model ProofImage {

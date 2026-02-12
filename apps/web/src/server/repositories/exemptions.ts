@@ -25,6 +25,17 @@ export const upsertExemption = (data: {
     },
   });
 
+export const deleteOtherIndefiniteExemptions = (athleteId: string, keepWeekStartAt: Date) =>
+  prisma.exemption.deleteMany({
+    where: {
+      athleteId,
+      isIndefinite: true,
+      weekStartAt: {
+        not: keepWeekStartAt,
+      },
+    },
+  });
+
 export const getExemption = (athleteId: string, weekStartAt: Date, weekEndAt: Date) => {
   return prisma.exemption.findFirst({
     where: {
@@ -44,6 +55,7 @@ export const getExemption = (athleteId: string, weekStartAt: Date, weekEndAt: Da
         },
       ],
     },
+    orderBy: [{ isIndefinite: "asc" }, { weekStartAt: "desc" }],
   });
 };
 
@@ -75,6 +87,7 @@ export const listExemptionsByWeek = (weekStartAt: Date, weekEndAt: Date, teamId?
         : {}),
     },
     include: { athlete: true },
+    orderBy: [{ athleteId: "asc" }, { isIndefinite: "asc" }, { weekStartAt: "desc" }],
   });
 };
 
@@ -82,10 +95,21 @@ export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Dat
   return prisma.exemption.findMany({
     where: {
       athleteId,
-      weekStartAt: {
-        gte: weekStartAt,
-      },
+      OR: [
+        {
+          weekStartAt: {
+            gte: weekStartAt,
+          },
+        },
+        {
+          isIndefinite: true,
+          weekStartAt: {
+            lt: weekStartAt,
+          },
+        },
+      ],
     },
+    orderBy: [{ isIndefinite: "asc" }, { weekStartAt: "desc" }],
   });
 };
 
@@ -96,5 +120,23 @@ export const deleteExemption = (athleteId: string, weekStartAt: Date) =>
         athleteId,
         weekStartAt,
       },
+    },
+  });
+
+export const getExemptionById = (id: string) =>
+  prisma.exemption.findUnique({
+    where: { id },
+  });
+
+export const deleteExemptionById = (id: string) =>
+  prisma.exemption.delete({
+    where: { id },
+  });
+
+export const deleteIndefiniteExemptionsByAthlete = (athleteId: string) =>
+  prisma.exemption.deleteMany({
+    where: {
+      athleteId,
+      isIndefinite: true,
     },
   });

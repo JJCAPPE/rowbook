@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { MiniTrendChart } from "@/components/ui/mini-trend-chart";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatTile } from "@/components/ui/stat-tile";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -64,6 +65,9 @@ export default function AthleteDashboardPage() {
   const sessions = countedEntries.length;
   const avgHr = dashboard?.avgHr ?? null;
   const goalMinutes = requiredMinutes > 0 ? requiredMinutes : 1;
+  const requirementSource =
+    dashboard?.requirementSource ?? "TEAM_DEFAULT";
+  const requirementReason = dashboard?.requirementReason ?? null;
   const remainingMinutes =
     requiredMinutes > totalMinutes ? requiredMinutes - totalMinutes : 0;
 
@@ -145,7 +149,13 @@ export default function AthleteDashboardPage() {
       <PageHeader
         title="Dashboard"
         subtitle={
-          requiredMinutes
+          requirementSource === "ATHLETE_OVERRIDE"
+            ? `Custom goal: ${requiredMinutes} minutes this week`
+            : requirementSource === "EXEMPT_INDEFINITE"
+              ? "You are exempt indefinitely."
+              : requirementSource === "EXEMPT_WEEK"
+                ? "You are exempt for this week."
+                : requiredMinutes
             ? `Goal: ${requiredMinutes} minutes this week`
             : "Weekly requirement has not been set yet."
         }
@@ -161,11 +171,24 @@ export default function AthleteDashboardPage() {
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div className="space-y-2">
               <p className="section-title">Weekly progress</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {requirementSource === "ATHLETE_OVERRIDE" ? (
+                  <Badge tone="info">Custom target</Badge>
+                ) : null}
+                {requirementSource === "EXEMPT_WEEK" ? (
+                  <Badge tone="neutral">Week exemption</Badge>
+                ) : null}
+                {requirementSource === "EXEMPT_INDEFINITE" ? (
+                  <Badge tone="neutral">Indefinite exemption</Badge>
+                ) : null}
+              </div>
               <p className="text-2xl font-semibold text-foreground">
                 {totalMinutes} / {requiredMinutes} min
               </p>
               <p className="text-sm text-default-500">
-                {requiredMinutes === 0
+                {requirementSource === "EXEMPT_WEEK" || requirementSource === "EXEMPT_INDEFINITE"
+                  ? requirementReason || "You are exempt from minutes this week."
+                  : requiredMinutes === 0
                   ? "Waiting for a weekly requirement."
                   : remainingMinutes > 0
                     ? `${remainingMinutes} min remaining`

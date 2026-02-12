@@ -3,6 +3,7 @@ import {
   PENDING_PROOF_STATUSES,
   ProofExtractionStatus,
   ValidationStatus,
+  getWeekStartAt,
   getWeekEndAt,
 } from "@rowbook/shared";
 import type { TrainingEntry } from "@rowbook/shared";
@@ -11,11 +12,12 @@ import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/service
 import { listEntriesByAthlete, listEntriesByTeamWeek, listEntriesForReview } from "@/server/repositories/training-entries";
 import { listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { listTeamAthletes, getUserById } from "@/server/repositories/users";
-import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
-import { listExemptionsByWeek } from "@/server/repositories/exemptions";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
-import { getWeekStartAt } from "@rowbook/shared";
+import {
+  getEffectiveWeeklyTargetsForTeamWeek,
+  type WeeklyRequirementSource,
+} from "@/server/services/weekly-target-service";
 
 type TeamLeaderboardRow = {
   id: string;
@@ -31,6 +33,8 @@ type TeamLeaderboardRow = {
   totalDistance: number;
   avgHr: number | null;
   previousWeekMinutes: number;
+  requiredMinutes: number;
+  requirementSource: WeeklyRequirementSource;
 };
 
 type ReviewEntry = {
@@ -85,10 +89,10 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
   const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt) : getWeekStartAt(new Date());
   const weekEndAt = getWeekEndAt(week);
 
-  const [leaderboardResult, entries, requirement, teamStats, teamTrend] = await Promise.all([
+  const [leaderboardResult, entries, targetContext, teamStats, teamTrend] = await Promise.all([
     getTeamLeaderboard(team.id, week),
     listEntriesByTeamWeek(team.id, week, weekEndAt),
-    getWeeklyRequirement(team.id, week, weekEndAt),
+    getEffectiveWeeklyTargetsForTeamWeek(team.id, week),
     getTeamStats(team.id, week),
     getTeamTrend(team.id, week, 6),
   ]);
@@ -114,7 +118,7 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
     teamId: team.id,
     weekStartAt: week,
     weekEndAt,
-    requiredMinutes: requirement?.requiredMinutes ?? 0,
+    requiredMinutes: targetContext.teamRequiredMinutes,
     summary,
     leaderboard,
     pendingProofCount,
@@ -262,25 +266,73 @@ export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date
 
   const effectiveWeekStartAt = getWeekStartAt(inputWeekStartAt ?? new Date());
   const weekEndAt = getWeekEndAt(effectiveWeekStartAt);
+  const currentWeekStartAt = getWeekStartAt(new Date());
+  const isCurrentWeek = currentWeekStartAt.getTime() === effectiveWeekStartAt.getTime();
 
-  const [requirement, exemptions, activeAthletes] = await Promise.all([
-    getWeeklyRequirement(team.id, effectiveWeekStartAt, weekEndAt),
-    listExemptionsByWeek(effectiveWeekStartAt, weekEndAt, team.id),
+  const [targetContext, activeAthletes] = await Promise.all([
+    getEffectiveWeeklyTargetsForTeamWeek(team.id, effectiveWeekStartAt),
     listTeamAthletes(team.id),
   ]);
+
+  const athleteTargets = activeAthletes.map((athlete) => {
+    const exemption = targetContext.exemptionsByAthlete.get(athlete.id) ?? null;
+    const override = targetContext.overridesByAthlete.get(athlete.id) ?? null;
+    const effective = targetContext.resolveForAthlete(athlete.id);
+
+    return {
+      athleteId: athlete.id,
+      athleteName: athlete.name ?? "Unknown",
+      teamRequiredMinutes: targetContext.teamRequiredMinutes,
+      effectiveRequiredMinutes: effective.requiredMinutes,
+      isExempt: effective.isExempt,
+      requirementSource: effective.source,
+      reason: effective.reason,
+      exemption: exemption
+        ? {
+            id: exemption.id,
+            reason: exemption.reason,
+            isIndefinite: exemption.isIndefinite,
+          }
+        : null,
+      override: override
+        ? {
+            id: override.id,
+            requiredMinutes: override.requiredMinutes,
+            reason: override.reason,
+          }
+        : null,
+    };
+  });
+
+  const exemptions = athleteTargets
+    .filter((target) => target.exemption)
+    .map((target) => ({
+      id: target.exemption!.id,
+      athleteId: target.athleteId,
+      athleteName: target.athleteName,
+      reason: target.exemption!.reason,
+      isIndefinite: target.exemption!.isIndefinite,
+    }));
+
+  const overrides = athleteTargets
+    .filter((target) => target.override)
+    .map((target) => ({
+      id: target.override!.id,
+      athleteId: target.athleteId,
+      athleteName: target.athleteName,
+      requiredMinutes: target.override!.requiredMinutes,
+      reason: target.override!.reason,
+    }));
 
   return {
     teamId: team.id,
     weekStartAt: effectiveWeekStartAt,
     weekEndAt,
-    requiredMinutes: requirement?.requiredMinutes,
-    exemptions: exemptions.map((e) => ({
-      id: e.id,
-      athleteId: e.athleteId,
-      athleteName: e.athlete.name ?? "Unknown",
-      reason: e.reason,
-      isIndefinite: (e as any).isIndefinite,
-    })),
+    isCurrentWeek,
+    requiredMinutes: targetContext.teamRequiredMinutes,
+    exemptions,
+    overrides,
+    athleteTargets,
     athletes: activeAthletes.map((a) => ({
       id: a.id,
       name: a.name ?? "Unknown",

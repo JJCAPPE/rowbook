@@ -144,7 +144,7 @@ export function WeeklyTargetsTable({ teamId, className }: WeeklyTargetsTableProp
                                         <Input
                                             type="number"
                                             min="0"
-                                            className="max-w-[120px]"
+                                            className="max-w-[120px] input-no-spinner"
                                             value={String(week.requiredMinutes)}
                                             onChange={(e) => handleMinuteChange(index, e.target.value)}
                                         />

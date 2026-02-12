@@ -2,12 +2,17 @@ import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, n
 import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
-import { getWeeklyRequirement, listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
-import { getExemption, listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
+import { listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
+import { listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
+import { listAthleteWeeklyRequirementOverridesByAthleteSince } from "@/server/repositories/athlete-weekly-requirement-overrides";
 import { getWeeklyAggregate, listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
+import {
+  getEffectiveWeeklyTarget,
+  resolveEffectiveWeeklyTarget,
+} from "@/server/services/weekly-target-service";
 
 const attachProofs = async <T extends { proofImages: Array<{ id: string; extractedFields: any }> }>(
   entries: T[],
@@ -64,19 +69,18 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     weekStartAt ?? nowInZone(),
   );
 
-  const [entries, requirement, exemption, aggregate] = await Promise.all([
+  const [entries, aggregate, effectiveTarget] = await Promise.all([
     listEntriesByAthleteWeek(athleteId, normalizedWeekStart, weekEndAt),
-    getWeeklyRequirement(teamId, normalizedWeekStart, weekEndAt),
-    getExemption(athleteId, normalizedWeekStart, weekEndAt),
     getWeeklyAggregate(athleteId, normalizedWeekStart, weekEndAt),
+    getEffectiveWeeklyTarget(teamId, athleteId, normalizedWeekStart),
   ]);
 
   const totals = aggregate ?? computeTotals(entries);
   const avgHr = getWeightedAvgHr(
     entries.filter((entry) => entry.validationStatus !== "REJECTED"),
   );
-  const requiredMinutes = requirement?.requiredMinutes ?? 0;
-  const status: WeeklyStatus = exemption
+  const requiredMinutes = effectiveTarget.requiredMinutes;
+  const status: WeeklyStatus = effectiveTarget.isExempt
     ? "EXEMPT"
     : totals.totalMinutes >= requiredMinutes
       ? "MET"
@@ -92,6 +96,8 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     hasHrData: totals.hasHrData,
     avgHr,
     status,
+    requirementSource: effectiveTarget.source,
+    requirementReason: effectiveTarget.reason,
     entries: entriesWithProofs.map(e => ({
       ...e,
       proofs: e.proofs,
@@ -217,32 +223,49 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
     earliestWeekStart = getPreviousWeekStartAt(earliestWeekStart);
   }
 
-  const [entriesResult, requirementsResult, exemptionsResult] = await Promise.all([
+  const [entriesResult, requirementsResult, exemptionsResult, overridesResult] = await Promise.all([
     listEntriesByAthleteSinceWeekStart(athleteId, earliestWeekStart),
     listWeeklyRequirementsByTeamSince(teamId, earliestWeekStart),
     listExemptionsByAthleteSince(athleteId, earliestWeekStart),
+    listAthleteWeeklyRequirementOverridesByAthleteSince(athleteId, earliestWeekStart),
   ]);
 
   const entries = entriesResult as TrainingEntry[];
+  const overrides = overridesResult as Array<{
+    id: string;
+    athleteId: string;
+    weekStartAt: Date;
+    requiredMinutes: number;
+    reason: string | null;
+  }>;
   const requirementsByWeek = new Map(
     requirementsResult.map((requirement) => [
-      requirement.weekStartAt.toISOString(),
+      getWeekKey(requirement.weekStartAt),
       requirement.requiredMinutes,
     ]),
   );
-  const exemptionsByWeek = new Set(
-    exemptionsResult.map((exemption) => exemption.weekStartAt.toISOString()),
+  const weeklyExemptionsByWeek = new Map(
+    exemptionsResult
+      .filter((exemption) => !exemption.isIndefinite)
+      .map((exemption) => [getWeekKey(exemption.weekStartAt), exemption]),
+  );
+  const indefiniteExemptions = exemptionsResult
+    .filter((exemption) => exemption.isIndefinite)
+    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
+  const overridesByWeek = new Map(
+    overrides.map((override) => [getWeekKey(override.weekStartAt), override]),
   );
 
   const weeksByKey = new Map<string, { weekStartAt: Date; entries: TrainingEntry[] }>();
 
   for (const entry of entries) {
-    const key = entry.weekStartAt.toISOString();
+    const key = getWeekKey(entry.weekStartAt);
+    const normalizedWeekStart = getWeekRange(entry.weekStartAt).weekStartAt;
     const current = weeksByKey.get(key);
     if (current) {
       current.entries.push(entry);
     } else {
-      weeksByKey.set(key, { weekStartAt: entry.weekStartAt, entries: [entry] });
+      weeksByKey.set(key, { weekStartAt: normalizedWeekStart, entries: [entry] });
     }
   }
   
@@ -274,11 +297,22 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
         }
       }
 
-      const weekKey = weekStartAt.toISOString();
-      const requiredMinutes = requirementsByWeek.get(weekKey) ?? 0;
-      const status: WeeklyStatus = exemptionsByWeek.has(weekKey)
+      const weekKey = getWeekKey(weekStartAt);
+      const weekEndAt = getWeekEndAt(weekStartAt);
+      const weeklyExemption = weeklyExemptionsByWeek.get(weekKey) ?? null;
+      const indefiniteExemption = indefiniteExemptions.find(
+        (exemption) => exemption.weekStartAt < weekEndAt,
+      ) ?? null;
+      const exemption = weeklyExemption ?? indefiniteExemption;
+      const override = overridesByWeek.get(weekKey) ?? null;
+      const effectiveTarget = resolveEffectiveWeeklyTarget(
+        requirementsByWeek.get(weekKey) ?? 0,
+        exemption,
+        override,
+      );
+      const status: WeeklyStatus = effectiveTarget.isExempt
         ? "EXEMPT"
-        : totalMinutes >= requiredMinutes
+        : totalMinutes >= effectiveTarget.requiredMinutes
           ? "MET"
           : "NOT_MET";
 
@@ -288,10 +322,13 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
 
       return {
         weekStartAt,
-        weekEndAt: getWeekEndAt(weekStartAt),
+        weekEndAt,
         totalMinutes,
+        requiredMinutes: effectiveTarget.requiredMinutes,
         status,
         hasHrData,
+        requirementSource: effectiveTarget.source,
+        requirementReason: effectiveTarget.reason,
         activityTypes: Array.from(activityTypes),
         entries: sortedEntries.map(e => {
             const proofs = proofMap.get(e.id) ?? [];
