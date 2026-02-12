@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WeeklyTargetsTable } from "@/components/coach/weekly-targets-table";
 import { Input } from "@/components/ui/input";
+import { FilterChip } from "@/components/ui/filter-chip";
 import { formatWeekRange } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,22 @@ type DraftState = {
   customMinutes: string;
   exemptionMode: ExemptionMode;
   reason: string;
+};
+
+const getRowToneClass = (draft: DraftState) => {
+  if (draft.exemptionMode === "INDEFINITE") {
+    return "bg-rose-500/5";
+  }
+
+  if (draft.exemptionMode === "WEEK") {
+    return "bg-amber-500/5";
+  }
+
+  if (draft.customMinutes.trim() !== "") {
+    return "bg-green-500/5";
+  }
+
+  return "";
 };
 
 const getExemptionMode = (target: {
@@ -46,6 +63,10 @@ export default function CoachSettingsPage() {
 
   const [draftByAthleteId, setDraftByAthleteId] = useState<Record<string, DraftState>>({});
   const [savingAthleteId, setSavingAthleteId] = useState<string | null>(null);
+  const [nameQuery, setNameQuery] = useState("");
+  const [filterExempt, setFilterExempt] = useState(false);
+  const [filterWeeklyExempt, setFilterWeeklyExempt] = useState(false);
+  const [filterCustomMinutes, setFilterCustomMinutes] = useState(false);
 
   useEffect(() => {
     if (!data?.athleteTargets) {
@@ -201,6 +222,35 @@ export default function CoachSettingsPage() {
     }
   };
 
+  const filteredAthleteTargets = useMemo(() => {
+    const targets = data?.athleteTargets ?? [];
+    const query = nameQuery.trim().toLowerCase();
+    const hasTypeFilter = filterExempt || filterWeeklyExempt || filterCustomMinutes;
+
+    return targets.filter((target) => {
+      const draft = draftByAthleteId[target.athleteId] ?? getInitialState(target);
+      const isExempt = draft.exemptionMode !== "NONE";
+      const isWeeklyExempt = draft.exemptionMode === "WEEK";
+      const hasCustom = draft.exemptionMode === "NONE" && draft.customMinutes.trim() !== "";
+
+      const typeMatch =
+        !hasTypeFilter ||
+        (filterExempt && isExempt) ||
+        (filterWeeklyExempt && isWeeklyExempt) ||
+        (filterCustomMinutes && hasCustom);
+
+      const nameMatch = !query || target.athleteName.toLowerCase().includes(query);
+      return typeMatch && nameMatch;
+    });
+  }, [
+    data?.athleteTargets,
+    draftByAthleteId,
+    filterCustomMinutes,
+    filterExempt,
+    filterWeeklyExempt,
+    nameQuery,
+  ]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -245,6 +295,32 @@ export default function CoachSettingsPage() {
             </p>
           ) : null}
 
+          {data ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={nameQuery}
+                onChange={(event) => setNameQuery(event.target.value)}
+                placeholder="Search by athlete name"
+                className="min-w-[220px] max-w-[320px]"
+              />
+              <FilterChip isActive={filterExempt} onClick={() => setFilterExempt((prev) => !prev)}>
+                Exempt
+              </FilterChip>
+              <FilterChip
+                isActive={filterWeeklyExempt}
+                onClick={() => setFilterWeeklyExempt((prev) => !prev)}
+              >
+                Weekly exempt
+              </FilterChip>
+              <FilterChip
+                isActive={filterCustomMinutes}
+                onClick={() => setFilterCustomMinutes((prev) => !prev)}
+              >
+                Custom minutes
+              </FilterChip>
+            </div>
+          ) : null}
+
           {isLoading ? (
             <p className="text-sm text-default-500">Loading weekly settings...</p>
           ) : error ? (
@@ -264,17 +340,18 @@ export default function CoachSettingsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-divider">
-                  {data.athleteTargets.map((target) => {
+                  {filteredAthleteTargets.map((target) => {
                     const draft =
                       draftByAthleteId[target.athleteId] ?? getInitialState(target);
                     const isSaving = savingAthleteId === target.athleteId;
                     const dirty = isRowDirty(target, draft);
                     const preview = getPreview(target, draft);
+                    const rowToneClass = getRowToneClass(draft);
                     const customDisabled =
                       draft.exemptionMode !== "NONE" || !data.isCurrentWeek;
 
                     return (
-                      <tr key={target.athleteId}>
+                      <tr key={target.athleteId} className={rowToneClass}>
                         <td className="px-3 py-2 font-medium text-foreground">
                           {target.athleteName}
                         </td>
@@ -285,7 +362,7 @@ export default function CoachSettingsPage() {
                           <Input
                             type="number"
                             min="0"
-                            className="max-w-[120px]"
+                            className="max-w-[120px] input-no-spinner"
                             value={draft.customMinutes}
                             disabled={customDisabled}
                             onChange={(event) => {
@@ -344,6 +421,13 @@ export default function CoachSettingsPage() {
                       </tr>
                     );
                   })}
+                  {filteredAthleteTargets.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-6 text-center text-sm text-default-500" colSpan={7}>
+                        No athletes match this filter.
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
