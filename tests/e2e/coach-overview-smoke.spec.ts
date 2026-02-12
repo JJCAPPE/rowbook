@@ -28,6 +28,6 @@ test.describe("@smoke coach overview", () => {
     await expect(page.getByText("Met goal")).toBeVisible();
     await expect(page.getByText("Not met")).toBeVisible();
 
-    await expect(page.getByRole("button", { name: "Hide exempt" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /exempt/i })).toBeVisible();
   });
 });

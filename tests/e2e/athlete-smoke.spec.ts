@@ -24,13 +24,13 @@ test.describe("@smoke athlete flow", () => {
   test("athlete can view dashboard, history and leaderboard", async ({ page }) => {
     await page.goto("/athlete");
 
-    await expect(page.getByText("Dashboard")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
     await expect(page.getByText("Recent entries")).toBeVisible();
 
     await page.goto("/athlete/history");
-    await expect(page.getByText("Weekly history")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly history" })).toBeVisible();
 
     await page.goto("/athlete/leaderboard");
-    await expect(page.getByText("Weekly leaderboard")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly leaderboard" })).toBeVisible();
   });
 });
