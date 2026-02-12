@@ -219,7 +219,7 @@ export default function CoachSettingsPage() {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      
         <div className="space-y-6">
           {data && <WeeklyTargetsTable teamId={data.teamId} />}
         </div>
@@ -349,7 +349,6 @@ export default function CoachSettingsPage() {
             </div>
           ) : null}
         </Card>
-      </div>
     </div>
   );
 }

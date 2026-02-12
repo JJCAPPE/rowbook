@@ -231,6 +231,13 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
   ]);
 
   const entries = entriesResult as TrainingEntry[];
+  const overrides = overridesResult as Array<{
+    id: string;
+    athleteId: string;
+    weekStartAt: Date;
+    requiredMinutes: number;
+    reason: string | null;
+  }>;
   const requirementsByWeek = new Map(
     requirementsResult.map((requirement) => [
       getWeekKey(requirement.weekStartAt),
@@ -246,7 +253,7 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
     .filter((exemption) => exemption.isIndefinite)
     .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
   const overridesByWeek = new Map(
-    overridesResult.map((override) => [getWeekKey(override.weekStartAt), override]),
+    overrides.map((override) => [getWeekKey(override.weekStartAt), override]),
   );
 
   const weeksByKey = new Map<string, { weekStartAt: Date; entries: TrainingEntry[] }>();

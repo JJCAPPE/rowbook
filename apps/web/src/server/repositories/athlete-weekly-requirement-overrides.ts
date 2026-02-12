@@ -1,5 +1,19 @@
 import { prisma } from "@/db/client";
 
+const getOverrideDelegate = () =>
+  (prisma as unknown as { athleteWeeklyRequirementOverride?: any })
+    .athleteWeeklyRequirementOverride;
+
+const requireOverrideDelegate = () => {
+  const delegate = getOverrideDelegate();
+  if (!delegate) {
+    throw new Error(
+      "Athlete weekly override model is unavailable in Prisma client. Run prisma generate and restart the server.",
+    );
+  }
+  return delegate;
+};
+
 export const upsertAthleteWeeklyRequirementOverride = (data: {
   athleteId: string;
   weekStartAt: Date;
@@ -7,7 +21,7 @@ export const upsertAthleteWeeklyRequirementOverride = (data: {
   reason: string | null;
   createdBy: string;
 }) =>
-  prisma.athleteWeeklyRequirementOverride.upsert({
+  requireOverrideDelegate().upsert({
     where: {
       athleteId_weekStartAt: {
         athleteId: data.athleteId,
@@ -26,8 +40,12 @@ export const getAthleteWeeklyRequirementOverride = (
   athleteId: string,
   weekStartAt: Date,
   weekEndAt: Date,
-) =>
-  prisma.athleteWeeklyRequirementOverride.findFirst({
+) => {
+  const delegate = getOverrideDelegate();
+  if (!delegate) {
+    return Promise.resolve(null);
+  }
+  return delegate.findFirst({
     where: {
       athleteId,
       weekStartAt: {
@@ -36,13 +54,18 @@ export const getAthleteWeeklyRequirementOverride = (
       },
     },
   });
+};
 
 export const listAthleteWeeklyRequirementOverridesByWeek = (
   weekStartAt: Date,
   weekEndAt: Date,
   teamId?: string,
-) =>
-  prisma.athleteWeeklyRequirementOverride.findMany({
+) => {
+  const delegate = getOverrideDelegate();
+  if (!delegate) {
+    return Promise.resolve([]);
+  }
+  return delegate.findMany({
     where: {
       weekStartAt: {
         gte: weekStartAt,
@@ -62,12 +85,17 @@ export const listAthleteWeeklyRequirementOverridesByWeek = (
       athlete: true,
     },
   });
+};
 
 export const listAthleteWeeklyRequirementOverridesByAthleteSince = (
   athleteId: string,
   weekStartAt: Date,
-) =>
-  prisma.athleteWeeklyRequirementOverride.findMany({
+) => {
+  const delegate = getOverrideDelegate();
+  if (!delegate) {
+    return Promise.resolve([]);
+  }
+  return delegate.findMany({
     where: {
       athleteId,
       weekStartAt: {
@@ -75,9 +103,10 @@ export const listAthleteWeeklyRequirementOverridesByAthleteSince = (
       },
     },
   });
+};
 
 export const deleteAthleteWeeklyRequirementOverrideById = (id: string) =>
-  prisma.athleteWeeklyRequirementOverride.delete({
+  requireOverrideDelegate().delete({
     where: { id },
   });
 
@@ -85,7 +114,7 @@ export const deleteAthleteWeeklyRequirementOverrideByAthleteWeek = (
   athleteId: string,
   weekStartAt: Date,
 ) =>
-  prisma.athleteWeeklyRequirementOverride.delete({
+  requireOverrideDelegate().delete({
     where: {
       athleteId_weekStartAt: {
         athleteId,
