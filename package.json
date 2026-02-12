@@ -14,16 +14,30 @@
         "prisma:generate": "npm --workspace apps/web run prisma:generate",
         "prisma:migrate": "npm --workspace apps/web run prisma:migrate",
         "postinstall": "npm --workspace apps/web run prisma:generate",
-        "test": "node --test --experimental-strip-types",
-        "test:unit": "node --test --experimental-strip-types tests/unit/*.test.ts",
-        "test:integration": "node --test --experimental-strip-types tests/integration/*.test.ts",
-        "test:e2e": "node --test --experimental-strip-types tests/e2e/*.test.ts"
+        "test": "vitest run --project unit-node --project component-jsdom",
+        "test:unit": "vitest run --project unit-node",
+        "test:component": "vitest run --project component-jsdom",
+        "test:integration": "node scripts/test/run-vitest-integration.mjs",
+        "test:e2e": "playwright test",
+        "test:manual:proof-extraction": "npx tsx --env-file=.env scripts/manual/proof-extraction.manual.ts",
+        "test:manual:recap-email": "npx tsx --env-file=.env scripts/manual/test-recap-email.manual.ts",
+        "test:manual:recap-html": "npx tsx --env-file=.env scripts/manual/test-recap-html.manual.ts",
+        "test:coverage": "vitest run --coverage"
     },
     "devDependencies": {
+        "@playwright/test": "^1.56.1",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.0",
+        "@testing-library/user-event": "^14.6.1",
+        "@vitest/coverage-v8": "^3.2.4",
         "@types/luxon": "^3.7.1",
         "@types/nodemailer": "^7.0.5",
+        "jsdom": "^26.1.0",
         "next": "^14.2.35",
-        "typescript": "^5.4.5"
+        "pg": "^8.16.3",
+        "testcontainers": "^11.8.1",
+        "typescript": "^5.4.5",
+        "vitest": "^3.2.4"
     },
     "type": "module",
     "dependencies": {
