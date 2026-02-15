@@ -5,7 +5,13 @@ import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ACTIVITY_TYPE_LABELS, ActivityTypeValues } from "@rowbook/shared";
+import {
+  ACTIVITY_TYPE_LABELS,
+  ActivityTypeValues,
+  ALLOWED_MIME_TYPES,
+  MAX_UPLOAD_SIZE_BYTES,
+  type ProofExtractedFields,
+} from "@rowbook/shared";
 
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { Button } from "@/components/ui/button";
@@ -14,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { getWorkoutUploadErrorMessage } from "@/lib/workout-upload-errors";
 
 const optionalNumber = z.preprocess(
   (value) => (value === "" || value === null ? undefined : value),
@@ -109,12 +116,41 @@ const uploadFileWithProgress = (
     request.send(file);
   });
 
-const parseNumberValue = (value: unknown) => {
-  if (value === "" || value === null || value === undefined) {
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const sanitizeExtractedFields = (value: unknown): ProofExtractedFields | null => {
+  if (!value || typeof value !== "object") {
     return null;
   }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+
+  const source = value as Record<string, unknown>;
+  const sanitized: ProofExtractedFields = {};
+
+  if (typeof source.date === "string") {
+    const trimmedDate = source.date.trim();
+    if (DATE_ONLY_PATTERN.test(trimmedDate)) {
+      sanitized.date = trimmedDate;
+    }
+  }
+
+  if (typeof source.minutes === "number" && Number.isFinite(source.minutes) && source.minutes > 0) {
+    sanitized.minutes = Math.round(source.minutes);
+  }
+
+  if (
+    typeof source.distance === "number" &&
+    Number.isFinite(source.distance) &&
+    source.distance > 0 &&
+    source.distance <= 500
+  ) {
+    sanitized.distance = Number(source.distance.toFixed(3));
+  }
+
+  if (typeof source.avgHr === "number" && Number.isFinite(source.avgHr) && source.avgHr > 0) {
+    sanitized.avgHr = Math.round(source.avgHr);
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
 };
 
 export const LogWorkoutForm = () => {
@@ -136,7 +172,7 @@ export const LogWorkoutForm = () => {
     watch,
     setValue,
     reset,
-    formState: { errors, isSubmitting, dirtyFields },
+    formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -151,14 +187,12 @@ export const LogWorkoutForm = () => {
     trpc.proof.extractFromProof.useMutation();
   const { mutateAsync: createEntry } = trpc.athlete.createEntry.useMutation();
 
-  const proof = watch("proof");
   const activityType = watch("activityType");
-  const proofRegister = register("proof");
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
-  const [firstExtractedFields, setFirstExtractedFields] = useState<any | null>(
-    null,
-  );
-  const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
+  const [firstExtractedFields, setFirstExtractedFields] =
+    useState<ProofExtractedFields | null>(
+      null,
+    );
 
   const simulateProgress = (
     setProgress: (val: number | ((prev: number) => number)) => void,
@@ -183,7 +217,6 @@ export const LogWorkoutForm = () => {
   const onSubmit = async (values: FormValues) => {
     setSubmitted(false);
     setSubmitError(null);
-    setExtractionStatus(null);
 
     // We expect files to be already uploaded
     if (uploadedIds.length === 0) {
@@ -229,14 +262,11 @@ export const LogWorkoutForm = () => {
       reset({ ...defaultValues, date: getTodayString() });
       setPreviewUrls([]);
       setUploadedIds([]);
+      setFirstExtractedFields(null);
       setProofInputKey((current) => current + 1);
       setSubmitted(true);
     } catch (error) {
-      if (error instanceof Error) {
-        setSubmitError(error.message);
-      } else {
-        setSubmitError("Unable to save entry. Please try again.");
-      }
+      setSubmitError(getWorkoutUploadErrorMessage(error, "submit"));
     } finally {
       if (progressInterval) clearInterval(progressInterval);
       setIsSaving(false);
@@ -248,7 +278,9 @@ export const LogWorkoutForm = () => {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
     setSubmitError(null);
+    setFirstExtractedFields(null);
 
     const newIds: string[] = [];
     const newUrls: string[] = [];
@@ -260,13 +292,22 @@ export const LogWorkoutForm = () => {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+          throw new Error("File exceeds maximum size.");
+        }
+
+        const mimeType = file.type.toLowerCase();
+        if (!ALLOWED_MIME_TYPES.includes(mimeType as (typeof ALLOWED_MIME_TYPES)[number])) {
+          throw new Error("Unsupported file type.");
+        }
+
         // Enhance preview
         newUrls.push(URL.createObjectURL(file));
 
         const upload = await createUploadUrl({
           fileName: file.name,
           fileSize: file.size,
-          mimeType: file.type as "image/jpeg" | "image/png" | "image/webp",
+          mimeType: mimeType as "image/jpeg" | "image/png" | "image/webp",
         });
 
         await uploadFileWithProgress(upload.uploadUrl, file, (progress) => {
@@ -288,34 +329,29 @@ export const LogWorkoutForm = () => {
             const extracted = await extractFromProof({
               proofImageId: upload.proofImageId,
             });
-            console.log("Extracted Data for Form Population:", extracted);
-            setFirstExtractedFields(extracted);
+            const sanitizedExtracted = sanitizeExtractedFields(extracted);
+            setFirstExtractedFields(sanitizedExtracted);
 
-            if (extracted.date) {
-              console.log("Setting date to:", extracted.date);
-              setValue("date", extracted.date, {
+            if (sanitizedExtracted?.date) {
+              setValue("date", sanitizedExtracted.date, {
                 shouldValidate: true,
                 shouldDirty: true,
               });
             }
-            if (extracted.minutes) {
-              const flooredMinutes = Math.floor(extracted.minutes);
-              console.log("Setting minutes to:", flooredMinutes);
-              setValue("minutes", flooredMinutes, {
+            if (sanitizedExtracted?.minutes) {
+              setValue("minutes", sanitizedExtracted.minutes, {
                 shouldValidate: true,
                 shouldDirty: true,
               });
             }
-            if (extracted.distance) {
-              console.log("Setting distance to:", extracted.distance);
-              setValue("distanceKm", extracted.distance, {
+            if (sanitizedExtracted?.distance) {
+              setValue("distanceKm", sanitizedExtracted.distance, {
                 shouldValidate: true,
                 shouldDirty: true,
               });
             }
-            if (extracted.avgHr) {
-              console.log("Setting avgHr to:", extracted.avgHr);
-              setValue("avgHr", extracted.avgHr, {
+            if (sanitizedExtracted?.avgHr) {
+              setValue("avgHr", sanitizedExtracted.avgHr, {
                 shouldValidate: true,
                 shouldDirty: true,
               });
@@ -325,11 +361,8 @@ export const LogWorkoutForm = () => {
             extractInterval = null;
             setExtractionProgress(100);
             await new Promise((r) => setTimeout(r, 400));
-          } catch (e) {
-            console.error("Extraction failed", e);
-            setSubmitError(
-              "Auto-extraction failed. Please enter details manually.",
-            );
+          } catch (error) {
+            setSubmitError(getWorkoutUploadErrorMessage(error, "extract"));
           } finally {
             if (extractInterval) clearInterval(extractInterval);
             setIsExtracting(false);
@@ -340,8 +373,8 @@ export const LogWorkoutForm = () => {
 
       setUploadedIds([...currentIds, ...newIds]);
       setPreviewUrls([...currentUrls, ...newUrls]);
-    } catch (e) {
-      setSubmitError("Failed to upload image(s).");
+    } catch (error) {
+      setSubmitError(getWorkoutUploadErrorMessage(error, "upload"));
     } finally {
       setIsUploading(false);
     }
