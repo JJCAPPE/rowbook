@@ -23,6 +23,15 @@ export const setGenAI = (instance: GoogleGenerativeAI) => {
   genAI = instance;
 };
 
+type GeminiProofExtraction = {
+  date: string | null;
+  minutes: number | null;
+  distance: number | null;
+  avgHr: number | null;
+  confidence: number;
+  rejectionReason: string | null;
+};
+
 const getGenAI = () => {
   if (genAI) return genAI;
   
@@ -75,10 +84,43 @@ const verificationSchema: Schema = {
 };
 
 export const extractProofWithGemini = async (imageBuffer: Buffer) => {
+  return extractProofWithGeminiBatch([imageBuffer]);
+};
+
+const detectImageMimeType = (imageBuffer: Buffer): string => {
+  if (imageBuffer.length >= 8 && imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) {
+    return "image/png";
+  }
+
+  if (
+    imageBuffer.length >= 3 &&
+    imageBuffer[0] === 0xff &&
+    imageBuffer[1] === 0xd8 &&
+    imageBuffer[2] === 0xff
+  ) {
+    return "image/jpeg";
+  }
+
+  if (
+    imageBuffer.length >= 12 &&
+    imageBuffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    imageBuffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+
+  return "image/jpeg";
+};
+
+export const extractProofWithGeminiBatch = async (imageBuffers: Buffer[]): Promise<GeminiProofExtraction> => {
+  if (imageBuffers.length === 0) {
+    throw new Error("At least one proof image is required for Gemini extraction.");
+  }
+
   const ai = getGenAI();
 
   const model = ai.getGenerativeModel({
-    model: "gemini-flash-lite-latest",
+    model: "gemini-2.0-flash",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: verificationSchema,
@@ -87,30 +129,44 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
 
   const today = nowInZone().toISODate() ?? "";
   const prompt = `
-    Analyze this image and extract workout proof data.
-    Current date is ${today}.
-    - Date: Look for a date or relative date (e.g., "today", "yesterday"). Convert to ISO 8601 (YYYY-MM-DD). 
-      If "yesterday", use the date before ${today}.
-      If "today", use ${today}.
-      If year is missing, assume the current year, but ensure the resulting date is not in the future.
-    - Minutes: Total duration of the workout in minutes. Beware of some screens showing Total time inclusing resting time.
-    - Distance: Total distance covered in KILOMETERS. If the value is in meters, divide by 1000. To three decimal places (eg 12.124)
-    - AvgHr: Average heart rate in beats per minute (bpm). Beware of not selecting stroke rate instead. Heart rate ranges typically are above 100 bpm. Make sure is says bpm and not rpm or s/m.
-    - Confidence: A score (0.0 to 1.0) indicating if this image looks like a legitimate workout screen (e.g. Concept2 PM5, Apple Watch, Strava, etc.). Low confidence if it's a random image.
-    - RejectionReason: If confidence is low, explain why. For example: "Image is too blurry", "Image is of a landscape, not a workout", "No workout data visible".
-  `;
+You are validating rowing workout proof images.
+Current date: ${today}.
+The user may provide one image or multiple related images from the same workout.
+
+Task:
+1) Review all provided images together as one evidence set.
+2) Return one consolidated JSON object matching the schema.
+
+Field rules:
+- date: Workout date in YYYY-MM-DD.
+  * Resolve relative dates like "today" and "yesterday" against ${today}.
+  * If year is missing, infer current year unless that would make a future date.
+- minutes: Total workout minutes for the full evidence set.
+  * Use workout duration only (exclude recovery/rest-only clocks unless clearly part of the workout total).
+- distance: Total workout distance in kilometers for the full evidence set.
+  * Convert meters to kilometers.
+  * Return up to 3 decimal places.
+- avgHr: Average heart rate in bpm.
+  * Only use heart-rate values (bpm). Never use stroke rate (s/m) or cadence/rpm.
+- confidence: 0.0 to 1.0 confidence that the evidence set is legitimate workout proof.
+- rejectionReason: Required when confidence < 0.8, otherwise null.
+
+Consistency and de-duplication:
+- If multiple images show the same workout metric, do not double-count.
+- If images contain complementary metrics (e.g., one shows time and another shows distance), combine them.
+- Prefer clearly labeled totals over ambiguous partial splits.
+`;
+
+  const imageParts = imageBuffers.map((imageBuffer) => ({
+    inlineData: {
+      data: imageBuffer.toString("base64"),
+      mimeType: detectImageMimeType(imageBuffer),
+    },
+  }));
 
   let result;
   try {
-    result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: imageBuffer.toString("base64"),
-          mimeType: "image/jpeg",
-        },
-      },
-    ]);
+    result = await model.generateContent([prompt, ...imageParts]);
   } catch (e: any) {
     console.error("Gemini API Error during generateContent:", e);
     const hasKey = !!process.env.GEMINI_API_KEY;
@@ -121,25 +177,15 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
   const text = result.response.text();
   console.log("AI extraction result:", text);
   try {
-    return JSON.parse(text) as {
-      date: string | null;
-      minutes: number | null;
-      distance: number | null;
-      avgHr: number | null;
-      confidence: number;
-      rejectionReason: string | null;
-    };
-    console.error("Failed to parse Gemini response:", text);
-    throw new Error("Invalid response from Gemini");
+    return JSON.parse(text) as GeminiProofExtraction;
   } catch (e: any) {
-    // Check for 403 or other API errors that might be thrown by the library
-    console.error("Gemini API Error:", e);
+    console.error("Failed to parse Gemini response:", text);
     const hasKey = !!process.env.GEMINI_API_KEY;
     const keyLen = process.env.GEMINI_API_KEY?.length;
-    
+
     if (e.message?.includes("403") || e.toString().includes("403")) {
        throw new Error(`Gemini API 403 Forbidden. Env Key Present: ${hasKey}, Length: ${keyLen}. Details: ${e.message}`);
     }
-    throw e;
+    throw new Error(`Invalid response from Gemini. Key Present: ${hasKey} (Len: ${keyLen})`);
   }
 };
