@@ -10,8 +10,8 @@ import {
 } from "@/server/repositories/proof-extraction-jobs";
 import { getTrainingEntryByProofImageId, updateTrainingEntry } from "@/server/repositories/training-entries";
 import { downloadFile } from "@/server/storage/proof-storage";
-import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
-import { evaluateAutoVerification } from "@/server/services/validation-logic";
+import { extractProofWithGemini, extractProofWithGeminiBatch } from "@/server/services/proof-extraction-service";
+import { evaluateAutoVerification, isDateMatch } from "@/server/services/validation-logic";
 
 const toBuffer = async (data: unknown) => {
   if (data instanceof Buffer) {
@@ -117,10 +117,36 @@ const processJob = async (jobId: string, proofImageId: string) => {
       return p.extractedFields as any;
     });
     
-    const { autoVerified, validationStatus: entryValidationStatus } = evaluateAutoVerification(
+    let { autoVerified, validationStatus: entryValidationStatus } = evaluateAutoVerification(
       { date: entry.date, minutes: entry.minutes },
       proofsState
     );
+
+    const uploadedProofs = allProofs.filter((proof: any) => proof.uploadedAt);
+    if (uploadedProofs.length > 1) {
+      try {
+        const proofBuffers = await Promise.all(
+          uploadedProofs.map(async (proof: any) => {
+            if (proof.id === proofImageId) {
+              return buffer;
+            }
+            const proofFile = await downloadFile(proof.storagePath);
+            return toBuffer(proofFile);
+          })
+        );
+
+        const combinedExtraction = await extractProofWithGeminiBatch(proofBuffers);
+        const combinedMinutes = combinedExtraction.minutes;
+        const combinedDate = combinedExtraction.date;
+
+        if (combinedMinutes !== null && combinedDate) {
+          autoVerified = combinedMinutes >= (entry.minutes - 1) && isDateMatch(entry.date, combinedDate);
+          entryValidationStatus = autoVerified ? "VERIFIED" : "PENDING";
+        }
+      } catch (combinedError) {
+        console.warn("Combined Gemini proof extraction failed; falling back to per-image aggregation.", combinedError);
+      }
+    }
 
     const hasManualReview = allProofs.some((proof: any) => proof.reviewedById !== null);
     if (!hasManualReview) {
