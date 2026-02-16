@@ -24,7 +24,7 @@ async function main() {
   console.log(`Using team: ${team.name} (${team.id})`);
 
   // Use current week (same as app leaderboard page)
-  const weekStart = getWeekStartAt(new Date());
+  const weekStart = getWeekStartAt(new Date("2026-02-15T23:00:00.000Z"));
   console.log(`Week start: ${weekStart.toISOString()}`);
 
   const [leaderboard, teamStats, previousTeamStats, teamTrend] = await Promise.all([

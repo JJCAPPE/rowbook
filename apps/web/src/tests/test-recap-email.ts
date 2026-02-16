@@ -23,7 +23,7 @@ async function main() {
   const team = teams[0]!;
   console.log(`Using team: ${team.name}`);
   
-  const recapWeekStart = getWeekStartAt(new Date());
+  const recapWeekStart = getWeekStartAt(new Date("2026-02-15T23:00:00.000Z"));
 
   const [leaderboard, teamStats, previousTeamStats] = await Promise.all([
     getTeamLeaderboard(team.id, recapWeekStart),

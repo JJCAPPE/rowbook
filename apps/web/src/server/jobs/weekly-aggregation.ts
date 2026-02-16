@@ -10,6 +10,26 @@ type WeeklyAggregationOptions = {
   sendEmails?: boolean;
 };
 
+type TeamEmailResult = {
+  status: "sent" | "skipped" | "failed";
+  reason:
+    | "sent"
+    | "emails-disabled"
+    | "outside-email-window"
+    | "recap-week-not-in-range"
+    | "no-recipients"
+    | "provider-error";
+  recipientCount: number;
+  error?: string;
+};
+
+type TeamAggregationResult = {
+  teamId: string;
+  aggregateCount: number;
+  weeks: number;
+  email: TeamEmailResult;
+};
+
 type LeaderboardRow = {
   id: string;
   athleteId: string;
@@ -234,13 +254,30 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
   const sendEmails = options.sendEmails ?? true;
   const weekStarts = buildWeekStarts(weeks);
   const recapWeekStart = getPreviousWeekStartAt(new Date());
+  const recapWeekStartMs = recapWeekStart.getTime();
   
   const teams = await listTeams();
-  const results: Array<{ teamId: string; aggregateCount: number; weeks: number }> = [];
+  const results: TeamAggregationResult[] = [];
+  const weekStartSet = new Set(weekStarts.map((weekStartAt) => weekStartAt.getTime()));
 
   // Recaps are only sent on Sunday at 8 PM America/New_York
   const now = DateTime.now().setZone("America/New_York");
   const isEmailWindow = now.weekday === 7 && now.hour === 20;
+  const emailWindow = {
+    timezone: "America/New_York",
+    now: now.toISO() ?? now.toString(),
+    weekday: now.weekday,
+    hour: now.hour,
+    isOpen: isEmailWindow,
+    recapWeekStart: recapWeekStart.toISOString(),
+  };
+
+  console.info("[weekly-aggregation] starting run", {
+    weeks,
+    sendEmails,
+    teamCount: teams.length,
+    emailWindow,
+  });
 
   for (const team of teams) {
     let aggregateCount = 0;
@@ -248,23 +285,34 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
     for (const weekStartAt of weekStarts) {
       const aggregates = await aggregateWeekForTeam(team.id, weekStartAt);
       aggregateCount += aggregates.length;
+    }
 
-      const isRecapWeek = weekStartAt.getTime() === recapWeekStart.getTime();
+    let email: TeamEmailResult;
 
-      if (sendEmails && isRecapWeek && isEmailWindow) {
-        const recipients: Array<{ email: string }> = await prisma.user.findMany({
-          where: { 
-            status: "ACTIVE",
-            OR: [
-              { athleteProfile: { teamId: team.id } },
-              { role: "COACH" } // Coaches usually want to see the recap too
-            ]
-          },
-          select: { email: true },
-        });
+    if (!sendEmails) {
+      email = { status: "skipped", reason: "emails-disabled", recipientCount: 0 };
+    } else if (!isEmailWindow) {
+      email = { status: "skipped", reason: "outside-email-window", recipientCount: 0 };
+    } else if (!weekStartSet.has(recapWeekStartMs)) {
+      email = { status: "skipped", reason: "recap-week-not-in-range", recipientCount: 0 };
+    } else {
+      const recipients: Array<{ email: string }> = await prisma.user.findMany({
+        where: {
+          status: "ACTIVE",
+          OR: [
+            { athleteProfile: { teamId: team.id } },
+            { role: "COACH" }, // Coaches usually want to see the recap too
+          ],
+        },
+        select: { email: true },
+      });
+      const recipientEmails = [...new Set(recipients.map((user) => user.email))];
 
-        if (recipients.length > 0) {
-          // Use the same data fetching as the leaderboard page
+      if (recipientEmails.length === 0) {
+        email = { status: "skipped", reason: "no-recipients", recipientCount: 0 };
+      } else {
+        try {
+          // Use the same data fetching as the leaderboard page.
           const [leaderboard, teamStats, previousTeamStats, teamTrend] = await Promise.all([
             getTeamLeaderboard(team.id, recapWeekStart),
             getTeamStats(team.id, recapWeekStart),
@@ -273,16 +321,49 @@ export const runWeeklyAggregation = async (options: WeeklyAggregationOptions = {
           ]);
 
           await sendEmail({
-            to: recipients.map((user) => user.email),
+            to: recipientEmails,
             subject: `${team.name} weekly recap`,
             html: buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, previousTeamStats, teamTrend),
           });
+
+          email = { status: "sent", reason: "sent", recipientCount: recipientEmails.length };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          email = {
+            status: "failed",
+            reason: "provider-error",
+            recipientCount: recipientEmails.length,
+            error: message,
+          };
         }
       }
     }
 
-    results.push({ teamId: team.id, aggregateCount, weeks });
+    console.info("[weekly-aggregation] team result", {
+      teamId: team.id,
+      teamName: team.name,
+      aggregateCount,
+      emailStatus: email.status,
+      emailReason: email.reason,
+      recipientCount: email.recipientCount,
+      error: email.error,
+    });
+
+    results.push({ teamId: team.id, aggregateCount, weeks, email });
   }
 
-  return { results };
+  const emailSummary = results.reduce(
+    (summary, result) => {
+      summary[result.email.status] += 1;
+      return summary;
+    },
+    { sent: 0, skipped: 0, failed: 0 },
+  );
+
+  console.info("[weekly-aggregation] completed run", {
+    resultCount: results.length,
+    emailSummary,
+  });
+
+  return { results, emailWindow, emailSummary };
 };
