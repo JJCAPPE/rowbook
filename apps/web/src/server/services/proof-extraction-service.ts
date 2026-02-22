@@ -120,7 +120,7 @@ export const extractProofWithGeminiBatch = async (imageBuffers: Buffer[]): Promi
   const ai = getGenAI();
 
   const model = ai.getGenerativeModel({
-    model: "gemini-flash-latest",
+    model: "gemini-flash-lite-latest",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: verificationSchema,
