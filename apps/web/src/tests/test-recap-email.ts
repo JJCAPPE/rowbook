@@ -1,6 +1,9 @@
 import { getPreviousWeekStartAt, getWeekStartAt } from "@rowbook/shared";
 import { listTeams } from "../server/repositories/teams";
-import { getTeamLeaderboard, getTeamStats } from "../server/services/weekly-service";
+import {
+  getTeamLeaderboard,
+  getTeamStats,
+} from "../server/services/weekly-service";
 import { sendEmail } from "../server/services/email-service";
 import { buildLeaderboardEmailHtml } from "../server/jobs/weekly-aggregation";
 import { PrismaClient } from "@prisma/client";
@@ -13,7 +16,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log("Starting email recap test script...");
-  
+
   const teams = await listTeams();
   if (teams.length === 0) {
     console.error("No teams found");
@@ -22,8 +25,8 @@ async function main() {
 
   const team = teams[0]!;
   console.log(`Using team: ${team.name}`);
-  
-  const recapWeekStart = getWeekStartAt(new Date("2026-02-15T23:00:00.000Z"));
+
+  const recapWeekStart = getWeekStartAt(new Date("2026-02-22T23:00:00.000Z"));
 
   const [leaderboard, teamStats, previousTeamStats] = await Promise.all([
     getTeamLeaderboard(team.id, recapWeekStart),
@@ -46,12 +49,19 @@ async function main() {
     return;
   }
 
-  console.log(`Sending final recap email to ${recipientEmails.length} recipients`);
+  console.log(
+    `Sending final recap email to ${recipientEmails.length} recipients`,
+  );
 
   const result = await sendEmail({
     to: recipientEmails,
     subject: `${team.name} Weekly Recap as of ${recapWeekStart.toISOString().split("T")[0]}`,
-    html: buildLeaderboardEmailHtml(team.name, leaderboard, teamStats, previousTeamStats),
+    html: buildLeaderboardEmailHtml(
+      team.name,
+      leaderboard,
+      teamStats,
+      previousTeamStats,
+    ),
   });
 
   console.log("Send result:", result);
