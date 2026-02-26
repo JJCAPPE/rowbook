@@ -1,6 +1,10 @@
 import type { ProofExtractedFields } from "@rowbook/shared";
 import { nowInZone } from "@rowbook/shared";
-import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  SchemaType,
+  type Schema,
+} from "@google/generative-ai";
 
 // We keep this for backward compatibility if needed, but the main logic uses Gemini now.
 export const extractTextFromImage = async (image: Buffer) => {
@@ -14,7 +18,6 @@ export const extractTextFromImage = async (image: Buffer) => {
     await worker.terminate();
   }
 };
-
 
 // Exported for testing/mocking purposes
 export let genAI: GoogleGenerativeAI | null = null;
@@ -34,7 +37,7 @@ type GeminiProofExtraction = {
 
 const getGenAI = () => {
   if (genAI) return genAI;
-  
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("GEMINI_API_KEY is missing in environment variables!");
@@ -62,7 +65,8 @@ const verificationSchema: Schema = {
     },
     distance: {
       type: SchemaType.NUMBER,
-      description: "Total distance in kilometers. Convert meters to km if needed.",
+      description:
+        "Total distance in kilometers. Convert meters to km if needed.",
       nullable: true,
     },
     avgHr: {
@@ -72,15 +76,24 @@ const verificationSchema: Schema = {
     },
     confidence: {
       type: SchemaType.NUMBER,
-      description: "Confidence score between 0 and 1 indicating how likely this is a valid workout proof",
+      description:
+        "Confidence score between 0 and 1 indicating how likely this is a valid workout proof",
     },
     rejectionReason: {
       type: SchemaType.STRING,
-      description: "If confidence is low (less than 0.8), provide a brief explanation of why this image might not be a valid workout proof.",
+      description:
+        "If confidence is low (less than 0.8), provide a brief explanation of why this image might not be a valid workout proof.",
       nullable: true,
     },
   },
-  required: ["date", "minutes", "distance", "avgHr", "confidence", "rejectionReason"],
+  required: [
+    "date",
+    "minutes",
+    "distance",
+    "avgHr",
+    "confidence",
+    "rejectionReason",
+  ],
 };
 
 export const extractProofWithGemini = async (imageBuffer: Buffer) => {
@@ -88,7 +101,12 @@ export const extractProofWithGemini = async (imageBuffer: Buffer) => {
 };
 
 const detectImageMimeType = (imageBuffer: Buffer): string => {
-  if (imageBuffer.length >= 8 && imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) {
+  if (
+    imageBuffer.length >= 8 &&
+    imageBuffer
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
     return "image/png";
   }
 
@@ -112,9 +130,13 @@ const detectImageMimeType = (imageBuffer: Buffer): string => {
   return "image/jpeg";
 };
 
-export const extractProofWithGeminiBatch = async (imageBuffers: Buffer[]): Promise<GeminiProofExtraction> => {
+export const extractProofWithGeminiBatch = async (
+  imageBuffers: Buffer[],
+): Promise<GeminiProofExtraction> => {
   if (imageBuffers.length === 0) {
-    throw new Error("At least one proof image is required for Gemini extraction.");
+    throw new Error(
+      "At least one proof image is required for Gemini extraction.",
+    );
   }
 
   const ai = getGenAI();
@@ -171,7 +193,9 @@ Consistency and de-duplication:
     console.error("Gemini API Error during generateContent:", e);
     const hasKey = !!process.env.GEMINI_API_KEY;
     const keyLen = process.env.GEMINI_API_KEY?.length;
-    throw new Error(`Gemini API Error: ${e.message}. Key Present: ${hasKey} (Len: ${keyLen})`);
+    throw new Error(
+      `Gemini API Error: ${e.message}. Key Present: ${hasKey} (Len: ${keyLen})`,
+    );
   }
 
   const text = result.response.text();
@@ -184,8 +208,12 @@ Consistency and de-duplication:
     const keyLen = process.env.GEMINI_API_KEY?.length;
 
     if (e.message?.includes("403") || e.toString().includes("403")) {
-       throw new Error(`Gemini API 403 Forbidden. Env Key Present: ${hasKey}, Length: ${keyLen}. Details: ${e.message}`);
+      throw new Error(
+        `Gemini API 403 Forbidden. Env Key Present: ${hasKey}, Length: ${keyLen}. Details: ${e.message}`,
+      );
     }
-    throw new Error(`Invalid response from Gemini. Key Present: ${hasKey} (Len: ${keyLen})`);
+    throw new Error(
+      `Invalid response from Gemini. Key Present: ${hasKey} (Len: ${keyLen})`,
+    );
   }
 };
