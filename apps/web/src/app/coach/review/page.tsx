@@ -45,6 +45,7 @@ export default function CoachReviewQueuePage() {
   const searchParams = useSearchParams();
   const [showReviewed, setShowReviewed] = useState(false);
   const [entryStatuses, setEntryStatuses] = useState<Record<string, EntryStatus>>({});
+  const [hiddenEntryIds, setHiddenEntryIds] = useState<string[]>([]);
   const [, startTransition] = useTransition();
 
   const weekStartParam = searchParams.get("weekStartAt");
@@ -62,7 +63,17 @@ export default function CoachReviewQueuePage() {
 
   const { mutateAsync: overrideStatus } =
     trpc.coach.overrideValidationStatus.useMutation({
-      onSuccess: () => {
+      onSuccess: (_, variables) => {
+        setHiddenEntryIds((prev) => Array.from(new Set([...prev, variables.entryId])));
+        utils.coach.getReviewQueue.setData(reviewQueueInput, (old) => {
+          if (!old) return old;
+
+          return {
+            ...old,
+            entries: old.entries.filter((entry) => entry.id !== variables.entryId),
+          };
+        });
+
         // Defer the invalidation to not block the UI
         startTransition(() => {
           utils.coach.getReviewQueue.invalidate();
@@ -78,15 +89,6 @@ export default function CoachReviewQueuePage() {
       try {
         await overrideStatus({ entryId, status, rejectionNote });
         setEntryStatuses((prev) => ({ ...prev, [entryId]: "success" }));
-
-        // Remove from view after a brief success indicator
-        setTimeout(() => {
-          setEntryStatuses((prev) => {
-            const next = { ...prev };
-            delete next[entryId];
-            return next;
-          });
-        }, 1500);
       } catch {
         setEntryStatuses((prev) => ({ ...prev, [entryId]: "idle" }));
       }
@@ -101,7 +103,11 @@ export default function CoachReviewQueuePage() {
 
   const visibleEntries = showReviewed
     ? entries
-    : entries.filter((entry) => !isOcrReviewed(entry) && entryStatuses[entry.id] !== "success");
+    : entries.filter(
+      (entry) => !isOcrReviewed(entry)
+        && entryStatuses[entry.id] !== "success"
+        && !hiddenEntryIds.includes(entry.id),
+    );
 
   return (
     <div className="space-y-6">
