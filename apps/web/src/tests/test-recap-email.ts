@@ -3,6 +3,7 @@ import { listTeams } from "../server/repositories/teams";
 import {
   getTeamLeaderboard,
   getTeamStats,
+  getTeamTrend,
 } from "../server/services/weekly-service";
 import { sendEmail } from "../server/services/email-service";
 import { buildLeaderboardEmailHtml } from "../server/jobs/weekly-aggregation";
@@ -26,12 +27,13 @@ async function main() {
   const team = teams[0]!;
   console.log(`Using team: ${team.name}`);
 
-  const recapWeekStart = getWeekStartAt(new Date("2026-02-22T23:00:00.000Z"));
+  const recapWeekStart = getWeekStartAt(new Date("2026-03-01T23:00:00.000Z"));
 
-  const [leaderboard, teamStats, previousTeamStats] = await Promise.all([
+  const [leaderboard, teamStats, previousTeamStats, teamTrend] = await Promise.all([
     getTeamLeaderboard(team.id, recapWeekStart),
     getTeamStats(team.id, recapWeekStart),
     getTeamStats(team.id, getPreviousWeekStartAt(recapWeekStart)),
+    getTeamTrend(team.id, recapWeekStart, 6),
   ]);
 
   const recipients = await prisma.user.findMany({
@@ -61,6 +63,7 @@ async function main() {
       leaderboard,
       teamStats,
       previousTeamStats,
+      teamTrend,
     ),
   });
 
