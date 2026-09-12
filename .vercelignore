@@ -1,0 +1,5 @@
+# Never upload local environment files. Production secrets are configured in Vercel.
+.env
+.env.*
+**/.env
+**/.env.*
