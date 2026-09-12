@@ -2,6 +2,40 @@ import { prisma } from "@/db/client";
 import type { Prisma } from "@prisma/client";
 import { ActivityType, ValidationStatus, EntryStatus } from "@rowbook/shared";
 
+const athleteEntrySelect = {
+  id: true,
+  athleteId: true,
+  activityType: true,
+  date: true,
+  minutes: true,
+  distance: true,
+  avgHr: true,
+  avgPace: true,
+  avgWatts: true,
+  notes: true,
+  validationStatus: true,
+  entryStatus: true,
+  weekStartAt: true,
+  lockedAt: true,
+  rejectionNote: true,
+  createdAt: true,
+  updatedAt: true,
+  version: true,
+  evidenceExtractionJob: {
+    select: { result: true },
+  },
+  proofImages: {
+    where: { uploadedAt: { not: null }, deletedAt: null },
+    select: {
+      id: true,
+      originalFileName: true,
+      extractedFields: true,
+      validationStatus: true,
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+} satisfies Prisma.TrainingEntrySelect;
+
 export const createTrainingEntry = (data: {
   athleteId: string;
   activityType: ActivityType;
@@ -106,7 +140,7 @@ export const listEntriesByAthleteWeek = (
       athleteId, 
       weekStartAt: { gte: weekStartAt, lt: weekEndAt },
     },
-    include: { proofImages: true },
+    select: athleteEntrySelect,
     orderBy: { date: "desc" },
   });
 };
@@ -137,67 +171,114 @@ export const listEntriesByTeamSinceWeekStart = (
   });
 };
 
-export const listEntriesByAthlete = (athleteId: string) =>
+export const listEntriesByAthlete = (athleteId: string, limit = 100) =>
   prisma.trainingEntry.findMany({
     where: { athleteId },
-    include: { proofImages: true },
+    select: athleteEntrySelect,
     orderBy: { date: "desc" },
+    take: limit,
   });
 
 export const listEntriesByAthleteSinceWeekStart = (
   athleteId: string,
   weekStartAt: Date,
+  weekEndAt?: Date,
 ) => {
   return prisma.trainingEntry.findMany({
     where: {
       athleteId,
       weekStartAt: {
         gte: weekStartAt,
+        ...(weekEndAt ? { lt: weekEndAt } : {}),
       },
     },
-    include: { proofImages: true },
+    select: athleteEntrySelect,
     orderBy: { date: "desc" },
   });
 };
 
 export const listEntriesForReview = (
   teamId: string,
-  statuses: ValidationStatus[],
-  options?: { includeReviewed?: boolean; dateRange?: { start: Date; end: Date } },
+  options: {
+    weekStartAt: Date;
+    weekEndAt: Date;
+    state: "NEEDS_REVIEW" | "CHECKING" | "COMPLETED";
+    cursor?: string;
+    limit: number;
+  },
 ) => {
-  const orFilters: Prisma.TrainingEntryWhereInput[] = [
-    {
-      validationStatus: { in: statuses },
-    },
-  ];
-
-  if (options?.includeReviewed) {
-    orFilters.push({
-      validationStatus: { in: ["VERIFIED", "REJECTED"] as ValidationStatus[] },
-      proofImage: {
-        reviewedById: null,
-        proofExtractionJob: { status: "COMPLETED" },
-      },
-    });
-  }
+  const stateFilter: Prisma.TrainingEntryWhereInput =
+    options.state === "COMPLETED"
+      ? { reviewedAt: { not: null } }
+      : options.state === "CHECKING"
+        ? {
+            reviewedAt: null,
+            validationStatus: { in: ["NOT_CHECKED", "PENDING"] },
+            evidenceExtractionJob: {
+              status: { in: ["NOT_CHECKED", "PENDING", "PROCESSING"] },
+            },
+          }
+        : {
+            reviewedAt: null,
+            OR: [
+              { validationStatus: "EXTRACTION_INCOMPLETE" },
+              {
+                validationStatus: "PENDING",
+                evidenceExtractionJob: { status: { in: ["COMPLETED", "FAILED"] } },
+              },
+              {
+                validationStatus: { in: ["NOT_CHECKED", "PENDING"] },
+                evidenceExtractionJob: null,
+              },
+            ],
+          };
 
   return prisma.trainingEntry.findMany({
     where: {
-      ...(options?.dateRange && {
-        date: {
-          gte: options.dateRange.start,
-          lt: options.dateRange.end,
-        },
-      }),
-      athlete: {
-        athleteProfile: { teamId },
+      weekStartAt: {
+        gte: options.weekStartAt,
+        lt: options.weekEndAt,
       },
-      OR: orFilters,
+      athlete: { athleteProfile: { teamId } },
+      ...stateFilter,
     },
-    include: {
-      athlete: true,
-      proofImages: { include: { proofExtractionJob: true } },
+    select: {
+      id: true,
+      activityType: true,
+      minutes: true,
+      distance: true,
+      avgHr: true,
+      avgPace: true,
+      avgWatts: true,
+      notes: true,
+      date: true,
+      validationStatus: true,
+      rejectionNote: true,
+      reviewedAt: true,
+      version: true,
+      createdAt: true,
+      athlete: { select: { name: true } },
+      evidenceExtractionJob: {
+        select: {
+          status: true,
+          result: true,
+          failureCode: true,
+          lastError: true,
+        },
+      },
+      proofImages: {
+        where: { uploadedAt: { not: null }, deletedAt: null },
+        select: {
+          id: true,
+          originalFileName: true,
+          extractedFields: true,
+          validationStatus: true,
+          reviewedById: true,
+        },
+      },
     },
-    orderBy: { date: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    take: options.limit + 1,
   });
-};
+};;

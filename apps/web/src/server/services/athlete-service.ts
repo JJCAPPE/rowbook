@@ -1,11 +1,11 @@
 import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, nowInZone } from "@rowbook/shared";
-import type { ActivityType, TrainingEntry, WeeklyStatus } from "@rowbook/shared";
+import type { ActivityType, WeeklyStatus } from "@rowbook/shared";
+import { prisma } from "@/db/client";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
 import { listEntriesByAthleteSinceWeekStart, listEntriesByAthleteWeek } from "@/server/repositories/training-entries";
 import { listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
 import { listExemptionsByAthleteSince } from "@/server/repositories/exemptions";
 import { listAthleteWeeklyRequirementOverridesByAthleteSince } from "@/server/repositories/athlete-weekly-requirement-overrides";
-import { getWeeklyAggregate, listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
@@ -14,26 +14,24 @@ import {
   resolveEffectiveWeeklyTarget,
 } from "@/server/services/weekly-target-service";
 
-const attachProofs = async <T extends { proofImages: Array<{ id: string; extractedFields: any }> }>(
-  entries: T[],
-  athleteId: string,
-): Promise<Array<T & { proofs: Array<{ id: string; url: string; extractedFields: any }> }>> =>
-  Promise.all(
-    entries.map(async (entry) => {
-      const proofs = await Promise.all(
-        entry.proofImages.map(async (proof) => {
-          try {
-            const view = await getProofViewUrl(athleteId, proof.id, false);
-            return { id: proof.id, url: view.signedUrl, extractedFields: proof.extractedFields };
-          } catch {
-            return { id: proof.id, url: "", extractedFields: proof.extractedFields };
-          }
-        })
-      );
-      // Filter out failed URLs if needed, or keep empty string to indicate error
-      return { ...entry, proofs };
-    }),
-  );
+type AthleteEntryRecord = Awaited<
+  ReturnType<typeof listEntriesByAthleteWeek>
+>[number];
+
+const toPublicEntry = (entry: AthleteEntryRecord) => {
+  const { evidenceExtractionJob, proofImages, ...trainingEntry } = entry;
+  return {
+    ...trainingEntry,
+    extractedFields:
+      evidenceExtractionJob?.result ?? proofImages[0]?.extractedFields ?? null,
+    proofs: proofImages.map((proof) => ({
+      id: proof.id,
+      fileName: proof.originalFileName,
+      validationStatus: proof.validationStatus,
+      available: true,
+    })),
+  };
+};
 
 const computeTotals = (entries: Array<{
   minutes: number;
@@ -59,7 +57,10 @@ const computeTotals = (entries: Array<{
 const getNormalizedWeekStart = (date: Date) => getWeekRange(date).weekStartAt;
 const getWeekKey = (date: Date) => getNormalizedWeekStart(date).toISOString();
 
-export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date) => {
+export const getAthleteDashboard = async (
+  athleteId: string,
+  weekStartAt?: Date,
+) => {
   const teamId = await getTeamIdForAthlete(athleteId);
   if (!teamId) {
     throw new Error("Athlete is not assigned to a team.");
@@ -69,13 +70,13 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     weekStartAt ?? nowInZone(),
   );
 
-  const [entries, aggregate, effectiveTarget] = await Promise.all([
+  const [entries, effectiveTarget] = await Promise.all([
     listEntriesByAthleteWeek(athleteId, normalizedWeekStart, weekEndAt),
-    getWeeklyAggregate(athleteId, normalizedWeekStart, weekEndAt),
     getEffectiveWeeklyTarget(teamId, athleteId, normalizedWeekStart),
   ]);
 
-  const totals = aggregate ?? computeTotals(entries);
+  // Entries are canonical; an aggregate can briefly lag an acknowledged save.
+  const totals = computeTotals(entries);
   const avgHr = getWeightedAvgHr(
     entries.filter((entry) => entry.validationStatus !== "REJECTED"),
   );
@@ -85,8 +86,6 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     : totals.totalMinutes >= requiredMinutes
       ? "MET"
       : "NOT_MET";
-      
-  const entriesWithProofs = await attachProofs(entries as any[], athleteId);
 
   return {
     weekStartAt: normalizedWeekStart,
@@ -98,139 +97,60 @@ export const getAthleteDashboard = async (athleteId: string, weekStartAt?: Date)
     status,
     requirementSource: effectiveTarget.source,
     requirementReason: effectiveTarget.reason,
-    entries: entriesWithProofs.map(e => ({
-      ...e,
-      proofs: e.proofs,
-      // Legacy support for frontend transition (using first proof)
-      extractedFields: e.proofs[0]?.extractedFields ?? null,
-      proofUrl: e.proofs[0]?.url ?? null,
-    })),
+    entries: entries.map(toPublicEntry),
   };
-};
+};;
 
 export const getAthleteHistory = async (athleteId: string) => {
-  const [history, teamId] = await Promise.all([
-    listWeeklyAggregatesByAthlete(athleteId),
-    getTeamIdForAthlete(athleteId),
-  ]);
-  
-  if (!history.length) {
-    return history;
-  }
+  const weeks = await getAthleteHistoryWithEntries(athleteId, 32, true);
 
-  const earliestWeekStart = history[history.length - 1]?.weekStartAt;
-  if (!earliestWeekStart) {
-    return history;
-  }
-
-  const entries = (await listEntriesByAthleteSinceWeekStart(
+  return weeks.map((week) => ({
     athleteId,
-    earliestWeekStart,
-  )) as Array<{
-    weekStartAt: Date;
-    minutes: number;
-    avgHr: number | null;
-    validationStatus: ValidationStatus;
-  }>;
-
-  // Group entries by week for robust HR calculation
-  const entriesByWeek = new Map<string, typeof entries>();
-  for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") continue;
-    const key = getWeekKey(entry.weekStartAt);
-    const list = entriesByWeek.get(key) ?? [];
-    list.push(entry);
-    entriesByWeek.set(key, list);
-  }
-
-  // Deduplicate weekly aggregates by week range key to handle cases where
-  // weekStartAt timestamps differ slightly but represent the same week
-  const weekMap = new Map<string, {
-    athleteId: string;
-    weekStartAt: Date;
-    weekEndAt: Date;
-    totalMinutes: number;
-    activityTypes: any[];
-    hasHrData: boolean;
-    status: any;
-    avgHr: number | null;
-  }>();
-
-  for (const week of history) {
-    const normalizedWeekStart = getNormalizedWeekStart(week.weekStartAt);
-    const weekKey = normalizedWeekStart.toISOString();
-    const existing = weekMap.get(weekKey);
-    
-    // Calculate avgHr for this normalized week from entries
-    const entriesForWeek = entriesByWeek.get(weekKey) ?? [];
-    const entriesAvgHr = entriesForWeek.length > 0 
-      ? getWeightedAvgHr(entriesForWeek.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })))
-      : null;
-
-    if (existing) {
-      // Merge: sum minutes
-      existing.totalMinutes += week.totalMinutes;
-      existing.hasHrData = existing.hasHrData || week.hasHrData;
-      existing.activityTypes = Array.from(
-        new Set([...existing.activityTypes, ...week.activityTypes]),
-      );
-      existing.status =
-        existing.status === "EXEMPT" || week.status === "EXEMPT"
-          ? "EXEMPT"
-          : existing.status === "MET" || week.status === "MET"
-            ? "MET"
-            : "NOT_MET";
-      // avgHr is constant for the weekKey
-    } else {
-      weekMap.set(weekKey, {
-        athleteId: week.athleteId,
-        weekStartAt: normalizedWeekStart,
-        weekEndAt: getWeekEndAt(normalizedWeekStart),
-        totalMinutes: week.totalMinutes,
-        activityTypes: week.activityTypes,
-        hasHrData: week.hasHrData,
-        status: week.status,
-        avgHr: entriesAvgHr,
-      });
-    }
-  }
-
-  // Convert map back to array and compute final avgHr
-  return Array.from(weekMap.values())
-    .map((week) => ({
-      athleteId: week.athleteId,
-      weekStartAt: week.weekStartAt,
-      weekEndAt: week.weekEndAt,
-      totalMinutes: week.totalMinutes,
-      activityTypes: week.activityTypes,
-      hasHrData: week.hasHrData,
-      status: week.status,
-      avgHr: week.avgHr,
-    }))
-    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
+    weekStartAt: week.weekStartAt,
+    weekEndAt: week.weekEndAt,
+    totalMinutes: week.totalMinutes,
+    totalDistance: week.totalDistance,
+    activityTypes: week.activityTypes,
+    hasHrData: week.hasHrData,
+    status: week.status,
+    avgHr: week.avgHr,
+    requiredMinutes: week.requiredMinutes,
+    requirementSource: week.requirementSource,
+    requirementReason: week.requirementReason,
+  }));
 };
 
-export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount = 8) => {
+export const getAthleteHistoryWithEntries = async (
+  athleteId: string,
+  weekCount = 32,
+  includeEmptyWeeks = false,
+) => {
   const teamId = await getTeamIdForAthlete(athleteId);
   if (!teamId) {
     throw new Error("Athlete is not assigned to a team.");
   }
 
   const { weekStartAt: currentWeekStart } = getWeekRange(nowInZone());
+  const boundedWeekCount = Math.min(52, Math.max(1, Math.floor(weekCount)));
   let earliestWeekStart = currentWeekStart;
 
-  for (let index = 1; index < weekCount; index += 1) {
+  for (let index = 1; index < boundedWeekCount; index += 1) {
     earliestWeekStart = getPreviousWeekStartAt(earliestWeekStart);
   }
+  const seasonEndAt = getWeekEndAt(currentWeekStart);
 
   const [entriesResult, requirementsResult, exemptionsResult, overridesResult] = await Promise.all([
-    listEntriesByAthleteSinceWeekStart(athleteId, earliestWeekStart),
-    listWeeklyRequirementsByTeamSince(teamId, earliestWeekStart),
-    listExemptionsByAthleteSince(athleteId, earliestWeekStart),
-    listAthleteWeeklyRequirementOverridesByAthleteSince(athleteId, earliestWeekStart),
+    listEntriesByAthleteSinceWeekStart(athleteId, earliestWeekStart, seasonEndAt),
+    listWeeklyRequirementsByTeamSince(teamId, earliestWeekStart, seasonEndAt),
+    listExemptionsByAthleteSince(athleteId, earliestWeekStart, seasonEndAt),
+    listAthleteWeeklyRequirementOverridesByAthleteSince(
+      athleteId,
+      earliestWeekStart,
+      seasonEndAt,
+    ),
   ]);
 
-  const entries = entriesResult as TrainingEntry[];
+  const entries = entriesResult;
   const overrides = overridesResult as Array<{
     id: string;
     athleteId: string;
@@ -256,7 +176,21 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
     overrides.map((override) => [getWeekKey(override.weekStartAt), override]),
   );
 
-  const weeksByKey = new Map<string, { weekStartAt: Date; entries: TrainingEntry[] }>();
+  const weeksByKey = new Map<
+    string,
+    { weekStartAt: Date; entries: AthleteEntryRecord[] }
+  >();
+
+  if (includeEmptyWeeks) {
+    let weekStartAt = currentWeekStart;
+    for (let index = 0; index < boundedWeekCount; index += 1) {
+      weeksByKey.set(getWeekKey(weekStartAt), {
+        weekStartAt,
+        entries: [],
+      });
+      weekStartAt = getPreviousWeekStartAt(weekStartAt);
+    }
+  }
 
   for (const entry of entries) {
     const key = getWeekKey(entry.weekStartAt);
@@ -268,22 +202,11 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
       weeksByKey.set(key, { weekStartAt: normalizedWeekStart, entries: [entry] });
     }
   }
-  
-  // Need to fetch proofs for all entries efficiently?
-  // attachProofs already takes an array. 
-  // We can just process on the fly or flat map.
-  // Actually, getAthleteHistoryWithEntries groups by week.
-  // It returns entries. 
-  
-  // The 'entries' variable contains all entries found.
-  // We should attach proofs to ALL of them first.
-  const allEntriesWithProofs = await attachProofs(entries as any[], athleteId);
-  const proofMap = new Map(allEntriesWithProofs.map(e => [e.id, e.proofs]));
-
   return Array.from(weeksByKey.values())
     .map(({ weekStartAt, entries: weekEntries }) => {
       const activityTypes = new Set<ActivityType>();
       let totalMinutes = 0;
+      let totalDistance = 0;
       let hasHrData = false;
 
       for (const entry of weekEntries) {
@@ -291,6 +214,7 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
           continue;
         }
         totalMinutes += entry.minutes;
+        totalDistance += entry.distance;
         activityTypes.add(entry.activityType);
         if (entry.avgHr !== null && entry.avgHr !== undefined) {
           hasHrData = true;
@@ -324,21 +248,19 @@ export const getAthleteHistoryWithEntries = async (athleteId: string, weekCount 
         weekStartAt,
         weekEndAt,
         totalMinutes,
+        totalDistance,
+        avgHr: getWeightedAvgHr(
+          weekEntries.filter(
+            (entry) => entry.validationStatus !== "REJECTED",
+          ),
+        ),
         requiredMinutes: effectiveTarget.requiredMinutes,
         status,
         hasHrData,
         requirementSource: effectiveTarget.source,
         requirementReason: effectiveTarget.reason,
         activityTypes: Array.from(activityTypes),
-        entries: sortedEntries.map(e => {
-            const proofs = proofMap.get(e.id) ?? [];
-            return {
-                ...e,
-                proofs,
-                extractedFields: proofs[0]?.extractedFields ?? null,
-                proofUrl: proofs[0]?.url ?? null, // Legacy
-            };
-        }),
+        entries: sortedEntries.map(toPublicEntry),
       };
     })
     .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
@@ -352,13 +274,11 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
 
   const normalizedWeekStart = getWeekRange(weekStartAt).weekStartAt;
   const weekEndAt = getWeekEndAt(normalizedWeekStart);
-  const entries = (await listEntriesByAthleteWeek(
+  const entries = await listEntriesByAthleteWeek(
     athleteId,
     normalizedWeekStart,
     weekEndAt,
-  )) as TrainingEntry[];
-  
-  const entriesWithProofs = await attachProofs(entries as any[], athleteId);
+  );
 
   const totalMinutes = entries.reduce(
     (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.minutes),
@@ -376,13 +296,54 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
     totalMinutes,
     totalDistanceKm,
     sessions: countedEntries.length,
-    entries: entriesWithProofs.map(e => ({
-        ...e,
-        proofs: e.proofs,
-        extractedFields: e.proofs[0]?.extractedFields ?? null,
-        proofUrl: e.proofs[0]?.url ?? null,
-    })),
+    entries: entries.map(toPublicEntry),
   };
+};
+
+export const getAthleteEntryEvidence = async (
+  athleteId: string,
+  entryId: string,
+  expectedVersion: number,
+) => {
+  const entry = await prisma.trainingEntry.findFirst({
+    where: { id: entryId, athleteId, version: expectedVersion },
+    select: {
+      id: true,
+      version: true,
+      proofImageId: true,
+      proofImages: {
+        where: { uploadedAt: { not: null }, deletedAt: null },
+        select: { id: true, originalFileName: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  if (!entry) {
+    throw new Error("Workout evidence is unavailable or changed.");
+  }
+
+  const proofIds = [
+    ...new Set([
+      ...entry.proofImages.map((proof) => proof.id),
+      ...(entry.proofImageId ? [entry.proofImageId] : []),
+    ]),
+  ];
+  const images = await Promise.all(
+    proofIds.map(async (proofImageId, index) => {
+      const view = await getProofViewUrl(athleteId, proofImageId, false);
+      const metadata = entry.proofImages.find(
+        (proof) => proof.id === proofImageId,
+      );
+      return {
+        id: proofImageId,
+        src: view.signedUrl,
+        alt: `Workout proof ${index + 1}`,
+        fileName: metadata?.originalFileName ?? null,
+      };
+    }),
+  );
+
+  return { entryId: entry.id, version: entry.version, images };
 };
 
 export const getAthleteLeaderboard = async (athleteId: string, weekStartAt?: Date) => {

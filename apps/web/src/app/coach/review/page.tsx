@@ -1,25 +1,33 @@
 "use client";
 
-import { PENDING_PROOF_STATUSES, ProofExtractionStatus, ValidationStatus } from "@rowbook/shared";
+import type { ProofExtractionStatus, ValidationStatus } from "@rowbook/shared";
 import { Spinner } from "@heroui/react";
-import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
-import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
+import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatFullDate, formatMinutes, formatDistance, formatPaceWithUnit, formatWatts } from "@/lib/format";
+import {
+  formatDistance,
+  formatFullDate,
+  formatMinutes,
+  formatPaceWithUnit,
+  formatWatts,
+} from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState, useCallback, useTransition } from "react";
+
+type ReviewState = "NEEDS_REVIEW" | "CHECKING" | "COMPLETED";
+type RowState = "idle" | "saving" | "saved";
 
 type ReviewEntry = {
   id: string;
-  proofImageId: string;
+  version: number;
   activityType: "ERG" | "RUN" | "CYCLE" | "SWIM" | "OTHER";
   minutes: number;
   distance: number;
@@ -30,246 +38,439 @@ type ReviewEntry = {
   date: Date;
   validationStatus: ValidationStatus;
   rejectionNote: string | null;
-  proofUrl: string | null;
-  proofs?: Array<{ id: string; url: string; extractedFields: unknown }>;
-  athleteName: string | null;
+  reviewedAt: Date | null;
+  athleteName: string;
   proofExtractionStatus: ProofExtractionStatus | null;
-  proofReviewedById: string | null;
-  extractedFields: unknown | null;
+  extractionFailureCode: string | null;
+  extractedFields: unknown;
+  proofs: Array<{
+    id: string;
+    fileName: string | null;
+    validationStatus: ValidationStatus;
+    available: boolean;
+  }>;
 };
 
-type EntryStatus = "idle" | "loading" | "success";
+const stateLabels: Record<ReviewState, string> = {
+  NEEDS_REVIEW: "Needs review",
+  CHECKING: "Checking",
+  COMPLETED: "Reviewed",
+};
+
+function LazyReviewEvidence({
+  entryId,
+  version,
+  count,
+}: {
+  entryId: string;
+  version: number;
+  count: number;
+}) {
+  const [requested, setRequested] = useState(false);
+  const evidence = trpc.coach.getReviewEvidence.useQuery(
+    { entryId, expectedVersion: version },
+    {
+      enabled: requested,
+      retry: false,
+      staleTime: 10 * 60 * 1000,
+    },
+  );
+
+  if (!requested) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="min-h-11"
+        onClick={() => setRequested(true)}
+      >
+        Load {count === 1 ? "evidence" : `${count} evidence images`}
+      </Button>
+    );
+  }
+  if (evidence.isLoading) {
+    return (
+      <div
+        role="status"
+        className="flex min-h-11 items-center gap-2 text-sm text-default-500"
+      >
+        <Spinner size="sm" /> Loading secure evidence…
+      </div>
+    );
+  }
+  if (evidence.error) {
+    return (
+      <div className="flex flex-wrap items-center gap-2" role="alert">
+        <span className="text-sm text-rose-600">
+          Evidence could not be loaded.
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void evidence.refetch()}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  if (!evidence.data?.images.length) {
+    return <p className="text-sm text-default-500">Evidence has expired.</p>;
+  }
+
+  return (
+    <ProofImageViewer
+      images={evidence.data.images}
+      alt="Workout evidence"
+      onRefresh={() => evidence.refetch()}
+    />
+  );
+}
 
 export default function CoachReviewQueuePage() {
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
-  const [showReviewed, setShowReviewed] = useState(false);
-  const [entryStatuses, setEntryStatuses] = useState<Record<string, EntryStatus>>({});
+  const [reviewState, setReviewState] = useState<ReviewState>("NEEDS_REVIEW");
+  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([
+    undefined,
+  ]);
+  const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [hiddenEntryIds, setHiddenEntryIds] = useState<string[]>([]);
-  const [, startTransition] = useTransition();
+  const [rejectingEntryId, setRejectingEntryId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   const weekStartParam = searchParams.get("weekStartAt");
+  const teamId = searchParams.get("teamId") ?? undefined;
   const weekStartAt = useMemo(() => {
-    if (!weekStartParam) {
-      return undefined;
-    }
+    if (!weekStartParam) return undefined;
     const parsed = new Date(weekStartParam);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }, [weekStartParam]);
 
-  const reviewQueueInput = weekStartAt ? { weekStartAt } : undefined;
-  const { data, isLoading, error } = trpc.coach.getReviewQueue.useQuery(reviewQueueInput);
-  const entries: ReviewEntry[] = data?.entries ?? [];
+  useEffect(() => {
+    setCursorStack([undefined]);
+    setHiddenEntryIds([]);
+    setRowErrors({});
+  }, [reviewState, teamId, weekStartParam]);
 
-  const { mutateAsync: overrideStatus } =
-    trpc.coach.overrideValidationStatus.useMutation({
-      onSuccess: (_, variables) => {
-        setHiddenEntryIds((prev) => Array.from(new Set([...prev, variables.entryId])));
-        utils.coach.getReviewQueue.setData(reviewQueueInput, (old) => {
-          if (!old) return old;
-
-          return {
-            ...old,
-            entries: old.entries.filter((entry) => entry.id !== variables.entryId),
-          };
-        });
-
-        // Defer the invalidation to not block the UI
-        startTransition(() => {
-          utils.coach.getReviewQueue.invalidate();
-          utils.coach.getTeamOverview.invalidate();
-        });
-      },
-    });
-
-  const handleAction = useCallback(
-    async (entryId: string, status: "VERIFIED" | "REJECTED", rejectionNote?: string) => {
-      setEntryStatuses((prev) => ({ ...prev, [entryId]: "loading" }));
-
-      try {
-        await overrideStatus({ entryId, status, rejectionNote });
-        setEntryStatuses((prev) => ({ ...prev, [entryId]: "success" }));
-      } catch {
-        setEntryStatuses((prev) => ({ ...prev, [entryId]: "idle" }));
-      }
-    },
-    [overrideStatus],
+  const cursor = cursorStack[cursorStack.length - 1];
+  const reviewQueueInput = useMemo(
+    () => ({
+      ...(teamId ? { teamId } : {}),
+      ...(weekStartAt ? { weekStartAt } : {}),
+      state: reviewState,
+      limit: 20,
+      ...(cursor ? { cursor } : {}),
+    }),
+    [cursor, reviewState, teamId, weekStartAt],
+  );
+  const queue = trpc.coach.getReviewQueue.useQuery(reviewQueueInput, {
+    keepPreviousData: true,
+  });
+  const entries = (queue.data?.entries ?? []) as ReviewEntry[];
+  const visibleEntries = entries.filter(
+    (entry) => !hiddenEntryIds.includes(entry.id),
   );
 
-  const isOcrReviewed = (entry: ReviewEntry) =>
-    entry.proofExtractionStatus === "COMPLETED"
-    && !entry.proofReviewedById
-    && (entry.validationStatus === "VERIFIED" || entry.validationStatus === "REJECTED");
+  const review = trpc.coach.overrideValidationStatus.useMutation();
 
-  const visibleEntries = showReviewed
-    ? entries
-    : entries.filter(
-      (entry) => !isOcrReviewed(entry)
-        && entryStatuses[entry.id] !== "success"
-        && !hiddenEntryIds.includes(entry.id),
-    );
+  const handleReview = useCallback(
+    async (
+      entry: ReviewEntry,
+      decision: "VERIFIED" | "REJECTED",
+      reason?: string,
+    ) => {
+      setRowStates((current) => ({ ...current, [entry.id]: "saving" }));
+      setRowErrors((current) => ({ ...current, [entry.id]: "" }));
+      try {
+        await review.mutateAsync(
+          decision === "VERIFIED"
+            ? {
+                entryId: entry.id,
+                expectedVersion: entry.version,
+                decision,
+              }
+            : {
+                entryId: entry.id,
+                expectedVersion: entry.version,
+                decision,
+                reason: reason?.trim() ?? "",
+              },
+        );
+        setRowStates((current) => ({ ...current, [entry.id]: "saved" }));
+        setHiddenEntryIds((current) => [...new Set([...current, entry.id])]);
+        setRejectingEntryId(null);
+        setRejectionReason("");
+        void Promise.all([
+          utils.coach.getReviewQueue.invalidate(),
+          utils.coach.getTeamOverview.invalidate(),
+        ]);
+      } catch (error) {
+        setRowStates((current) => ({ ...current, [entry.id]: "idle" }));
+        setRowErrors((current) => ({
+          ...current,
+          [entry.id]:
+            error instanceof Error
+              ? error.message
+              : "Review was not saved. Try again.",
+        }));
+      }
+    },
+    [review, utils.coach.getReviewQueue, utils.coach.getTeamOverview],
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Review queue"
-        subtitle="Override proof status for entries that are not checked."
+        title="Review workouts"
+        subtitle="Check only the workouts that need a person’s decision."
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterChip isActive={showReviewed} onClick={() => setShowReviewed((prev) => !prev)}>
-          Show reviewed
-        </FilterChip>
+      <div className="flex flex-wrap gap-2" aria-label="Review queue filters">
+        {(Object.keys(stateLabels) as ReviewState[]).map((state) => (
+          <FilterChip
+            key={state}
+            isActive={reviewState === state}
+            onClick={() => setReviewState(state)}
+          >
+            {stateLabels[state]}
+          </FilterChip>
+        ))}
       </div>
 
-      <Card className="space-y-3 p-4">
-        {isLoading ? (
-          <p className="text-sm text-default-500">Loading review queue...</p>
-        ) : error ? (
-          <p className="text-sm text-rose-500">Unable to load review queue.</p>
+      <Card className="space-y-4 p-3 sm:p-5">
+        {queue.isLoading && !queue.data ? (
+          <div
+            role="status"
+            className="flex items-center gap-2 py-8 text-sm text-default-500"
+          >
+            <Spinner size="sm" /> Loading review queue…
+          </div>
+        ) : queue.error ? (
+          <div className="space-y-3 py-6" role="alert">
+            <p className="text-sm text-rose-600">
+              Unable to load the review queue.
+            </p>
+            <Button variant="outline" onClick={() => void queue.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : visibleEntries.length ? (
           visibleEntries.map((entry) => {
-            const status = entryStatuses[entry.id] ?? "idle";
-            const isProcessing =
-              entry.proofExtractionStatus === "PROCESSING"
-              || entry.proofExtractionStatus === "PENDING";
-            const isFailed = entry.proofExtractionStatus === "FAILED";
-            const completed = entry.proofExtractionStatus === "COMPLETED";
-            const needsManualAfterOcr =
-              completed && PENDING_PROOF_STATUSES.has(entry.validationStatus);
-            const ocrVerified =
-              completed
-              && !entry.proofReviewedById
-              && entry.validationStatus === "VERIFIED";
-            const ocrRejected =
-              completed
-              && !entry.proofReviewedById
-              && entry.validationStatus === "REJECTED";
-            const proofImages = (entry.proofs ?? [])
-              .filter((proof) => Boolean(proof.url))
-              .map((proof, index) => ({
-                id: proof.id,
-                src: proof.url,
-                alt: `Workout proof ${index + 1}`,
-              }));
-
+            const rowState = rowStates[entry.id] ?? "idle";
+            const isSaving = rowState === "saving";
+            const isRejecting = rejectingEntryId === entry.id;
             return (
-              <div
+              <article
                 key={entry.id}
-                className={[
-                  "rounded-2xl border p-3 sm:p-4 transition-all duration-300",
-                  status === "success"
-                    ? "border-success bg-success/10"
-                    : "border-divider/40 bg-content2/70",
-                ].join(" ")}
+                className="space-y-4 rounded-2xl border border-divider/50 bg-content2/50 p-4"
               >
-                {status === "success" ? (
-                  <div className="flex items-center justify-center gap-2 py-4 text-success">
-                    <CheckCircleIcon className="h-6 w-6" />
-                    <span className="font-medium">Reviewed successfully</span>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-foreground">
+                      {entry.athleteName}
+                    </h2>
+                    <p className="text-sm text-default-500">
+                      {formatFullDate(entry.date)} · {entry.activityType} ·{" "}
+                      {formatMinutes(entry.minutes)}
+                    </p>
                   </div>
+                  <div className="flex flex-wrap gap-2">
+                    {entry.proofExtractionStatus === "PROCESSING" ||
+                    entry.proofExtractionStatus === "PENDING" ? (
+                      <Badge tone="pending">Photo check running</Badge>
+                    ) : null}
+                    {entry.proofExtractionStatus === "FAILED" ? (
+                      <Badge tone="danger">Photo check needs help</Badge>
+                    ) : null}
+                    <StatusBadge status={entry.validationStatus} />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 rounded-xl border border-divider/40 bg-content1/70 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <span className="block text-xs text-default-500">
+                      Distance
+                    </span>
+                    <strong>{formatDistance(entry.distance)}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-default-500">
+                      Average HR
+                    </span>
+                    <strong>{entry.avgHr ?? "Not entered"}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-default-500">Pace</span>
+                    <strong>
+                      {formatPaceWithUnit(entry.activityType, entry.avgPace) ??
+                        "—"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-default-500">
+                      Watts
+                    </span>
+                    <strong>{formatWatts(entry.avgWatts) ?? "—"}</strong>
+                  </div>
+                </div>
+
+                {entry.extractedFields ? (
+                  <ProofExtractionFeedback
+                    fields={entry.extractedFields}
+                    enteredFields={{
+                      activityType: entry.activityType,
+                      date: entry.date,
+                      minutes: entry.minutes,
+                      distance: entry.distance,
+                      avgHr: entry.avgHr,
+                    }}
+                  />
                 ) : (
-                  <>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          {entry.activityType} • {formatMinutes(entry.minutes)}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-default-500">
-                          <span>{formatFullDate(entry.date)}</span>
-                          {entry.athleteName ? (
-                            <>
-                              <span className="text-default-400">•</span>
-                              <span>Athlete: {entry.athleteName}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-start gap-2 md:justify-end">
-                        {isProcessing ? (
-                          <Badge tone="pending">Supabase OCR job running</Badge>
-                        ) : null}
-                        {isFailed ? (
-                          <Badge tone="danger">OCR failed • manual review</Badge>
-                        ) : null}
-                        {needsManualAfterOcr ? (
-                          <Badge tone="info">OCR incomplete • manual review</Badge>
-                        ) : null}
-                        {ocrVerified ? <Badge tone="success">OCR verified</Badge> : null}
-                        {ocrRejected ? <Badge tone="danger">OCR rejected</Badge> : null}
-                        <StatusBadge status={entry.validationStatus} />
-                        {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
-                          <div className="mt-1 text-[10px] text-rose-500 max-w-[200px] text-right">
-                            Reason: {entry.rejectionNote}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                      <div className="space-y-2">
-                        <div className="grid gap-1 text-xs text-default-500 sm:grid-cols-2 md:grid-cols-3">
-                          <span>Distance: {formatDistance(entry.distance)}</span>
-                          <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace) ?? "—"}</span>
-                          {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && (
-                            <span>Watts: {formatWatts(entry.avgWatts) ?? "—"}</span>
-                          )}
-                          <span>Avg HR: {entry.avgHr ?? "—"}</span>
-                          <span className="sm:col-span-2">Notes: {entry.notes ?? "—"}</span>
-                        </div>
-                        {entry.extractedFields ? (
-                          <ProofExtractionFeedback fields={entry.extractedFields} />
-                        ) : null}
-                        {proofImages.length > 0 ? (
-                          <ProofImageViewer images={proofImages} alt="Workout proof" />
-                        ) : entry.proofUrl ? (
-                          <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
-                        ) : (
-                          <p className="text-xs text-default-500">Proof not available.</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 md:justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          disabled={status === "loading"}
-                          onClick={() => handleAction(entry.id, "VERIFIED")}
-                        >
-                          {status === "loading" ? (
-                            <Spinner size="sm" color="current" />
-                          ) : (
-                            "Mark verified"
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          disabled={status === "loading"}
-                          onClick={() => {
-                            const note = window.prompt("Reason for rejection:");
-                            if (note === null) return;
-                            handleAction(entry.id, "REJECTED", note);
-                          }}
-                        >
-                          {status === "loading" ? (
-                            <Spinner size="sm" color="current" />
-                          ) : (
-                            "Reject"
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
+                  <p className="text-sm text-default-500">
+                    No reliable values could be read automatically.
+                  </p>
                 )}
-              </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  {entry.proofs.length ? (
+                    <LazyReviewEvidence
+                      entryId={entry.id}
+                      version={entry.version}
+                      count={entry.proofs.length}
+                    />
+                  ) : (
+                    <p className="text-sm text-default-500">
+                      Evidence has expired.
+                    </p>
+                  )}
+
+                  {reviewState === "NEEDS_REVIEW" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={isSaving}
+                        onClick={() => void handleReview(entry, "VERIFIED")}
+                      >
+                        {isSaving ? <Spinner size="sm" /> : null}
+                        Approve
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="min-h-11"
+                        disabled={isSaving}
+                        onClick={() => {
+                          setRejectingEntryId(entry.id);
+                          setRejectionReason(entry.rejectionNote ?? "");
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {isRejecting ? (
+                  <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+                    <label
+                      htmlFor={`reason-${entry.id}`}
+                      className="text-sm font-semibold text-rose-900"
+                    >
+                      Why is this workout being rejected?
+                    </label>
+                    <textarea
+                      id={`reason-${entry.id}`}
+                      autoFocus
+                      maxLength={500}
+                      rows={3}
+                      value={rejectionReason}
+                      onChange={(event) =>
+                        setRejectionReason(event.target.value)
+                      }
+                      className="w-full rounded-xl border border-rose-200 bg-white p-3 text-base text-foreground outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+                      placeholder="Give the athlete a clear reason and next step."
+                    />
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        disabled={isSaving}
+                        onClick={() => {
+                          setRejectingEntryId(null);
+                          setRejectionReason("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        disabled={isSaving || !rejectionReason.trim()}
+                        onClick={() =>
+                          void handleReview(entry, "REJECTED", rejectionReason)
+                        }
+                      >
+                        {isSaving ? <Spinner size="sm" /> : null}
+                        Confirm rejection
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {rowErrors[entry.id] ? (
+                  <p role="alert" className="text-sm font-medium text-rose-600">
+                    {rowErrors[entry.id]}
+                  </p>
+                ) : null}
+              </article>
             );
           })
         ) : (
-          <p className="text-sm text-default-500">
-            {showReviewed ? "No OCR-reviewed entries yet." : "Nothing to review right now."}
-          </p>
+          <div className="py-10 text-center">
+            <p className="font-medium text-foreground">
+              {reviewState === "NEEDS_REVIEW"
+                ? "Nothing needs review"
+                : reviewState === "CHECKING"
+                  ? "No photo checks are running"
+                  : "No reviewed workouts this week"}
+            </p>
+            <p className="mt-1 text-sm text-default-500">
+              This list is limited to the selected week.
+            </p>
+          </div>
         )}
+
+        {queue.data ? (
+          <nav
+            className="flex items-center justify-between border-t border-divider/40 pt-4"
+            aria-label="Review pages"
+          >
+            <Button
+              variant="ghost"
+              disabled={cursorStack.length === 1 || queue.isFetching}
+              onClick={() => setCursorStack((current) => current.slice(0, -1))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm tabular-nums text-default-500">
+              Page {cursorStack.length}
+            </span>
+            <Button
+              variant="ghost"
+              disabled={!queue.data.nextCursor || queue.isFetching}
+              onClick={() => {
+                if (queue.data.nextCursor) {
+                  setCursorStack((current) => [
+                    ...current,
+                    queue.data!.nextCursor!,
+                  ]);
+                }
+              }}
+            >
+              Next
+            </Button>
+          </nav>
+        ) : null}
       </Card>
     </div>
   );

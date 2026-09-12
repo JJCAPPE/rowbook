@@ -34,7 +34,7 @@ export function ConfirmModal({
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} backdrop="blur">
       <ModalContent>
-        {(onClose) => (
+        {(onClose: () => void) => (
           <>
             <ModalHeader className="flex flex-col gap-1">{title}</ModalHeader>
             <ModalBody>

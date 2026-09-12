@@ -11,6 +11,7 @@ import {
 } from "./common";
 import { ProofOcrResultSchema } from "./proof";
 import { parseDateStringAsNewYorkNoon } from "../utils/time";
+import { MAX_PROOF_FILES } from "../constants/limits";
 
 /**
  * Custom date schema that handles date strings properly to avoid timezone issues.
@@ -31,6 +32,7 @@ const NewYorkDateSchema = z.preprocess((val) => {
 }, z.coerce.date());
 
 export const TrainingEntryInputSchema = z.object({
+  clientSubmissionId: z.string().uuid(),
   activityType: ActivityTypeSchema,
   date: NewYorkDateSchema,
   minutes: MinutesSchema,
@@ -39,13 +41,14 @@ export const TrainingEntryInputSchema = z.object({
   avgPace: z.number().positive().optional().nullable(),
   avgWatts: z.number().positive().optional().nullable(),
   notes: OptionalNotesSchema,
-  proofImageIds: z.array(z.string()).min(1),
+  proofImageIds: z.array(z.string()).min(1).max(MAX_PROOF_FILES),
   proofOcr: ProofOcrResultSchema.optional().nullable(),
 });
 export type TrainingEntryInput = z.infer<typeof TrainingEntryInputSchema>;
 
 export const TrainingEntryUpdateSchema = z.object({
   id: z.string(),
+  expectedVersion: z.number().int().positive(),
   activityType: ActivityTypeSchema.optional(),
   date: NewYorkDateSchema.optional(),
   minutes: MinutesSchema.optional(),
@@ -76,5 +79,6 @@ export const TrainingEntrySchema = z.object({
   rejectionNote: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  version: z.number().int().positive(),
 });
 export type TrainingEntry = z.infer<typeof TrainingEntrySchema>;

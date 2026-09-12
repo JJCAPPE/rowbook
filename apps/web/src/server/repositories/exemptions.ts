@@ -91,7 +91,11 @@ export const listExemptionsByWeek = (weekStartAt: Date, weekEndAt: Date, teamId?
   });
 };
 
-export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Date) => {
+export const listExemptionsByAthleteSince = (
+  athleteId: string,
+  weekStartAt: Date,
+  weekEndAt?: Date,
+) => {
   return prisma.exemption.findMany({
     where: {
       athleteId,
@@ -99,6 +103,7 @@ export const listExemptionsByAthleteSince = (athleteId: string, weekStartAt: Dat
         {
           weekStartAt: {
             gte: weekStartAt,
+            ...(weekEndAt ? { lt: weekEndAt } : {}),
           },
         },
         {

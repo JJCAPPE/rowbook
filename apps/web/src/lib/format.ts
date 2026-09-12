@@ -14,7 +14,7 @@ const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 const distanceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 3,
 });
 
 export const formatShortDate = (date: Date) => shortDateFormatter.format(date);

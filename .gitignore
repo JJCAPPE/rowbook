@@ -11,3 +11,4 @@ out
 .vercel
 turbo
 apps/web/src/tests/test-recap-output.html
+.env*

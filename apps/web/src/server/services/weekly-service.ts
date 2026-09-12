@@ -1,274 +1,288 @@
 import {
   ActivityType,
   PENDING_PROOF_STATUSES,
-  ValidationStatus,
   WeeklyStatus,
   getPreviousWeekStartAt,
   getWeekStartAt,
   getWeekEndAt,
 } from "@rowbook/shared";
+import { prisma } from "@/db/client";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import { listTeamAthletes } from "@/server/repositories/users";
 import {
-  listEntriesByAthleteWeek,
   listEntriesByTeamSinceWeekStart,
   listEntriesByTeamWeek,
 } from "@/server/repositories/training-entries";
-import {
-  listWeeklyAggregatesByTeamWeekWithAthlete,
-  upsertWeeklyAggregate,
-} from "@/server/repositories/weekly-aggregates";
 import {
   getEffectiveWeeklyTarget,
   getEffectiveWeeklyTargetsForTeamWeek,
 } from "@/server/services/weekly-target-service";
 
-const computeAggregate = (entries: Array<{
-  athleteId: string;
-  activityType: ActivityType;
-  minutes: number;
-  distance: number;
+type TeamWeekEntry = Awaited<ReturnType<typeof listEntriesByTeamWeek>>[number];
+
+type WeekEntrySummary = {
+  totalMinutes: number;
+  totalDistance: number;
+  activityTypes: ActivityType[];
+  hasHrData: boolean;
   avgHr: number | null;
-  validationStatus: ValidationStatus;
-}>) => {
-  const totals = new Map<
-    string,
-    { totalMinutes: number; totalDistance: number; activityTypes: Set<ActivityType>; hasHrData: boolean }
-  >();
-
-  for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") {
-      continue;
-    }
-    const current =
-      totals.get(entry.athleteId) ?? {
-        totalMinutes: 0,
-        totalDistance: 0,
-        activityTypes: new Set<ActivityType>(),
-        hasHrData: false,
-      };
-    current.totalMinutes += entry.minutes;
-    current.totalDistance += entry.distance;
-    current.activityTypes.add(entry.activityType);
-    if (entry.avgHr !== null && entry.avgHr !== undefined) {
-      current.hasHrData = true;
-    }
-    totals.set(entry.athleteId, current);
-  }
-
-  return totals;
+  missingProof: boolean;
+  pendingProof: boolean;
 };
 
-export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) => {
-  const targetContext = await getEffectiveWeeklyTargetsForTeamWeek(teamId, weekStartAt);
-  const [athletes, entriesResult] = await Promise.all([
-    listTeamAthletes(teamId),
-    listEntriesByTeamWeek(teamId, targetContext.weekStartAt, targetContext.weekEndAt),
-  ]);
-  const entries = entriesResult as Array<{
-    athleteId: string;
-    activityType: ActivityType;
-    minutes: number;
-    distance: number;
-    avgHr: number | null;
-    validationStatus: ValidationStatus;
-  }>;
-
-  const totals = computeAggregate(entries);
-
-  const aggregates = [];
-
-  for (const athlete of athletes) {
-    const athleteTotals = totals.get(athlete.id) ?? {
-      totalMinutes: 0,
-      totalDistance: 0,
-      activityTypes: new Set<ActivityType>(),
-      hasHrData: false,
-    };
-    const effectiveTarget = targetContext.resolveForAthlete(athlete.id);
-
-    const status: WeeklyStatus = effectiveTarget.isExempt
-      ? "EXEMPT"
-      : athleteTotals.totalMinutes >= effectiveTarget.requiredMinutes
-        ? "MET"
-        : "NOT_MET";
-
-    const aggregate = await upsertWeeklyAggregate({
-      athleteId: athlete.id,
-      teamId,
-      weekStartAt: targetContext.weekStartAt,
-      weekEndAt: targetContext.weekEndAt,
-      totalMinutes: athleteTotals.totalMinutes,
-      totalDistance: athleteTotals.totalDistance,
-      activityTypes: Array.from(athleteTotals.activityTypes),
-      hasHrData: athleteTotals.hasHrData,
-      status,
-    });
-
-    aggregates.push(aggregate);
-  }
-
-  return aggregates;
+const EMPTY_WEEK_ENTRY_SUMMARY: WeekEntrySummary = {
+  totalMinutes: 0,
+  totalDistance: 0,
+  activityTypes: [],
+  hasHrData: false,
+  avgHr: null,
+  missingProof: false,
+  pendingProof: false,
 };
 
-export const aggregateWeekForAthlete = async (teamId: string, athleteId: string, weekStartAt: Date) => {
-  const effectiveTarget = await getEffectiveWeeklyTarget(teamId, athleteId, weekStartAt);
-  const entries = await listEntriesByAthleteWeek(
-    athleteId,
-    effectiveTarget.weekStartAt,
-    effectiveTarget.weekEndAt,
-  );
-
-  let totalMinutes = 0;
-  let totalDistance = 0;
-  const activityTypes = new Set<ActivityType>();
-  let hasHrData = false;
-
-  for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") {
-      continue;
-    }
-    totalMinutes += entry.minutes;
-    totalDistance += entry.distance;
-    activityTypes.add(entry.activityType);
-    if (entry.avgHr !== null && entry.avgHr !== undefined) {
-      hasHrData = true;
-    }
-  }
-
-  const status: WeeklyStatus = effectiveTarget.isExempt
-    ? "EXEMPT"
-    : totalMinutes >= effectiveTarget.requiredMinutes
-      ? "MET"
-      : "NOT_MET";
-
-  return upsertWeeklyAggregate({
-    athleteId,
-    teamId,
-    weekStartAt: effectiveTarget.weekStartAt,
-    weekEndAt: effectiveTarget.weekEndAt,
-    totalMinutes,
-    totalDistance,
-    activityTypes: Array.from(activityTypes),
-    hasHrData,
-    status,
-  });
-};
-
-export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) => {
-  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
-  const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
-  const aggregates = await listWeeklyAggregatesByTeamWeekWithAthlete(
-    teamId,
-    normalizedWeekStartAt,
-    weekEndAt,
-  );
-  if (aggregates.length > 0) {
-    return aggregates;
-  }
-
-  await aggregateWeekForTeam(teamId, normalizedWeekStartAt);
-  return listWeeklyAggregatesByTeamWeekWithAthlete(
-    teamId,
-    normalizedWeekStartAt,
-    weekEndAt,
-  );
-};
-
-export const getTeamLeaderboard = async (teamId: string, weekStartAt: Date) => {
-  const targetContext = await getEffectiveWeeklyTargetsForTeamWeek(teamId, weekStartAt);
-  const previousWeekStartAt = getPreviousWeekStartAt(targetContext.weekStartAt);
-  const [aggregatesResult, entriesResult, previousAggregatesResult] = await Promise.all([
-    getLeaderboardForWeek(teamId, targetContext.weekStartAt),
-    listEntriesByTeamWeek(
-      teamId,
-      targetContext.weekStartAt,
-      targetContext.weekEndAt,
-    ),
-    getLeaderboardForWeek(teamId, previousWeekStartAt),
-  ]);
-  const aggregates = aggregatesResult as Array<{
-    id: string;
-    athleteId: string;
-    totalMinutes: number;
-    totalDistance: number;
-    status: WeeklyStatus;
-    activityTypes: ActivityType[];
-    hasHrData: boolean;
-    athlete: { name: string | null; email: string };
-  }>;
-  const previousAggregates = previousAggregatesResult as Array<{
-    athleteId: string;
-    totalMinutes: number;
-    totalDistance: number;
-  }>;
-  const entries = entriesResult as Array<{
-    athleteId: string;
-    validationStatus: ValidationStatus;
-    minutes: number;
-    distance: number;
-    avgHr: number | null;
-  }>;
-
-  const entriesByAthlete = new Map<string, typeof entries>();
+const summarizeEntriesByAthlete = (entries: TeamWeekEntry[]) => {
+  const entriesByAthlete = new Map<string, TeamWeekEntry[]>();
   for (const entry of entries) {
     const athleteEntries = entriesByAthlete.get(entry.athleteId) ?? [];
     athleteEntries.push(entry);
     entriesByAthlete.set(entry.athleteId, athleteEntries);
   }
 
-  const previousMinutesByAthlete = new Map<string, number>();
-  for (const agg of previousAggregates) {
-    previousMinutesByAthlete.set(agg.athleteId, agg.totalMinutes);
+  const summaries = new Map<string, WeekEntrySummary>();
+  for (const [athleteId, athleteEntries] of entriesByAthlete) {
+    const validEntries = athleteEntries.filter(
+      (entry) => entry.validationStatus !== "REJECTED",
+    );
+    const activityTypes = new Set<ActivityType>();
+    let totalMinutes = 0;
+    let totalDistance = 0;
+    let hasHrData = false;
+
+    for (const entry of validEntries) {
+      totalMinutes += entry.minutes;
+      totalDistance += entry.distance;
+      activityTypes.add(entry.activityType);
+      if (entry.avgHr !== null) hasHrData = true;
+    }
+
+    summaries.set(athleteId, {
+      totalMinutes,
+      totalDistance,
+      activityTypes: Array.from(activityTypes),
+      hasHrData,
+      avgHr: getWeightedAvgHr(validEntries),
+      missingProof: athleteEntries.some(
+        (entry) => entry.validationStatus === "REJECTED",
+      ),
+      pendingProof: athleteEntries.some((entry) =>
+        PENDING_PROOF_STATUSES.has(entry.validationStatus),
+      ),
+    });
   }
 
-  return aggregates.map((aggregate) => {
-    const athleteEntries = entriesByAthlete.get(aggregate.athleteId) ?? [];
-    
-    // Calculate Stats
-    const validEntries = athleteEntries.filter(e => e.validationStatus !== "REJECTED");
-    const totalDistance = aggregate.totalDistance > 0 ? aggregate.totalDistance : validEntries.reduce((sum, e) => sum + e.distance, 0);
-    const avgHr = getWeightedAvgHr(validEntries.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })));
-    const previousWeekMinutes = previousMinutesByAthlete.get(aggregate.athleteId) ?? 0;
+  return summaries;
+};
 
-    const missingProof = athleteEntries.some(
-      (entry) => entry.validationStatus === "REJECTED",
-    );
-    const pendingProof = athleteEntries.some((entry) =>
-      PENDING_PROOF_STATUSES.has(entry.validationStatus),
-    );
-    const effectiveTarget = targetContext.resolveForAthlete(aggregate.athleteId);
+export const aggregateWeekForTeam = async (teamId: string, weekStartAt: Date) => {
+  const athletes = await listTeamAthletes(teamId);
+  const aggregates = new Array<Awaited<ReturnType<typeof aggregateWeekForAthlete>>>();
+  let nextAthlete = 0;
+  const workerCount = Math.min(4, athletes.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextAthlete < athletes.length) {
+        const athlete = athletes[nextAthlete];
+        nextAthlete += 1;
+        if (athlete) {
+          aggregates.push(
+            await aggregateWeekForAthlete(teamId, athlete.id, weekStartAt),
+          );
+        }
+      }
+    }),
+  );
+
+  return aggregates;
+};
+
+export const aggregateWeekForAthlete = async (
+  teamId: string,
+  athleteId: string,
+  weekStartAt: Date,
+) => {
+  const effectiveTarget = await getEffectiveWeeklyTarget(
+    teamId,
+    athleteId,
+    weekStartAt,
+  );
+  const lockScope = effectiveTarget.weekStartAt.toISOString();
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtext(${`rowbook-athlete:${athleteId}`}),
+        hashtext(${lockScope})
+      )
+    `;
+
+    const entries = await tx.trainingEntry.findMany({
+      where: {
+        athleteId,
+        weekStartAt: {
+          gte: effectiveTarget.weekStartAt,
+          lt: effectiveTarget.weekEndAt,
+        },
+      },
+      select: {
+        activityType: true,
+        minutes: true,
+        distance: true,
+        avgHr: true,
+        validationStatus: true,
+      },
+    });
+
+    let totalMinutes = 0;
+    let totalDistance = 0;
+    const activityTypes = new Set<ActivityType>();
+    let hasHrData = false;
+
+    for (const entry of entries) {
+      if (entry.validationStatus === "REJECTED") continue;
+      totalMinutes += entry.minutes;
+      totalDistance += entry.distance;
+      activityTypes.add(entry.activityType);
+      if (entry.avgHr !== null) hasHrData = true;
+    }
+
     const status: WeeklyStatus = effectiveTarget.isExempt
       ? "EXEMPT"
-      : aggregate.totalMinutes >= effectiveTarget.requiredMinutes
+      : totalMinutes >= effectiveTarget.requiredMinutes
         ? "MET"
         : "NOT_MET";
-    const missingMinutes =
-      !effectiveTarget.isExempt &&
-      effectiveTarget.requiredMinutes > 0 &&
-      status === "NOT_MET";
 
-    return {
-      id: aggregate.athleteId,
-      athleteId: aggregate.athleteId,
-      name:
-        "athlete" in aggregate
-          ? aggregate.athlete?.name ?? aggregate.athlete?.email ?? "Athlete"
-          : "Athlete",
-      totalMinutes: aggregate.totalMinutes,
-      status,
-      activityTypes: aggregate.activityTypes,
-      hasHr: aggregate.hasHrData,
-      missingProof,
-      pendingProof,
-      missingMinutes,
-      totalDistance,
-      avgHr,
-      previousWeekMinutes,
-      requiredMinutes: effectiveTarget.requiredMinutes,
-      requirementSource: effectiveTarget.source,
-    };
+    return tx.weeklyAggregate.upsert({
+      where: {
+        athleteId_weekStartAt: {
+          athleteId,
+          weekStartAt: effectiveTarget.weekStartAt,
+        },
+      },
+      update: {
+        teamId,
+        weekEndAt: effectiveTarget.weekEndAt,
+        totalMinutes,
+        totalDistance,
+        activityTypes: Array.from(activityTypes),
+        hasHrData,
+        status,
+      },
+      create: {
+        athleteId,
+        teamId,
+        weekStartAt: effectiveTarget.weekStartAt,
+        weekEndAt: effectiveTarget.weekEndAt,
+        totalMinutes,
+        totalDistance,
+        activityTypes: Array.from(activityTypes),
+        hasHrData,
+        status,
+      },
+    });
   });
+};
+
+export const getLeaderboardForWeek = async (teamId: string, weekStartAt: Date) => {
+  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
+  const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
+  const [athletes, entries, targetContext] = await Promise.all([
+    listTeamAthletes(teamId),
+    listEntriesByTeamWeek(teamId, normalizedWeekStartAt, weekEndAt),
+    getEffectiveWeeklyTargetsForTeamWeek(teamId, normalizedWeekStartAt),
+  ]);
+  const summaries = summarizeEntriesByAthlete(entries);
+
+  return athletes
+    .map((athlete) => {
+      const summary = summaries.get(athlete.id) ?? EMPTY_WEEK_ENTRY_SUMMARY;
+      const effectiveTarget = targetContext.resolveForAthlete(athlete.id);
+      const status: WeeklyStatus = effectiveTarget.isExempt
+        ? "EXEMPT"
+        : summary.totalMinutes >= effectiveTarget.requiredMinutes
+          ? "MET"
+          : "NOT_MET";
+
+      return {
+        id: athlete.id,
+        athleteId: athlete.id,
+        teamId,
+        weekStartAt: normalizedWeekStartAt,
+        weekEndAt,
+        totalMinutes: summary.totalMinutes,
+        totalDistance: summary.totalDistance,
+        activityTypes: summary.activityTypes,
+        hasHrData: summary.hasHrData,
+        status,
+        athlete,
+      };
+    })
+    .sort((left, right) => right.totalMinutes - left.totalMinutes);
+};
+
+export const getTeamLeaderboard = async (
+  teamId: string,
+  weekStartAt: Date,
+  _options: { rebuildIfMissing?: boolean } = {},
+) => {
+  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
+  const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
+  const previousWeekStartAt = getPreviousWeekStartAt(normalizedWeekStartAt);
+  const previousWeekEndAt = getWeekEndAt(previousWeekStartAt);
+  const [athletes, entries, previousEntries, targetContext] = await Promise.all([
+    listTeamAthletes(teamId),
+    listEntriesByTeamWeek(teamId, normalizedWeekStartAt, weekEndAt),
+    listEntriesByTeamWeek(teamId, previousWeekStartAt, previousWeekEndAt),
+    getEffectiveWeeklyTargetsForTeamWeek(teamId, normalizedWeekStartAt),
+  ]);
+  const summaries = summarizeEntriesByAthlete(entries);
+  const previousSummaries = summarizeEntriesByAthlete(previousEntries);
+
+  return athletes
+    .map((athlete) => {
+      const summary = summaries.get(athlete.id) ?? EMPTY_WEEK_ENTRY_SUMMARY;
+      const previousSummary =
+        previousSummaries.get(athlete.id) ?? EMPTY_WEEK_ENTRY_SUMMARY;
+      const effectiveTarget = targetContext.resolveForAthlete(athlete.id);
+      const status: WeeklyStatus = effectiveTarget.isExempt
+        ? "EXEMPT"
+        : summary.totalMinutes >= effectiveTarget.requiredMinutes
+          ? "MET"
+          : "NOT_MET";
+      const missingMinutes =
+        !effectiveTarget.isExempt &&
+        effectiveTarget.requiredMinutes > 0 &&
+        status === "NOT_MET";
+
+      return {
+        id: athlete.id,
+        athleteId: athlete.id,
+        name: athlete.name ?? athlete.email,
+        totalMinutes: summary.totalMinutes,
+        status,
+        activityTypes: summary.activityTypes,
+        hasHr: summary.hasHrData,
+        missingProof: summary.missingProof,
+        pendingProof: summary.pendingProof,
+        missingMinutes,
+        totalDistance: summary.totalDistance,
+        avgHr: summary.avgHr,
+        previousWeekMinutes: previousSummary.totalMinutes,
+        requiredMinutes: effectiveTarget.requiredMinutes,
+        requirementSource: effectiveTarget.source,
+      };
+    })
+    .sort((left, right) => right.totalMinutes - left.totalMinutes);
 };
 
 export const getTeamStats = async (teamId: string, weekStartAt: Date) => {

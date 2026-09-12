@@ -1,8 +1,28 @@
-import { ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES, getWeekRange, nowInZone } from "@rowbook/shared";
-import { createProofImage, getProofImageById, listExpiredProofImages, updateProofImage } from "@/server/repositories/proof-images";
-import { createUploadUrl, createViewUrl, deleteFile, downloadFile } from "@/server/storage/proof-storage";
-import { extractProofWithGemini } from "@/server/services/proof-extraction-service";
-import { createProofExtractionJob } from "@/server/repositories/proof-extraction-jobs";
+import { randomUUID } from "node:crypto";
+import {
+  ALLOWED_MIME_TYPES,
+  MAX_UPLOAD_SIZE_BYTES,
+  getProofRetentionDeleteAfter,
+  getWeekRange,
+  nowInZone,
+} from "@rowbook/shared";
+import {
+  confirmProofImage,
+  createProofImage,
+  getProofImageById,
+  listExpiredProofImages,
+  lockExpiredProofImageForCleanup,
+  markExpiredProofImageDeleted,
+} from "@/server/repositories/proof-images";
+import {
+  createUploadUrl,
+  createViewUrl,
+  deleteFile,
+  downloadFile,
+  getFileInfo,
+} from "@/server/storage/proof-storage";
+import { prisma } from "@/db/client";
+import { verifyStoredProof } from "@/server/utils/proof-verification";
 
 const toBuffer = async (data: unknown) => {
   if (data instanceof Buffer) {
@@ -32,16 +52,20 @@ const toBuffer = async (data: unknown) => {
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 const VIEW_URL_TTL_SECONDS = 15 * 60;
-
-const getDeleteAfter = (weekEndAt: Date) =>
-  new Date(weekEndAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+export const PROOF_CLEANUP_BATCH_SIZE = 500;
+const PROOF_CLEANUP_TRANSACTION_TIMEOUT_MS = 30_000;
 
 const sanitizeFileName = (name: string) =>
   name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
 export const createProofUpload = async (
   athleteId: string,
-  input: { fileName: string; fileSize: number; mimeType: string },
+  input: {
+    clientSubmissionId: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+  },
 ) => {
   if (input.fileSize > MAX_UPLOAD_SIZE_BYTES) {
     throw new Error("File exceeds maximum size.");
@@ -52,13 +76,19 @@ export const createProofUpload = async (
   }
 
   const { weekEndAt } = getWeekRange(nowInZone());
-  const deleteAfter = getDeleteAfter(weekEndAt);
+  const deleteAfter = getProofRetentionDeleteAfter(weekEndAt);
   const safeName = sanitizeFileName(input.fileName);
-  const storagePath = `${athleteId}/${Date.now()}-${safeName}`;
+  const proofImageId = randomUUID();
+  const storagePath = `${athleteId}/${proofImageId}/${safeName}`;
 
   const proofImage = await createProofImage({
+    id: proofImageId,
     athleteId,
     storagePath,
+    clientSubmissionId: input.clientSubmissionId,
+    originalFileName: input.fileName,
+    declaredSize: input.fileSize,
+    declaredMimeType: input.mimeType,
     deleteAfter,
     validationStatus: "NOT_CHECKED",
   });
@@ -75,12 +105,39 @@ export const createProofUpload = async (
 
 export const confirmProofUpload = async (athleteId: string, proofImageId: string) => {
   const proofImage = await getProofImageById(proofImageId);
-  if (!proofImage || proofImage.athleteId !== athleteId) {
+  if (!proofImage || proofImage.athleteId !== athleteId || proofImage.deletedAt) {
     throw new Error("Proof image not found.");
   }
 
-  const updatedTarget = await updateProofImage(proofImageId, { uploadedAt: nowInZone().toJSDate() });
-  await createProofExtractionJob(proofImageId);
+  if (
+    proofImage.uploadedAt &&
+    proofImage.verifiedSize &&
+    proofImage.verifiedMimeType &&
+    proofImage.contentSha256
+  ) {
+    return proofImage;
+  }
+
+  const [fileInfo, file] = await Promise.all([
+    getFileInfo(proofImage.storagePath),
+    downloadFile(proofImage.storagePath),
+  ]);
+  const buffer = await toBuffer(file);
+  const verified = await verifyStoredProof({
+    buffer,
+    declaredSize: proofImage.declaredSize,
+    declaredMimeType: proofImage.declaredMimeType,
+    storageSize: fileInfo.size,
+  });
+
+  const updatedTarget = await confirmProofImage(proofImageId, {
+    uploadedAt: nowInZone().toJSDate(),
+    ...verified,
+  });
+  if (!updatedTarget?.uploadedAt) {
+    throw new Error("Proof upload could not be confirmed.");
+  }
+
   return updatedTarget;
 };
 
@@ -90,12 +147,28 @@ export const getProofViewUrl = async (
   canViewAll: boolean,
 ) => {
   const proofImage = await getProofImageById(proofImageId);
-  if (!proofImage) {
+  if (!proofImage || proofImage.deletedAt || !proofImage.uploadedAt) {
     throw new Error("Proof image not found.");
   }
 
   if (!canViewAll && proofImage.athleteId !== athleteId) {
     throw new Error("Access denied.");
+  }
+
+  if (canViewAll && proofImage.athleteId !== athleteId) {
+    const authorized = await prisma.proofImage.count({
+      where: {
+        id: proofImageId,
+        athlete: {
+          athleteProfile: {
+            team: { coaches: { some: { coachId: athleteId } } },
+          },
+        },
+      },
+    });
+    if (!authorized) {
+      throw new Error("Access denied.");
+    }
   }
 
   const view = await createViewUrl(proofImage.storagePath, VIEW_URL_TTL_SECONDS);
@@ -105,30 +178,65 @@ export const getProofViewUrl = async (
   };
 };
 
-export const extractDataFromProof = async (athleteId: string, proofImageId: string) => {
-  const proofImage = await getProofImageById(proofImageId);
-  if (!proofImage) {
-    throw new Error("Proof image not found.");
-  }
-
-  if (proofImage.athleteId !== athleteId) {
-    throw new Error("Access denied.");
-  }
-
-  const file = await downloadFile(proofImage.storagePath);
-  const buffer = await toBuffer(file);
-  
-  return extractProofWithGemini(buffer);
+type ProofCleanupOptions = {
+  now?: Date;
+  maxCandidates?: number;
+  removeStorageObject?: (storagePath: string) => Promise<void>;
 };
 
-export const cleanupExpiredProofImages = async () => {
-  const now = nowInZone().toJSDate();
-  const expired = await listExpiredProofImages(now);
+export const cleanupExpiredProofImageCandidate = async (
+  proofImageId: string,
+  now: Date,
+  removeStorageObject: (storagePath: string) => Promise<void> = deleteFile,
+) =>
+  prisma.$transaction(
+    async (tx) => {
+      const proof = await lockExpiredProofImageForCleanup(tx, proofImageId, now);
+      if (!proof) return false;
+
+      await removeStorageObject(proof.storagePath);
+      const marked = await markExpiredProofImageDeleted(tx, proof.id, now);
+      if (marked.count !== 1) {
+        throw new Error("Expired proof changed while cleanup was in progress.");
+      }
+      return true;
+    },
+    { timeout: PROOF_CLEANUP_TRANSACTION_TIMEOUT_MS },
+  );
+
+export const cleanupExpiredProofImages = async (
+  options: ProofCleanupOptions = {},
+) => {
+  const now = options.now ?? nowInZone().toJSDate();
+  const requestedCandidates = options.maxCandidates ?? PROOF_CLEANUP_BATCH_SIZE;
+  const maxCandidates = Math.min(
+    PROOF_CLEANUP_BATCH_SIZE,
+    Math.max(1, Math.trunc(requestedCandidates)),
+  );
+  const expired = await listExpiredProofImages(now, maxCandidates);
+  const removeStorageObject = options.removeStorageObject ?? deleteFile;
+  let deletedCount = 0;
+  let failedCount = 0;
 
   for (const proof of expired) {
-    await deleteFile(proof.storagePath);
-    await updateProofImage(proof.id, { deletedAt: now });
+    try {
+      if (
+        await cleanupExpiredProofImageCandidate(
+          proof.id,
+          now,
+          removeStorageObject,
+        )
+      ) {
+        deletedCount += 1;
+      }
+    } catch (error) {
+      failedCount += 1;
+      console.error("Expired proof cleanup failed", {
+        proofImageId: proof.id,
+        error: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
   }
 
-  return { deletedCount: expired.length };
+  return { deletedCount, failedCount };
 };

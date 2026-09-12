@@ -3,12 +3,18 @@ import { TrainingEntryInputSchema, TrainingEntryUpdateSchema } from "@rowbook/sh
 import { isAthleteRole } from "@/server/auth/rbac";
 import {
   getAthleteDashboard,
+  getAthleteEntryEvidence,
   getAthleteHistory,
   getAthleteHistoryWithEntries,
   getAthleteLeaderboard,
   getAthleteWeekDetail,
 } from "@/server/services/athlete-service";
-import { createEntry, deleteEntry, updateEntry } from "@/server/services/entries-service";
+import {
+  createEntry,
+  deleteEntry,
+  getEntryValidationStatus,
+  updateEntry,
+} from "@/server/services/entries-service";
 import { protectedProcedure, router } from "@/server/trpc";
 import { z } from "zod";
 
@@ -48,6 +54,31 @@ export const athleteRouter = router({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       return getAthleteWeekDetail(ctx.session.user.id, input.weekStartAt);
+    }),
+  getEntryEvidence: protectedProcedure
+    .input(
+      z.object({
+        entryId: z.string().min(1),
+        expectedVersion: z.number().int().positive(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (!isAthleteRole(ctx.session.user.role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return getAthleteEntryEvidence(
+        ctx.session.user.id,
+        input.entryId,
+        input.expectedVersion,
+      );
+    }),
+  getEntryValidationStatus: protectedProcedure
+    .input(z.object({ entryId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      if (!isAthleteRole(ctx.session.user.role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return getEntryValidationStatus(ctx.session.user.id, input.entryId);
     }),
   createEntry: protectedProcedure
     .input(TrainingEntryInputSchema)

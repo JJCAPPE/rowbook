@@ -21,7 +21,7 @@ export function EditWorkoutModal({ entry, isOpen, onOpenChange }: EditWorkoutMod
       scrollBehavior="inside"
     >
       <ModalContent>
-        {(onClose) => (
+        {(onClose: () => void) => (
           <>
             <ModalHeader>Edit workout</ModalHeader>
             <ModalBody className="pb-5">
@@ -39,4 +39,3 @@ export function EditWorkoutModal({ entry, isOpen, onOpenChange }: EditWorkoutMod
     </Modal>
   );
 }
-

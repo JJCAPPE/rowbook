@@ -23,6 +23,7 @@ export const WeekSelector = ({ weeks, value, onChange, className }: WeekSelector
 
   return (
     <select
+      aria-label="Week"
       className={cn(
         "input-field w-auto rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-default-500 sm:px-4 sm:tracking-[0.2em]",
         className,

@@ -1,43 +1,38 @@
-import { prisma } from "@/db/client";
+import { getWeekEndAt, getWeekStartAt } from "@rowbook/shared";
+import { listTeamAthletes } from "@/server/repositories/users";
+import {
+  getTeamLeaderboard,
+  getTeamTrend,
+} from "@/server/services/weekly-service";
+
+const csvCell = (value: string | number) => {
+  let text = String(value);
+  if (/^[=+@-]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
 
 export const getTeamTrends = async (teamId: string, limit = 12) => {
-  const groupedResult = await prisma.weeklyAggregate.groupBy({
-    by: ["weekStartAt", "weekEndAt"],
-    where: { teamId },
-    _sum: { totalMinutes: true },
-    _count: { athleteId: true },
-    orderBy: { weekStartAt: "desc" },
-    take: limit,
-  });
-  const grouped = groupedResult as Array<{
-    weekStartAt: Date;
-    weekEndAt: Date;
-    _sum: { totalMinutes: number | null };
-    _count: { athleteId: number };
-  }>;
+  const boundedLimit = Math.min(52, Math.max(1, Math.floor(limit)));
+  const currentWeekStartAt = getWeekStartAt(new Date());
+  const [trend, athletes] = await Promise.all([
+    getTeamTrend(teamId, currentWeekStartAt, boundedLimit),
+    listTeamAthletes(teamId),
+  ]);
 
-  return grouped.map((row) => ({
-    weekStartAt: row.weekStartAt,
-    weekEndAt: row.weekEndAt,
-    totalMinutes: row._sum.totalMinutes ?? 0,
-    athleteCount: row._count.athleteId,
-  }));
+  return trend
+    .map((week) => ({
+      weekStartAt: week.weekStartAt,
+      weekEndAt: getWeekEndAt(week.weekStartAt),
+      totalMinutes: week.minutes,
+      athleteCount: athletes.length,
+    }))
+    .reverse();
 };
 
 export const exportWeeklyCsv = async (teamId: string, weekStartAt: Date) => {
-  const aggregatesResult = await prisma.weeklyAggregate.findMany({
-    where: { teamId, weekStartAt },
-    include: { athlete: true },
-    orderBy: { totalMinutes: "desc" },
-  });
-  const aggregates = aggregatesResult as Array<{
-    athleteId: string;
-    totalMinutes: number;
-    status: string;
-    weekStartAt: Date;
-    weekEndAt: Date;
-    athlete: { name: string | null };
-  }>;
+  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
+  const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
+  const leaderboard = await getTeamLeaderboard(teamId, normalizedWeekStartAt);
 
   const header = [
     "athlete_id",
@@ -46,17 +41,17 @@ export const exportWeeklyCsv = async (teamId: string, weekStartAt: Date) => {
     "status",
     "week_start_at",
     "week_end_at",
-  ].join(",");
+  ].map(csvCell).join(",");
 
-  const rows = aggregates.map((row) =>
+  const rows = leaderboard.map((row) =>
     [
       row.athleteId,
-      row.athlete.name ?? "",
+      row.name,
       row.totalMinutes,
       row.status,
-      row.weekStartAt.toISOString(),
-      row.weekEndAt.toISOString(),
-    ].join(","),
+      normalizedWeekStartAt.toISOString(),
+      weekEndAt.toISOString(),
+    ].map(csvCell).join(","),
   );
 
   return [header, ...rows].join("\n");

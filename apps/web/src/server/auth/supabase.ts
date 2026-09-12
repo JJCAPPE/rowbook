@@ -17,7 +17,9 @@ const buildCookieStore = (
     }
 
     const parsed = parse(header);
-    return Object.entries(parsed).map(([name, value]) => ({ name, value }));
+    return Object.entries(parsed).flatMap(([name, value]) =>
+      value === undefined ? [] : [{ name, value }],
+    );
   },
   setAll: (cookiesToSet) => {
     cookiesToSet.forEach(({ name, value, options }) => {

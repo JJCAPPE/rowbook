@@ -1,7 +1,12 @@
 "use client";
 
+import { Spinner } from "@heroui/react";
+import Link from "next/link";
+import { use, useState } from "react";
+
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -11,15 +16,92 @@ import { trpc } from "@/lib/trpc";
 import type { TrainingEntry } from "@rowbook/shared";
 
 type WeekDetailPageProps = {
-  params: { weekStart: string };
+  params: Promise<{ weekStart: string }>;
 };
 
-export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
-  const weekStartAt = new Date(params.weekStart);
+function AthleteEntryEvidence({
+  entryId,
+  version,
+  count,
+}: {
+  entryId: string;
+  version: number;
+  count: number;
+}) {
+  const [requested, setRequested] = useState(false);
+  const evidence = trpc.athlete.getEntryEvidence.useQuery(
+    { entryId, expectedVersion: version },
+    { enabled: requested, retry: false, staleTime: 10 * 60 * 1000 },
+  );
+
+  if (!requested) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setRequested(true)}>
+        Load {count === 1 ? "evidence" : `${count} evidence images`}
+      </Button>
+    );
+  }
+  if (evidence.isLoading) {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-default-500">
+        <Spinner size="sm" /> Loading secure evidence…
+      </p>
+    );
+  }
+  if (evidence.error) {
+    return (
+      <div className="flex flex-wrap items-center gap-2" role="alert">
+        <span className="text-sm text-rose-600">Evidence could not be loaded.</span>
+        <Button size="sm" variant="outline" onClick={() => void evidence.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  if (!evidence.data?.images.length) {
+    return <p className="text-sm text-default-500">Evidence has expired.</p>;
+  }
+
+  return (
+    <ProofImageViewer
+      images={evidence.data.images}
+      alt="Workout evidence"
+      onRefresh={() => evidence.refetch()}
+    />
+  );
+}
+
+export default function AthleteWeekDetailPage(props: WeekDetailPageProps) {
+  const params = use(props.params);
+  const parsedWeekStartAt = new Date(params.weekStart);
+  const hasValidWeek = !Number.isNaN(parsedWeekStartAt.getTime());
+  const weekStartAt = hasValidWeek ? parsedWeekStartAt : new Date(0);
   const { data, isLoading, error } = trpc.athlete.getWeekDetail.useQuery({
     weekStartAt,
-  });
-  const entries: Array<TrainingEntry & { proofUrl: string | null; extractedFields: any }> = data?.entries ?? [];
+  }, { enabled: hasValidWeek, retry: false });
+  const entries: Array<
+    TrainingEntry & {
+      extractedFields: unknown;
+      proofs: Array<{ id: string; available: boolean }>;
+    }
+  > = data?.entries ?? [];
+
+  if (!hasValidWeek) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Week not found"
+          subtitle="That week link is invalid or incomplete."
+        />
+        <Card className="space-y-3 text-sm text-default-600">
+          <p>Choose a week from your training history to continue.</p>
+          <Button as={Link} href="/athlete/history" className="w-fit">
+            Back to history
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -80,7 +162,7 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                     <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
                   </div>
                 )}
-                {entry.extractedFields && (
+                {entry.extractedFields != null && (
                   <details className="mt-3 text-[10px] text-default-500">
                     <summary className="cursor-pointer select-none hover:text-foreground">
                       View details from AI extraction
@@ -89,10 +171,14 @@ export default function AthleteWeekDetailPage({ params }: WeekDetailPageProps) {
                   </details>
                 )}
                 <div className="mt-3">
-                  {entry.proofUrl ? (
-                    <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
+                  {entry.proofs.length ? (
+                    <AthleteEntryEvidence
+                      entryId={entry.id}
+                      version={entry.version}
+                      count={entry.proofs.length}
+                    />
                   ) : (
-                    <p className="text-xs text-default-500">Proof not available.</p>
+                    <p className="text-xs text-default-500">Evidence has expired.</p>
                   )}
                 </div>
               </div>

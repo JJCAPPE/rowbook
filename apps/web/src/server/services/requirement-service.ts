@@ -1,42 +1,142 @@
+import { Prisma } from "@prisma/client";
+import { TRPCError } from "@trpc/server";
 import { getWeekEndAt, getWeekStartAt } from "@rowbook/shared";
-import { upsertWeeklyRequirement, listWeeklyRequirementsByTeamSince } from "@/server/repositories/weekly-requirements";
-import {
-  deleteExemptionById,
-  deleteIndefiniteExemptionsByAthlete,
-  deleteOtherIndefiniteExemptions,
-  getExemptionById,
-  upsertExemption,
-} from "@/server/repositories/exemptions";
-import {
-  deleteAthleteWeeklyRequirementOverrideById,
-  upsertAthleteWeeklyRequirementOverride,
-} from "@/server/repositories/athlete-weekly-requirement-overrides";
-import { createAuditLog } from "@/server/repositories/audit-logs";
+import { prisma } from "@/db/client";
+
+type TransactionClient = Prisma.TransactionClient;
+
+const toInputJsonValue = (value: unknown): Prisma.InputJsonValue =>
+  JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+
+const assertTeamAccess = async (
+  tx: TransactionClient,
+  actorId: string,
+  teamId: string,
+) => {
+  const membership = await tx.coachTeamMembership.findUnique({
+    where: { teamId_coachId: { teamId, coachId: actorId } },
+    select: { teamId: true },
+  });
+  if (!membership) throw new TRPCError({ code: "FORBIDDEN" });
+};
+
+const getAuthorizedAthleteTeam = async (
+  tx: TransactionClient,
+  actorId: string,
+  athleteId: string,
+) => {
+  const profile = await tx.athleteProfile.findFirst({
+    where: {
+      userId: athleteId,
+      team: { coaches: { some: { coachId: actorId } } },
+    },
+    select: { teamId: true },
+  });
+  if (!profile) throw new TRPCError({ code: "FORBIDDEN" });
+  return profile.teamId;
+};
+
+const upsertRequirement = async (
+  tx: TransactionClient,
+  input: {
+    actorId: string;
+    teamId: string;
+    weekStartAt: Date;
+    requiredMinutes: number;
+  },
+) => {
+  const weekEndAt = getWeekEndAt(input.weekStartAt);
+  const requirement = await tx.weeklyRequirement.upsert({
+    where: {
+      teamId_weekStartAt: {
+        teamId: input.teamId,
+        weekStartAt: input.weekStartAt,
+      },
+    },
+    update: { weekEndAt, requiredMinutes: input.requiredMinutes },
+    create: {
+      teamId: input.teamId,
+      weekStartAt: input.weekStartAt,
+      weekEndAt,
+      requiredMinutes: input.requiredMinutes,
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      entityType: "WEEKLY_REQUIREMENT",
+      entityId: requirement.id,
+      action: "UPSERT",
+      after: toInputJsonValue(requirement),
+    },
+  });
+  return requirement;
+};
 
 export const setWeeklyRequirement = async (
   actorId: string,
   teamId: string,
   weekStartAt: Date,
   requiredMinutes: number,
+) =>
+  prisma.$transaction(async (tx) => {
+    await assertTeamAccess(tx, actorId, teamId);
+    return upsertRequirement(tx, {
+      actorId,
+      teamId,
+      weekStartAt: getWeekStartAt(weekStartAt),
+      requiredMinutes,
+    });
+  });
+
+export const setWeeklyRequirements = async (
+  actorId: string,
+  teamId: string,
+  requirements: { weekStartAt: Date; requiredMinutes: number }[],
 ) => {
-  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
-  const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
-  const requirement = await upsertWeeklyRequirement({
-    teamId,
-    weekStartAt: normalizedWeekStartAt,
-    weekEndAt,
-    requiredMinutes,
-  });
+  const normalized = new Map<
+    number,
+    { weekStartAt: Date; requiredMinutes: number }
+  >();
+  for (const requirement of requirements) {
+    const weekStartAt = getWeekStartAt(requirement.weekStartAt);
+    normalized.set(weekStartAt.getTime(), {
+      weekStartAt,
+      requiredMinutes: requirement.requiredMinutes,
+    });
+  }
 
-  await createAuditLog({
-    actorId,
-    entityType: "WEEKLY_REQUIREMENT",
-    entityId: requirement.id,
-    action: "UPSERT",
-    after: requirement,
+  return prisma.$transaction(async (tx) => {
+    await assertTeamAccess(tx, actorId, teamId);
+    const saved = [];
+    for (const requirement of normalized.values()) {
+      saved.push(
+        await upsertRequirement(tx, {
+          actorId,
+          teamId,
+          ...requirement,
+        }),
+      );
+    }
+    return saved;
   });
+};
 
-  return requirement;
+export const getWeeklyRequirementsRange = async (
+  actorId: string,
+  teamId: string,
+  startAt: Date,
+  endAt: Date,
+) => {
+  const membership = await prisma.coachTeamMembership.findUnique({
+    where: { teamId_coachId: { teamId, coachId: actorId } },
+    select: { teamId: true },
+  });
+  if (!membership) throw new TRPCError({ code: "FORBIDDEN" });
+  return prisma.weeklyRequirement.findMany({
+    where: { teamId, weekStartAt: { gte: startAt, lt: endAt } },
+    orderBy: { weekStartAt: "asc" },
+  });
 };
 
 export const setExemption = async (
@@ -44,57 +144,79 @@ export const setExemption = async (
   athleteId: string,
   weekStartAt: Date,
   reason: string | null,
-  isIndefinite?: boolean,
-) => {
-  const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
-
-  if (isIndefinite) {
-    await deleteOtherIndefiniteExemptions(athleteId, normalizedWeekStartAt);
-  }
-
-  const exemption = await upsertExemption({
-    athleteId,
-    weekStartAt: normalizedWeekStartAt,
-    reason,
-    isIndefinite,
-    createdBy: actorId,
+  isIndefinite = false,
+) =>
+  prisma.$transaction(async (tx) => {
+    await getAuthorizedAthleteTeam(tx, actorId, athleteId);
+    const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
+    if (isIndefinite) {
+      await tx.exemption.deleteMany({
+        where: {
+          athleteId,
+          isIndefinite: true,
+          weekStartAt: { not: normalizedWeekStartAt },
+        },
+      });
+    }
+    const exemption = await tx.exemption.upsert({
+      where: {
+        athleteId_weekStartAt: {
+          athleteId,
+          weekStartAt: normalizedWeekStartAt,
+        },
+      },
+      update: { reason, isIndefinite, createdBy: actorId },
+      create: {
+        athleteId,
+        weekStartAt: normalizedWeekStartAt,
+        reason,
+        isIndefinite,
+        createdBy: actorId,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        entityType: "EXEMPTION",
+        entityId: exemption.id,
+        action: "UPSERT",
+        after: toInputJsonValue(exemption),
+      },
+    });
+    return exemption;
   });
 
-  await createAuditLog({
-    actorId,
-    entityType: "EXEMPTION",
-    entityId: exemption.id,
-    action: "UPSERT",
-    after: exemption,
+export const removeExemption = async (actorId: string, exemptionId: string) =>
+  prisma.$transaction(async (tx) => {
+    const exemption = await tx.exemption.findUnique({
+      where: { id: exemptionId },
+    });
+    if (!exemption) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Exemption not found.",
+      });
+    }
+    await getAuthorizedAthleteTeam(tx, actorId, exemption.athleteId);
+    const removed = exemption.isIndefinite
+      ? await tx.exemption.deleteMany({
+          where: { athleteId: exemption.athleteId, isIndefinite: true },
+        })
+      : await tx.exemption.delete({ where: { id: exemption.id } });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        entityType: "EXEMPTION",
+        entityId: exemption.id,
+        action: "DELETE",
+        before: toInputJsonValue(exemption),
+        after: toInputJsonValue(
+          "count" in removed ? { deletedCount: removed.count } : removed,
+        ),
+      },
+    });
+    return { success: true };
   });
-
-  return exemption;
-};
-
-export const removeExemption = async (
-  actorId: string,
-  exemptionId: string,
-) => {
-  const exemption = await getExemptionById(exemptionId);
-  if (!exemption) {
-    throw new Error("Exemption not found.");
-  }
-
-  const deleteResult = exemption.isIndefinite
-    ? await deleteIndefiniteExemptionsByAthlete(exemption.athleteId)
-    : await deleteExemptionById(exemption.id);
-
-  await createAuditLog({
-    actorId,
-    entityType: "EXEMPTION",
-    entityId: exemption.id,
-    action: "DELETE",
-    before: exemption,
-    after: "count" in deleteResult ? { deletedCount: deleteResult.count } : deleteResult,
-  });
-
-  return { success: true };
-};
 
 export const setAthleteWeeklyRequirementOverride = async (
   actorId: string,
@@ -104,86 +226,188 @@ export const setAthleteWeeklyRequirementOverride = async (
   reason: string | null,
 ) => {
   const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
-  const currentWeekStartAt = getWeekStartAt(new Date());
-
-  if (normalizedWeekStartAt.getTime() !== currentWeekStartAt.getTime()) {
-    throw new Error("Athlete weekly overrides can only be set for the current week.");
+  if (
+    normalizedWeekStartAt.getTime() !== getWeekStartAt(new Date()).getTime()
+  ) {
+    throw new Error(
+      "Athlete weekly overrides can only be set for the current week.",
+    );
   }
 
-  const override = await upsertAthleteWeeklyRequirementOverride({
-    athleteId,
-    weekStartAt: normalizedWeekStartAt,
-    requiredMinutes,
-    reason,
-    createdBy: actorId,
+  return prisma.$transaction(async (tx) => {
+    await getAuthorizedAthleteTeam(tx, actorId, athleteId);
+    const override = await tx.athleteWeeklyRequirementOverride.upsert({
+      where: {
+        athleteId_weekStartAt: {
+          athleteId,
+          weekStartAt: normalizedWeekStartAt,
+        },
+      },
+      update: { requiredMinutes, reason, createdBy: actorId },
+      create: {
+        athleteId,
+        weekStartAt: normalizedWeekStartAt,
+        requiredMinutes,
+        reason,
+        createdBy: actorId,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        entityType: "ATHLETE_WEEKLY_REQUIREMENT_OVERRIDE",
+        entityId: override.id,
+        action: "UPSERT",
+        after: toInputJsonValue(override),
+      },
+    });
+    return override;
   });
-
-  await createAuditLog({
-    actorId,
-    entityType: "ATHLETE_WEEKLY_REQUIREMENT_OVERRIDE",
-    entityId: override.id,
-    action: "UPSERT",
-    after: override,
-  });
-
-  return override;
 };
 
 export const removeAthleteWeeklyRequirementOverride = async (
   actorId: string,
   overrideId: string,
-) => {
-  const override = await deleteAthleteWeeklyRequirementOverrideById(overrideId);
-
-  await createAuditLog({
-    actorId,
-    entityType: "ATHLETE_WEEKLY_REQUIREMENT_OVERRIDE",
-    entityId: override.id,
-    action: "DELETE",
-    before: override,
+) =>
+  prisma.$transaction(async (tx) => {
+    const override = await tx.athleteWeeklyRequirementOverride.findUnique({
+      where: { id: overrideId },
+    });
+    if (!override) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Override not found.",
+      });
+    }
+    await getAuthorizedAthleteTeam(tx, actorId, override.athleteId);
+    await tx.athleteWeeklyRequirementOverride.delete({
+      where: { id: override.id },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        entityType: "ATHLETE_WEEKLY_REQUIREMENT_OVERRIDE",
+        entityId: override.id,
+        action: "DELETE",
+        before: toInputJsonValue(override),
+      },
+    });
+    return { success: true };
   });
 
-  return { success: true };
-};
+export type AthleteWeeklySettingMode = "NONE" | "WEEK" | "INDEFINITE";
 
-export const setWeeklyRequirements = async (
+export const saveAthleteWeeklySetting = async (
   actorId: string,
-  teamId: string,
-  requirements: { weekStartAt: Date; requiredMinutes: number }[],
+  input: {
+    teamId: string;
+    athleteId: string;
+    weekStartAt: Date;
+    mode: AthleteWeeklySettingMode;
+    requiredMinutes: number | null;
+    reason: string | null;
+  },
 ) => {
-  const results = await Promise.all(
-    requirements.map(async ({ weekStartAt, requiredMinutes }) => {
-      const normalizedWeekStartAt = getWeekStartAt(weekStartAt);
-      const weekEndAt = getWeekEndAt(normalizedWeekStartAt);
-      const requirement = await upsertWeeklyRequirement({
-        teamId,
-        weekStartAt: normalizedWeekStartAt,
-        weekEndAt,
-        requiredMinutes,
-      });
+  const weekStartAt = getWeekStartAt(input.weekStartAt);
+  if (
+    input.requiredMinutes !== null &&
+    weekStartAt.getTime() !== getWeekStartAt(new Date()).getTime()
+  ) {
+    throw new Error(
+      "Athlete weekly overrides can only be set for the current week.",
+    );
+  }
 
-      await createAuditLog({
+  return prisma.$transaction(async (tx) => {
+    const athleteTeamId = await getAuthorizedAthleteTeam(
+      tx,
+      actorId,
+      input.athleteId,
+    );
+    if (athleteTeamId !== input.teamId) {
+      throw new TRPCError({ code: "FORBIDDEN" });
+    }
+
+    const [beforeOverride, beforeExemptions] = await Promise.all([
+      tx.athleteWeeklyRequirementOverride.findUnique({
+        where: {
+          athleteId_weekStartAt: {
+            athleteId: input.athleteId,
+            weekStartAt,
+          },
+        },
+      }),
+      tx.exemption.findMany({
+        where: {
+          athleteId: input.athleteId,
+          OR: [{ weekStartAt }, { isIndefinite: true }],
+        },
+        orderBy: [{ weekStartAt: "asc" }, { id: "asc" }],
+      }),
+    ]);
+
+    let override: typeof beforeOverride = null;
+    if (input.mode === "NONE" && input.requiredMinutes !== null) {
+      override = await tx.athleteWeeklyRequirementOverride.upsert({
+        where: {
+          athleteId_weekStartAt: {
+            athleteId: input.athleteId,
+            weekStartAt,
+          },
+        },
+        update: {
+          requiredMinutes: input.requiredMinutes,
+          reason: input.reason,
+          createdBy: actorId,
+        },
+        create: {
+          athleteId: input.athleteId,
+          weekStartAt,
+          requiredMinutes: input.requiredMinutes,
+          reason: input.reason,
+          createdBy: actorId,
+        },
+      });
+    } else {
+      await tx.athleteWeeklyRequirementOverride.deleteMany({
+        where: { athleteId: input.athleteId, weekStartAt },
+      });
+    }
+
+    await tx.exemption.deleteMany({
+      where: {
+        athleteId: input.athleteId,
+        OR: [{ weekStartAt }, { isIndefinite: true }],
+      },
+    });
+
+    const exemption =
+      input.mode === "NONE"
+        ? null
+        : await tx.exemption.create({
+            data: {
+              athleteId: input.athleteId,
+              weekStartAt,
+              reason: input.reason,
+              isIndefinite: input.mode === "INDEFINITE",
+              createdBy: actorId,
+            },
+          });
+
+    await tx.auditLog.create({
+      data: {
         actorId,
-        entityType: "WEEKLY_REQUIREMENT",
-        entityId: requirement.id,
-        action: "UPSERT",
-        after: requirement,
-      });
+        entityType: "ATHLETE_WEEKLY_SETTING",
+        entityId: input.athleteId,
+        action: "REPLACE",
+        before: toInputJsonValue({
+          override: beforeOverride,
+          exemptions: beforeExemptions,
+        }),
+        after: toInputJsonValue({ override, exemption }),
+      },
+    });
 
-      return requirement;
-    }),
-  );
-
-  return results;
-};
-
-export const getWeeklyRequirementsRange = async (
-  teamId: string,
-  startAt: Date,
-  endAt: Date,
-) => {
-  return listWeeklyRequirementsByTeamSince(teamId, startAt);
-  // Note: listWeeklyRequirementsByTeamSince already filters by gte startAt.
-  // We might want to filter by lte endAt as well, but for now fetching forward is fine.
-  // Ideally, we should update the repository to support a range if we want strict bounding.
+    return { override, exemption };
+  });
 };

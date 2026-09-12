@@ -90,6 +90,7 @@ export const listAthleteWeeklyRequirementOverridesByWeek = (
 export const listAthleteWeeklyRequirementOverridesByAthleteSince = (
   athleteId: string,
   weekStartAt: Date,
+  weekEndAt?: Date,
 ) => {
   const delegate = getOverrideDelegate();
   if (!delegate) {
@@ -100,6 +101,7 @@ export const listAthleteWeeklyRequirementOverridesByAthleteSince = (
       athleteId,
       weekStartAt: {
         gte: weekStartAt,
+        ...(weekEndAt ? { lt: weekEndAt } : {}),
       },
     },
   });

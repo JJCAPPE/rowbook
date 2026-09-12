@@ -24,6 +24,18 @@ export const createViewUrl = async (path: string, expiresInSeconds: number) => {
   return data;
 };
 
+export const getFileInfo = async (path: string) => {
+  const { data, error } = await supabaseAdmin.storage
+    .from(storageBucket)
+    .info(path);
+
+  if (error || !data) {
+    throw new Error("Uploaded proof could not be found.");
+  }
+
+  return data;
+};
+
 export const deleteFile = async (path: string) => {
   const { error } = await supabaseAdmin.storage.from(storageBucket).remove([path]);
   if (error) {

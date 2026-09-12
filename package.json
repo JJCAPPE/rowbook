@@ -14,15 +14,18 @@
         "prisma:generate": "npm --workspace apps/web run prisma:generate",
         "prisma:migrate": "npm --workspace apps/web run prisma:migrate",
         "postinstall": "npm --workspace apps/web run prisma:generate",
-        "test": "node --test --experimental-strip-types",
-        "test:unit": "node --test --experimental-strip-types tests/unit/*.test.ts",
-        "test:integration": "node --test --experimental-strip-types tests/integration/*.test.ts",
-        "test:e2e": "node --test --experimental-strip-types tests/e2e/*.test.ts"
+        "test": "npm run test:unit",
+        "test:unit": "tsx --tsconfig apps/web/tsconfig.json --test tests/unit/*.test.ts",
+        "test:integration": "tsx --tsconfig apps/web/tsconfig.json --test tests/integration/*.test.ts",
+        "test:e2e": "python3 tests/e2e/smoke.py",
+        "test:e2e:authenticated": "python3 tests/e2e/authenticated.py",
+        "test:release": "npm run test:unit && npm run test:integration && npm run typecheck && npm run lint && npm run build",
+        "test:provider": "tsx --test tests/proof-extraction-manual.test.ts"
     },
     "devDependencies": {
         "@types/luxon": "^3.7.1",
         "@types/nodemailer": "^7.0.5",
-        "next": "^14.2.35",
+        "tsx": "^4.23.13",
         "typescript": "^5.4.5"
     },
     "type": "module",

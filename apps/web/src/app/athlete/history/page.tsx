@@ -16,7 +16,13 @@ import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedba
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useDisclosure } from "@heroui/react";
-import { formatFullDate, formatMinutes, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
+import {
+  formatFullDate,
+  formatMinutes,
+  formatWeekRange,
+  formatPaceWithUnit,
+  formatWatts,
+} from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { getWeekKey } from "@/lib/week-options";
 import { EditWorkoutModal } from "@/components/forms/edit-workout-modal";
@@ -27,9 +33,11 @@ export default function AthleteHistoryPage() {
   const disclosure = useDisclosure();
   const editDisclosure = useDisclosure();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<TrainingEntry | null>(null);
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.athlete.getHistoryWithEntries.useQuery();
+  const { data, isLoading, error } =
+    trpc.athlete.getHistoryWithEntries.useQuery();
   const history = useMemo(() => data ?? [], [data]);
   const { data: dashboard } = trpc.athlete.getDashboard.useQuery();
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>("ALL");
@@ -44,6 +52,8 @@ export default function AthleteHistoryPage() {
           utils.athlete.getLeaderboard.invalidate(),
         ]);
         setDeletingId(null);
+        setDeleteError(null);
+        disclosure.onClose();
       },
     });
 
@@ -71,8 +81,12 @@ export default function AthleteHistoryPage() {
           activeFilter === "ALL" || activeFilter === "MIN_30"
             ? week.entries
             : activeFilter === "HR_PRESENT"
-              ? week.entries.filter((entry) => entry.avgHr !== null && entry.avgHr !== undefined)
-              : week.entries.filter((entry) => entry.activityType === activeFilter);
+              ? week.entries.filter(
+                  (entry) => entry.avgHr !== null && entry.avgHr !== undefined,
+                )
+              : week.entries.filter(
+                  (entry) => entry.activityType === activeFilter,
+                );
 
         if (!entries.length) {
           return [];
@@ -90,16 +104,29 @@ export default function AthleteHistoryPage() {
 
   const handleDelete = (entryId: string) => {
     setDeletingId(entryId);
+    setDeleteError(null);
     disclosure.onOpen();
   };
 
   const confirmDelete = async () => {
     if (!deletingId) return;
-    await deleteEntry({ id: deletingId });
+    try {
+      await deleteEntry({ id: deletingId });
+    } catch (mutationError) {
+      setDeleteError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "This workout could not be removed. Try again.",
+      );
+    }
   };
 
-  const activeWeekStartAt = dashboard?.weekStartAt ? new Date(dashboard.weekStartAt) : null;
-  const activeWeekKey = activeWeekStartAt ? getWeekKey(activeWeekStartAt) : null;
+  const activeWeekStartAt = dashboard?.weekStartAt
+    ? new Date(dashboard.weekStartAt)
+    : null;
+  const activeWeekKey = activeWeekStartAt
+    ? getWeekKey(activeWeekStartAt)
+    : null;
 
   const isEditableWeek = (weekStartAt: Date) => {
     if (!activeWeekKey) {
@@ -123,7 +150,15 @@ export default function AthleteHistoryPage() {
         isLoading={isDeleting}
         confirmLabel="Remove"
       >
-        Are you sure you want to remove this entry? This action cannot be undone.
+        <span>
+          Are you sure you want to remove this entry? This action cannot be
+          undone.
+        </span>
+        {deleteError ? (
+          <span className="mt-3 block text-sm text-rose-600" role="alert">
+            {deleteError}
+          </span>
+        ) : null}
       </ConfirmModal>
       <EditWorkoutModal
         entry={editingEntry}
@@ -145,13 +180,22 @@ export default function AthleteHistoryPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <FilterChip isActive={activeFilter === "ALL"} onClick={() => setActiveFilter("ALL")}>
+        <FilterChip
+          isActive={activeFilter === "ALL"}
+          onClick={() => setActiveFilter("ALL")}
+        >
           All
         </FilterChip>
-        <FilterChip isActive={activeFilter === "ERG"} onClick={() => setActiveFilter("ERG")}>
+        <FilterChip
+          isActive={activeFilter === "ERG"}
+          onClick={() => setActiveFilter("ERG")}
+        >
           Erg
         </FilterChip>
-        <FilterChip isActive={activeFilter === "RUN"} onClick={() => setActiveFilter("RUN")}>
+        <FilterChip
+          isActive={activeFilter === "RUN"}
+          onClick={() => setActiveFilter("RUN")}
+        >
           Run
         </FilterChip>
         <FilterChip
@@ -160,14 +204,19 @@ export default function AthleteHistoryPage() {
         >
           HR present
         </FilterChip>
-        <FilterChip isActive={activeFilter === "MIN_30"} onClick={() => setActiveFilter("MIN_30")}>
+        <FilterChip
+          isActive={activeFilter === "MIN_30"}
+          onClick={() => setActiveFilter("MIN_30")}
+        >
           Min 30
         </FilterChip>
       </div>
 
       <div className="grid gap-6">
         {isLoading ? (
-          <Card className="text-sm text-default-500">Loading weekly history...</Card>
+          <Card className="text-sm text-default-500">
+            Loading weekly history...
+          </Card>
         ) : error ? (
           <Card className="text-sm text-rose-500">Unable to load history.</Card>
         ) : filteredHistory.length > 0 ? (
@@ -218,54 +267,70 @@ export default function AthleteHistoryPage() {
                         <div className="flex items-center gap-2">
                           <StatusBadge status={entry.validationStatus} />
                           {isEditableWeek(week.weekStartAt) ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              isIconOnly
-                              aria-label="Edit entry"
-                              className="h-8 w-8 min-w-0 text-default-500"
-                              disabled={isDeleting}
-                              onClick={() => handleEdit(entry)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                isIconOnly
+                                aria-label="Edit entry"
+                                className="h-8 w-8 min-w-0 text-default-500"
+                                disabled={isDeleting}
+                                onClick={() => handleEdit(entry)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                isIconOnly
+                                aria-label="Delete entry"
+                                className="h-8 w-8 min-w-0 text-default-500"
+                                disabled={isDeleting}
+                                onClick={() => handleDelete(entry.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
                           ) : null}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            isIconOnly
-                            aria-label="Delete entry"
-                            className="h-8 w-8 min-w-0 text-default-500"
-                            disabled={isDeleting}
-                            onClick={() => handleDelete(entry.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
                       </div>
                       {/* Pace and watts row */}
                       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-default-500">
                         {entry.avgPace != null && (
-                          <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace)}</span>
+                          <span>
+                            Pace:{" "}
+                            {formatPaceWithUnit(
+                              entry.activityType,
+                              entry.avgPace,
+                            )}
+                          </span>
                         )}
-                        {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && entry.avgWatts != null && (
-                          <span>Watts: {formatWatts(entry.avgWatts)}</span>
-                        )}
+                        {(entry.activityType === "ERG" ||
+                          entry.activityType === "CYCLE") &&
+                          entry.avgWatts != null && (
+                            <span>Watts: {formatWatts(entry.avgWatts)}</span>
+                          )}
                         {entry.avgHr != null && (
                           <span>HR: {entry.avgHr} bpm</span>
                         )}
                       </div>
-                      {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
-                        <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
-                          <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
-                        </div>
-                      )}
+                      {entry.validationStatus === "REJECTED" &&
+                        entry.rejectionNote && (
+                          <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
+                            <span className="font-semibold text-rose-600">
+                              Rejection reason:
+                            </span>{" "}
+                            {entry.rejectionNote}
+                          </div>
+                        )}
                       {(entry as any).extractedFields && (
                         <details className="mt-2 text-[10px] text-default-500">
                           <summary className="cursor-pointer select-none hover:text-foreground">
                             View details from AI extraction
                           </summary>
-                          <ProofExtractionFeedback fields={(entry as any).extractedFields} />
+                          <ProofExtractionFeedback
+                            fields={(entry as any).extractedFields}
+                          />
                         </details>
                       )}
                     </div>
@@ -276,7 +341,9 @@ export default function AthleteHistoryPage() {
           })
         ) : (
           <Card className="text-sm text-default-500">
-            {history.length > 0 ? "No weeks match this filter yet." : "No weekly history yet."}
+            {history.length > 0
+              ? "No weeks match this filter yet."
+              : "No weekly history yet."}
           </Card>
         )}
       </div>

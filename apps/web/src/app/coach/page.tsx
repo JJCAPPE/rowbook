@@ -13,6 +13,7 @@ import { useMemo } from "react";
 
 export default function CoachOverviewPage() {
   const searchParams = useSearchParams();
+  const teamId = searchParams.get("teamId") ?? undefined;
   const weekStartParam = searchParams.get("weekStartAt");
   const weekStartAt = useMemo(() => {
     if (!weekStartParam) {
@@ -22,31 +23,46 @@ export default function CoachOverviewPage() {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }, [weekStartParam]);
 
-  const { data, isLoading, error } = trpc.coach.getTeamOverview.useQuery(
-    weekStartAt ? { weekStartAt } : undefined,
+  const overviewInput = useMemo(
+    () =>
+      teamId || weekStartAt
+        ? {
+            ...(teamId ? { teamId } : {}),
+            ...(weekStartAt ? { weekStartAt } : {}),
+          }
+        : undefined,
+    [teamId, weekStartAt],
   );
+  const { data, isLoading, error } =
+    trpc.coach.getTeamOverview.useQuery(overviewInput);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Team overview"
         subtitle={
-          data?.requiredMinutes
+          isLoading
+            ? "Loading weekly requirement…"
+            : data?.requiredMinutes
             ? `Weekly requirement: ${data.requiredMinutes} minutes`
             : "Set a weekly requirement to track compliance."
         }
         actions={
           <div className="flex items-center gap-2">
-            <Badge tone="pending">{data?.pendingProofCount ?? 0} pending review</Badge>
-            <Badge tone="danger">{data?.missingMinutesCount ?? 0} missing minutes</Badge>
+            <Badge tone="pending">
+              {data ? data.pendingProofCount : "—"} pending review
+            </Badge>
+            <Badge tone="danger">
+              {data ? data.missingMinutesCount : "—"} missing minutes
+            </Badge>
           </div>
         }
       />
 
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Met goal" value={`${data?.summary.met ?? 0}`} />
-        <StatTile label="Not met" value={`${data?.summary.notMet ?? 0}`} />
-        <StatTile label="Exempt" value={`${data?.summary.exempt ?? 0}`} />
+        <StatTile label="Met goal" value={data ? `${data.summary.met}` : "—"} />
+        <StatTile label="Not met" value={data ? `${data.summary.notMet}` : "—"} />
+        <StatTile label="Exempt" value={data ? `${data.summary.exempt}` : "—"} />
       </div>
 
       {data && (

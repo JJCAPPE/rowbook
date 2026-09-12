@@ -9,9 +9,19 @@ export type WeekOption = {
   label: string;
 };
 
+export const SEASON_WEEK_OPTION_COUNT = 32;
+
 export const getWeekKey = (weekStartAt: Date) => weekStartAt.toISOString();
 
-export const buildWeekOptions = (count = 6, referenceDate = new Date()): WeekOption[] => {
+export const getWeekOptionsRefreshDelay = (referenceDate = new Date()) => {
+  const nextCutoff = getWeekRange(referenceDate).weekEndAt;
+  return Math.max(250, nextCutoff.getTime() - referenceDate.getTime() + 250);
+};
+
+export const buildWeekOptions = (
+  count = SEASON_WEEK_OPTION_COUNT,
+  referenceDate = new Date(),
+): WeekOption[] => {
   const options: WeekOption[] = [];
   let currentStart = getWeekRange(referenceDate).weekStartAt;
 

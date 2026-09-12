@@ -1,19 +1,23 @@
 import {
   ActivityType,
   PENDING_PROOF_STATUSES,
-  ProofExtractionStatus,
   ValidationStatus,
   getWeekStartAt,
   getWeekEndAt,
 } from "@rowbook/shared";
-import type { TrainingEntry } from "@rowbook/shared";
-import { getDefaultTeam, getTeamById } from "@/server/repositories/teams";
-import { getTeamLeaderboard, getTeamStats, getTeamTrend } from "@/server/services/weekly-service";
-import { listEntriesByAthlete, listEntriesByTeamWeek, listEntriesForReview } from "@/server/repositories/training-entries";
-import { listWeeklyAggregatesByAthlete } from "@/server/repositories/weekly-aggregates";
+import { prisma } from "@/db/client";
+import {
+  getTeamLeaderboard,
+  getTeamStats,
+  getTeamTrend,
+} from "@/server/services/weekly-service";
+import {
+  listEntriesByTeamWeek,
+  listEntriesForReview,
+} from "@/server/repositories/training-entries";
 import { listTeamAthletes, getUserById } from "@/server/repositories/users";
+import { getAthleteHistoryWithEntries } from "@/server/services/athlete-service";
 import { getProofViewUrl } from "@/server/services/proof-service";
-import { getWeightedAvgHr } from "@/server/utils/heart-rate";
 import {
   getEffectiveWeeklyTargetsForTeamWeek,
   type WeeklyRequirementSource,
@@ -37,65 +41,65 @@ type TeamLeaderboardRow = {
   requirementSource: WeeklyRequirementSource;
 };
 
-type ReviewEntry = {
-  id: string;
-  proofImageId: string;
-  activityType: ActivityType;
-  minutes: number;
-  distance: number;
-  avgHr: number | null;
-  avgPace: number | null;
-  avgWatts: number | null;
-  notes: string | null;
-  date: Date;
-  validationStatus: ValidationStatus;
-  rejectionNote: string | null;
-  athlete: { name: string | null; email: string };
-  proofImages: Array<{
-    id: string;
-    reviewedById: string | null;
-    proofExtractionJob: { status: ProofExtractionStatus; lastError: string | null } | null;
-    extractedFields: any;
-  }>;
+const getAuthorizedTeam = (actorId: string, teamId?: string) =>
+  prisma.team.findFirst({
+    where: {
+      ...(teamId ? { id: teamId } : {}),
+      coaches: { some: { coachId: actorId } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+export const listCoachTeams = (actorId: string) =>
+  prisma.team.findMany({
+    where: { coaches: { some: { coachId: actorId } } },
+    orderBy: [{ name: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true },
+  });
+
+export const listCoachTeamAthletes = async (
+  actorId: string,
+  teamId?: string,
+) => {
+  const team = await getAuthorizedTeam(actorId, teamId);
+  if (!team) {
+    throw new Error("Team not found or access denied.");
+  }
+
+  const athletes = await prisma.user.findMany({
+    where: { athleteProfile: { teamId: team.id } },
+    orderBy: [{ name: "asc" }, { email: "asc" }],
+    select: { id: true, name: true, email: true },
+  });
+  return athletes.map((athlete) => ({
+    id: athlete.id,
+    name: athlete.name ?? athlete.email,
+  }));
 };
 
-const attachProofs = async <T extends { proofImages: Array<any> }>(
-  entries: T[],
-  athleteId: string,
-  canViewAll: boolean,
-): Promise<Array<T & { proofs: Array<{ id: string; url: string; extractedFields: any }> }>> =>
-  Promise.all(
-    entries.map(async (entry: any) => {
-      const proofs = await Promise.all(
-        (entry.proofImages || []).map(async (proof: any) => {
-          try {
-            const view = await getProofViewUrl(athleteId, proof.id, canViewAll);
-            return { id: proof.id, url: view.signedUrl, extractedFields: proof.extractedFields };
-          } catch {
-            return { id: proof.id, url: "", extractedFields: proof.extractedFields };
-          }
-        })
-      );
-      return { ...entry, proofs };
-    }),
-  );
-
-export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) => {
-  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
+export const getTeamOverview = async (
+  actorId: string,
+  teamId?: string,
+  inputWeekStartAt?: Date,
+) => {
+  const team = await getAuthorizedTeam(actorId, teamId);
   if (!team) {
     throw new Error("Team not found.");
   }
 
-  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt) : getWeekStartAt(new Date());
+  const week = inputWeekStartAt
+    ? getWeekStartAt(inputWeekStartAt)
+    : getWeekStartAt(new Date());
   const weekEndAt = getWeekEndAt(week);
 
-  const [leaderboardResult, entries, targetContext, teamStats, teamTrend] = await Promise.all([
-    getTeamLeaderboard(team.id, week),
-    listEntriesByTeamWeek(team.id, week, weekEndAt),
-    getEffectiveWeeklyTargetsForTeamWeek(team.id, week),
-    getTeamStats(team.id, week),
-    getTeamTrend(team.id, week, 6),
-  ]);
+  const [leaderboardResult, entries, targetContext, teamStats, teamTrend] =
+    await Promise.all([
+      getTeamLeaderboard(team.id, week),
+      listEntriesByTeamWeek(team.id, week, weekEndAt),
+      getEffectiveWeeklyTargetsForTeamWeek(team.id, week),
+      getTeamStats(team.id, week),
+      getTeamTrend(team.id, week, 6),
+    ]);
   const leaderboard = leaderboardResult as TeamLeaderboardRow[];
 
   const summary = leaderboard.reduce(
@@ -108,11 +112,15 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
     { met: 0, notMet: 0, exempt: 0 },
   );
 
-  const pendingProofCount = (entries as Array<{ validationStatus: ValidationStatus }>).filter(
-    (entry) => PENDING_PROOF_STATUSES.has(entry.validationStatus),
+  const pendingProofCount = (
+    entries as Array<{ validationStatus: ValidationStatus }>
+  ).filter((entry) =>
+    PENDING_PROOF_STATUSES.has(entry.validationStatus),
   ).length;
 
-  const missingMinutesCount = leaderboard.filter((row) => row.missingMinutes).length;
+  const missingMinutesCount = leaderboard.filter(
+    (row) => row.missingMinutes,
+  ).length;
 
   return {
     teamId: team.id,
@@ -128,75 +136,51 @@ export const getTeamOverview = async (teamId?: string, inputWeekStartAt?: Date) 
   };
 };
 
-export const getAthleteDetail = async (actorId: string, athleteId: string) => {
-  const [athlete, entriesResult, history] = await Promise.all([
+export const getAthleteDetail = async (
+  actorId: string,
+  athleteId: string,
+  teamId?: string,
+) => {
+  const authorizedProfile = await prisma.athleteProfile.findFirst({
+    where: {
+      userId: athleteId,
+      ...(teamId ? { teamId } : {}),
+      team: { coaches: { some: { coachId: actorId } } },
+    },
+    select: { userId: true },
+  });
+  if (!authorizedProfile) {
+    throw new Error("Athlete not found or access denied.");
+  }
+
+  const [athlete, seasonHistory] = await Promise.all([
     getUserById(athleteId),
-    listEntriesByAthlete(athleteId),
-    listWeeklyAggregatesByAthlete(athleteId),
+    getAthleteHistoryWithEntries(athleteId, 52, true),
   ]);
-  const entries = entriesResult as TrainingEntry[];
-  
-  const entriesWithProofs = await attachProofs(entries as any[], athleteId, true);
+  const entries = seasonHistory.flatMap((week) => week.entries);
 
   const activityMixMap = new Map<ActivityType, number>();
-  const entriesByIsoWeek = new Map<string, TrainingEntry[]>();
-  const getNormalizedWeekStart = (date: Date) => getWeekStartAt(date);
 
   for (const entry of entries) {
     if (entry.validationStatus === "REJECTED") continue;
-    
+
     // Group for mix
-    activityMixMap.set(entry.activityType, (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes);
-    
-    // Group for Weekly HR
-    const key = getNormalizedWeekStart(entry.weekStartAt).toISOString();
-    const list = entriesByIsoWeek.get(key) ?? [];
-    list.push(entry);
-    entriesByIsoWeek.set(key, list);
+    activityMixMap.set(
+      entry.activityType,
+      (activityMixMap.get(entry.activityType) ?? 0) + entry.minutes,
+    );
   }
 
-  // Deduplicate weekly aggregates by week range key to handle cases where
-  // weekStartAt timestamps differ slightly but represent the same week
-  const weekMap = new Map<string, {
-    weekStartAt: Date;
-    weekEndAt: Date;
-    totalMinutes: number;
-    avgHr: number | null;
-  }>();
-
-  for (const week of history) {
-    const normalizedWeekStart = getNormalizedWeekStart(week.weekStartAt);
-    const weekKey = normalizedWeekStart.toISOString();
-    const existing = weekMap.get(weekKey);
-    
-    // Calculate avgHr for this normalized week from entries
-    const entriesForWeek = entriesByIsoWeek.get(weekKey) ?? [];
-    const entriesAvgHr = entriesForWeek.length > 0 
-      ? getWeightedAvgHr(entriesForWeek.map(e => ({ minutes: e.minutes, avgHr: e.avgHr })))
-      : null;
-
-    if (existing) {
-      existing.totalMinutes += week.totalMinutes;
-      // avgHr is constant for the weekKey (derived from entries), so no update needed
-    } else {
-      weekMap.set(weekKey, {
-        weekStartAt: normalizedWeekStart,
-        weekEndAt: getWeekEndAt(normalizedWeekStart),
-        totalMinutes: week.totalMinutes,
-        avgHr: entriesAvgHr, // Use entries calculation
-      });
-    }
-  }
-
-  // Convert map back to array
-  const deduplicatedHistory = Array.from(weekMap.values())
-    .map((week) => ({
+  const history = seasonHistory.map((week) => ({
       weekStartAt: week.weekStartAt,
       weekEndAt: week.weekEndAt,
       totalMinutes: week.totalMinutes,
       avgHr: week.avgHr,
-    }))
-    .sort((a, b) => b.weekStartAt.getTime() - a.weekStartAt.getTime());
+      requiredMinutes: week.requiredMinutes,
+      status: week.status,
+      requirementSource: week.requirementSource,
+      requirementReason: week.requirementReason,
+    }));
 
   return {
     athlete: athlete
@@ -205,17 +189,14 @@ export const getAthleteDetail = async (actorId: string, athleteId: string) => {
           name: athlete.name ?? athlete.email,
         }
       : { id: athleteId, name: "Athlete" },
-    entries: entriesWithProofs.map(e => ({
-        ...e,
-        proofs: e.proofs,
-        extractedFields: e.proofs[0]?.extractedFields ?? null,
-        proofUrl: e.proofs[0]?.url ?? null,
-    })),
-    history: deduplicatedHistory,
-    activityMix: Array.from(activityMixMap.entries()).map(([type, minutes]) => ({
-      type,
-      minutes,
-    })),
+    entries,
+    history,
+    activityMix: Array.from(activityMixMap.entries()).map(
+      ([type, minutes]) => ({
+        type,
+        minutes,
+      }),
+    ),
   };
 };
 
@@ -223,51 +204,143 @@ export const getReviewQueue = async (
   actorId: string,
   teamId?: string,
   inputWeekStartAt?: Date,
+  state: "NEEDS_REVIEW" | "CHECKING" | "COMPLETED" = "NEEDS_REVIEW",
+  cursor?: string,
+  limit = 20,
 ) => {
-  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
+  const team = await prisma.team.findFirst({
+    where: {
+      ...(teamId ? { id: teamId } : {}),
+      coaches: { some: { coachId: actorId } },
+    },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
   if (!team) {
-    throw new Error("Team not found.");
+    throw new Error("Team not found or access denied.");
   }
 
-  const week = inputWeekStartAt ? getWeekStartAt(inputWeekStartAt) : getWeekStartAt(new Date());
-  const weekEndAt = getWeekEndAt(week);
-
-  const entries = (await listEntriesForReview(
-    team.id,
-    Array.from(PENDING_PROOF_STATUSES),
-    { includeReviewed: true },
-  )) as unknown as ReviewEntry[];
-  
-  const entriesWithProofs = await attachProofs(entries, actorId, true);
+  const weekStartAt = inputWeekStartAt
+    ? getWeekStartAt(inputWeekStartAt)
+    : getWeekStartAt(new Date());
+  const weekEndAt = getWeekEndAt(weekStartAt);
+  const rows = await listEntriesForReview(team.id, {
+    weekStartAt,
+    weekEndAt,
+    state,
+    cursor,
+    limit,
+  });
+  const hasMore = rows.length > limit;
+  const entries = hasMore ? rows.slice(0, limit) : rows;
 
   return {
     teamId: team.id,
-    weekStartAt: week,
-    entries: entriesWithProofs.map(({ athlete, proofs, ...rest }: any) => {
-      const rejectionNote = rest.rejectionNote;
+    weekStartAt,
+    weekEndAt,
+    state,
+    nextCursor: hasMore ? (entries.at(-1)?.id ?? null) : null,
+    entries: entries.map((entry) => {
+      const extraction = entry.evidenceExtractionJob;
+      const firstProof = entry.proofImages[0];
       return {
-        ...rest,
-        proofs,
-        rejectionNote,
-        athleteName: athlete?.name ?? athlete?.email ?? null,
-        // Use first proof for these or expose array to frontend?
-        proofExtractionStatus: rest.proofImages?.[0]?.proofExtractionJob?.status ?? null,
-        proofReviewedById: rest.proofImages?.[0]?.reviewedById ?? null,
-        extractedFields: proofs[0]?.extractedFields ?? null,
-        proofUrl: proofs[0]?.url ?? null,
+        id: entry.id,
+        version: entry.version,
+        activityType: entry.activityType,
+        minutes: entry.minutes,
+        distance: entry.distance,
+        avgHr: entry.avgHr,
+        avgPace: entry.avgPace,
+        avgWatts: entry.avgWatts,
+        notes: entry.notes,
+        date: entry.date,
+        validationStatus: entry.validationStatus,
+        rejectionNote: entry.rejectionNote,
+        reviewedAt: entry.reviewedAt,
+        athleteName: entry.athlete.name ?? "Athlete",
+        proofExtractionStatus: extraction?.status ?? null,
+        extractionFailureCode: extraction?.failureCode ?? null,
+        extractedFields:
+          extraction?.result ?? firstProof?.extractedFields ?? null,
+        proofs: entry.proofImages.map((proof) => ({
+          id: proof.id,
+          fileName: proof.originalFileName,
+          validationStatus: proof.validationStatus,
+          available: true,
+        })),
       };
     }),
   };
 };
 
-export const getWeeklySettings = async (teamId?: string, inputWeekStartAt?: Date) => {
-  const team = teamId ? await getTeamById(teamId) : await getDefaultTeam();
+export const getReviewEvidence = async (
+  actorId: string,
+  entryId: string,
+  expectedVersion: number,
+) => {
+  const entry = await prisma.trainingEntry.findFirst({
+    where: {
+      id: entryId,
+      version: expectedVersion,
+      athlete: {
+        athleteProfile: {
+          team: { coaches: { some: { coachId: actorId } } },
+        },
+      },
+    },
+    select: {
+      id: true,
+      version: true,
+      proofImageId: true,
+      proofImages: {
+        where: { uploadedAt: { not: null }, deletedAt: null },
+        select: { id: true, originalFileName: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  if (!entry) {
+    throw new Error("Workout evidence is unavailable or changed.");
+  }
+
+  const proofIds = [
+    ...new Set([
+      ...entry.proofImages.map((proof) => proof.id),
+      ...(entry.proofImageId ? [entry.proofImageId] : []),
+    ]),
+  ];
+
+  const images = await Promise.all(
+    proofIds.map(async (proofImageId, index) => {
+      const view = await getProofViewUrl(actorId, proofImageId, true);
+      const metadata = entry.proofImages.find(
+        (proof) => proof.id === proofImageId,
+      );
+      return {
+        id: proofImageId,
+        src: view.signedUrl,
+        alt: `Workout proof ${index + 1}`,
+        fileName: metadata?.originalFileName ?? null,
+      };
+    }),
+  );
+
+  return { entryId: entry.id, version: entry.version, images };
+};
+
+export const getWeeklySettings = async (
+  actorId: string,
+  teamId?: string,
+  inputWeekStartAt?: Date,
+) => {
+  const team = await getAuthorizedTeam(actorId, teamId);
   if (!team) throw new Error("Team not found");
 
   const effectiveWeekStartAt = getWeekStartAt(inputWeekStartAt ?? new Date());
   const weekEndAt = getWeekEndAt(effectiveWeekStartAt);
   const currentWeekStartAt = getWeekStartAt(new Date());
-  const isCurrentWeek = currentWeekStartAt.getTime() === effectiveWeekStartAt.getTime();
+  const isCurrentWeek =
+    currentWeekStartAt.getTime() === effectiveWeekStartAt.getTime();
 
   const [targetContext, activeAthletes] = await Promise.all([
     getEffectiveWeeklyTargetsForTeamWeek(team.id, effectiveWeekStartAt),

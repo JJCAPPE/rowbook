@@ -42,12 +42,17 @@ export const getWeeklyRequirement = (teamId: string, weekStartAt: Date, weekEndA
   });
 };
 
-export const listWeeklyRequirementsByTeamSince = (teamId: string, weekStartAt: Date) => {
+export const listWeeklyRequirementsByTeamSince = (
+  teamId: string,
+  weekStartAt: Date,
+  weekEndAt?: Date,
+) => {
   return prisma.weeklyRequirement.findMany({
     where: {
       teamId,
       weekStartAt: {
         gte: weekStartAt,
+        ...(weekEndAt ? { lt: weekEndAt } : {}),
       },
     },
   });

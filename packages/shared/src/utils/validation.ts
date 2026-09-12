@@ -27,7 +27,7 @@ export const truncateDistanceKm = (distanceKm: number) =>
   Math.floor(distanceKm * 10) / 10;
 
 export const compareDistanceKm = (manualKm: number, proofKm?: number | null) =>
-  compareOptionalNumber(manualKm, proofKm, truncateDistanceKm);
+  compareOptionalNumber(truncateDistanceKm(manualKm), proofKm, truncateDistanceKm);
 
 export const compareAverageHr = (
   manualHr: number | null | undefined,

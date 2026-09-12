@@ -1,58 +1,118 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { Spinner } from "@heroui/react";
+import { use, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ActivityMixChart } from "@/components/charts/activity-mix-chart";
 import { WeeklyTrendChart } from "@/components/charts/weekly-trend-chart";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatFullDate, formatMinutes, formatDistance, formatWeekRange } from "@/lib/format";
+import {
+  formatFullDate,
+  formatMinutes,
+  formatDistance,
+  formatWeekRange,
+} from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import type { TrainingEntry } from "@rowbook/shared";
 
 type CoachAthleteDetailPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
-export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPageProps) {
+function CoachEntryEvidence({
+  entryId,
+  version,
+  count,
+}: {
+  entryId: string;
+  version: number;
+  count: number;
+}) {
+  const [requested, setRequested] = useState(false);
+  const evidence = trpc.coach.getReviewEvidence.useQuery(
+    { entryId, expectedVersion: version },
+    { enabled: requested, retry: false, staleTime: 10 * 60 * 1000 },
+  );
+
+  if (!requested) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setRequested(true)}>
+        Load {count === 1 ? "evidence" : `${count} evidence images`}
+      </Button>
+    );
+  }
+  if (evidence.isLoading) {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-default-500">
+        <Spinner size="sm" /> Loading secure evidence…
+      </p>
+    );
+  }
+  if (evidence.error) {
+    return (
+      <div className="flex flex-wrap items-center gap-2" role="alert">
+        <span className="text-sm text-rose-600">Evidence could not be loaded.</span>
+        <Button size="sm" variant="outline" onClick={() => void evidence.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  if (!evidence.data?.images.length) {
+    return <p className="text-sm text-default-500">Evidence has expired.</p>;
+  }
+
+  return (
+    <ProofImageViewer
+      images={evidence.data.images}
+      alt="Workout evidence"
+      onRefresh={() => evidence.refetch()}
+    />
+  );
+}
+
+export default function CoachAthleteDetailPage(
+  props: CoachAthleteDetailPageProps,
+) {
+  const params = use(props.params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const teamId = searchParams.get("teamId") ?? undefined;
   const { data, isLoading, error } = trpc.coach.getAthleteDetail.useQuery({
     athleteId: params.id,
+    ...(teamId ? { teamId } : {}),
   });
-  const { data: overview } = trpc.coach.getTeamOverview.useQuery();
+  const { data: roster } = trpc.coach.listAthletes.useQuery(
+    teamId ? { teamId } : undefined,
+  );
   const entries: any[] = data?.entries ?? [];
 
-  const weeklyTrend = useMemo(() => {
-    if (!data?.history?.length) {
-      return [];
-    }
-    return [...data.history]
-      .slice(0, 12)
-      .reverse()
-      .map((week) => ({
-        week: formatWeekRange(week.weekStartAt, week.weekEndAt),
-        minutes: week.totalMinutes,
-        avgHr: week.avgHr ?? null,
-      }));
-  }, [data?.history]);
+  const weeklyTrend = data?.history?.length
+    ? [...data.history]
+        .slice(0, 12)
+        .reverse()
+        .map((week) => ({
+          week: formatWeekRange(week.weekStartAt, week.weekEndAt),
+          minutes: week.totalMinutes,
+          avgHr: week.avgHr ?? null,
+        }))
+    : [];
+  const activityMix = data?.activityMix ?? [];
+  const athleteOptions = [...(roster ?? [])];
 
-  const activityMix = useMemo(() => data?.activityMix ?? [], [data?.activityMix]);
-  const athleteOptions = useMemo(() => {
-    const options = (overview?.leaderboard ?? []).map((row) => ({
-      id: row.athleteId,
-      name: row.name,
-    }));
+  if (
+    data?.athlete &&
+    !athleteOptions.some((option) => option.id === data.athlete.id)
+  ) {
+    athleteOptions.push({ id: data.athlete.id, name: data.athlete.name });
+  }
 
-    if (data?.athlete && !options.some((option) => option.id === data.athlete.id)) {
-      options.push({ id: data.athlete.id, name: data.athlete.name });
-    }
-
-    return options.sort((a, b) => a.name.localeCompare(b.name));
-  }, [overview?.leaderboard, data?.athlete]);
+  athleteOptions.sort((a, b) => a.name.localeCompare(b.name));
   const selectedAthleteId = data?.athlete?.id ?? params.id;
 
   return (
@@ -69,7 +129,10 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
               onChange={(event) => {
                 const nextAthleteId = event.target.value;
                 if (nextAthleteId && nextAthleteId !== selectedAthleteId) {
-                  router.push(`/coach/athlete/${nextAthleteId}`);
+                  const query = searchParams.toString();
+                  router.push(
+                    `/coach/athlete/${nextAthleteId}${query ? `?${query}` : ""}`,
+                  );
                 }
               }}
               className="w-full"
@@ -103,22 +166,33 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="section-title">Recent entries</p>
-          <span className="text-xs text-default-500">Proof images retained 7 days</span>
+          <span className="text-xs text-default-500">
+            Proof images retained 7 days
+          </span>
         </div>
         <div className="grid gap-4">
           {isLoading ? (
-            <p className="text-sm text-default-500">Loading athlete entries...</p>
+            <p className="text-sm text-default-500">
+              Loading athlete entries...
+            </p>
           ) : error ? (
-            <p className="text-sm text-rose-500">Unable to load athlete detail.</p>
+            <p className="text-sm text-rose-500">
+              Unable to load athlete detail.
+            </p>
           ) : entries.length ? (
             entries.map((entry) => (
-              <div key={entry.id} className="rounded-2xl border border-divider/40 bg-content2/70 p-4">
+              <div
+                key={entry.id}
+                className="rounded-2xl border border-divider/40 bg-content2/70 p-4"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-foreground">
                       {entry.activityType} • {formatMinutes(entry.minutes)}
                     </p>
-                    <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
+                    <p className="text-xs text-default-500">
+                      {formatFullDate(entry.date)}
+                    </p>
                   </div>
                   <StatusBadge status={entry.validationStatus} />
                 </div>
@@ -128,21 +202,16 @@ export default function CoachAthleteDetailPage({ params }: CoachAthleteDetailPag
                   <span>Notes: {entry.notes ?? "—"}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {entry.proofs && entry.proofs.some((proof: { url?: string }) => Boolean(proof.url)) ? (
-                    <ProofImageViewer
-                      images={(entry.proofs as Array<{ id: string; url: string }>)
-                        .filter((proof) => Boolean(proof.url))
-                        .map((proof, index) => ({
-                          id: proof.id,
-                          src: proof.url,
-                          alt: `Workout proof ${index + 1}`,
-                        }))}
-                      alt="Workout proof"
+                  {entry.proofs?.length ? (
+                    <CoachEntryEvidence
+                      entryId={entry.id}
+                      version={entry.version}
+                      count={entry.proofs.length}
                     />
-                  ) : entry.proofUrl ? (
-                    <ProofImageViewer src={entry.proofUrl} alt="Workout proof" />
                   ) : (
-                    <p className="text-xs text-default-500">Proof not available.</p>
+                    <p className="text-xs text-default-500">
+                      Evidence has expired.
+                    </p>
                   )}
                 </div>
               </div>

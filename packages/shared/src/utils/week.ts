@@ -1,4 +1,5 @@
 import { DateInput, DEFAULT_TIMEZONE, toDateTime } from "./time";
+import { PROOF_RETENTION_DAYS } from "../constants/limits";
 
 export const WEEK_START_HOUR = 20;
 export const WEEK_START_MINUTE = 0;
@@ -52,6 +53,15 @@ export const getWeekRange = (
   const weekStartAt = getWeekStartAt(date, timeZone);
   return { weekStartAt, weekEndAt: getWeekEndAt(weekStartAt, timeZone) };
 };
+
+export const getProofRetentionDeleteAfter = (
+  weekEndAt: DateInput,
+  timeZone = DEFAULT_TIMEZONE,
+): Date =>
+  toDateTime(weekEndAt, timeZone)
+    .plus({ days: PROOF_RETENTION_DAYS })
+    .toUTC()
+    .toJSDate();
 
 export const isWithinWeek = (
   date: DateInput,

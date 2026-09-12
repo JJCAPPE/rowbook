@@ -40,10 +40,11 @@ export const getWeeklyAggregate = (athleteId: string, weekStartAt: Date, weekEnd
   });
 };
 
-export const listWeeklyAggregatesByAthlete = (athleteId: string) =>
+export const listWeeklyAggregatesByAthlete = (athleteId: string, limit = 52) =>
   prisma.weeklyAggregate.findMany({
     where: { athleteId },
     orderBy: { weekStartAt: "desc" },
+    take: limit,
   });
 
 export const listWeeklyAggregatesByTeamWeek = (teamId: string, weekStartAt: Date, weekEndAt: Date) => {

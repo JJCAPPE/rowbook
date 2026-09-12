@@ -1,64 +1,169 @@
-import test from 'node:test';
-import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import "dotenv/config";
 
-// Define __dirname (not available in ES modules)
-const __dirname = new URL('.', import.meta.url).pathname;
+import {
+  extractProofWithGemini,
+  extractProofWithGeminiBatch,
+  ProofExtractionError,
+} from "../apps/web/src/server/services/proof-extraction-service.ts";
 
-// Load .env manually
-const envPath = path.resolve(__dirname, '../.env');
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, 'utf8');
-  envConfig.split('\n').forEach(line => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return;
-    const [key, ...valueParts] = trimmed.split('=');
-    if (key && valueParts.length > 0) {
-      process.env[key.trim()] = valueParts.join('=').trim();
-    }
-  });
-}
+const fixtures = path.resolve("tests/test-photos");
 
-// Import the service
-// @ts-ignore - Importing from outside root might need explicit path if alias not handled
-import { extractProofWithGemini } from '../apps/web/src/server/services/proof-extraction-service.ts';
+const convertHeic = (fileName: string, outputDirectory: string) => {
+  const outputPath = path.join(outputDirectory, `${path.parse(fileName).name}.jpg`);
+  execFileSync(
+    "sips",
+    ["-s", "format", "jpeg", path.join(fixtures, fileName), "--out", outputPath],
+    { stdio: "ignore" },
+  );
+  return fs.readFileSync(outputPath);
+};
 
-test('Proof Extraction Manual Test', async (t) => {
-  const processImage = async (filename: string, expectedMinutes: number, expectedDate: string) => {
-    const filePath = path.join(__dirname, filename);
-    const buffer = fs.readFileSync(filePath);
+const assertClose = (actual: number | null, expected: number, tolerance: number) => {
+  assert.notEqual(actual, null);
+  assert.ok(
+    Math.abs((actual as number) - expected) <= tolerance,
+    `expected ${expected} ± ${tolerance}, received ${actual}`,
+  );
+};
 
-    console.log(`\nProcessing ${filename}...`);
+const withProviderRetry = async <T>(operation: () => Promise<T>) => {
+  const retryDelaysMs = [15_000, 45_000, 90_000];
+  for (let attempt = 0; ; attempt += 1) {
     try {
-      const result = await extractProofWithGemini(buffer);
-      console.log('Result:', JSON.stringify(result, null, 2));
-
-      assert.ok(result, 'Result should not be null');
-      
-      // Validate Date
-      // We expect the date to match closely or exactly
-      assert.strictEqual(result.date, expectedDate, `Date mismatch for ${filename}. Expected ${expectedDate}, got ${result.date}`);
-
-      // Validate Minutes
-      assert.ok(result.minutes !== null, 'Minutes should not be null');
-      if (result.minutes !== null) {
-          const diff = Math.abs(result.minutes - expectedMinutes);
-          assert.ok(diff <= 1, `Minutes mismatch for ${filename}. Expected ${expectedMinutes} (+/- 1), got ${result.minutes}. Diff: ${diff}`);
-      }
+      return await operation();
     } catch (error) {
-       console.error(`Error processing ${filename}:`, error);
-       throw error;
+      const delayMs = retryDelaysMs[attempt];
+      if (
+        !(error instanceof ProofExtractionError) ||
+        !error.retryable ||
+        delayMs === undefined
+      ) {
+        throw error;
+      }
+      console.info("provider benchmark retry", {
+        attempt: attempt + 1,
+        code: error.code,
+        delayMs,
+      });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-  };
+  }
+};
 
-  await t.test('Garmin Proof', async () => {
-    // Jan 29th -> 2026-01-29
-    await processImage('garmin.PNG', 92, '2026-01-29');
-  });
+test(
+  "Gemini reads the labeled Concept2, Garmin, and Strava evidence sets",
+  { timeout: 8 * 60_000 },
+  async (t) => {
+    assert.ok(process.env.GEMINI_API_KEY, "GEMINI_API_KEY is required for this paid test");
+    const converted = fs.mkdtempSync(path.join(os.tmpdir(), "rowbook-proof-benchmark-"));
+    t.after(() => fs.rmSync(converted, { recursive: true, force: true }));
 
-  await t.test('Strava Proof', async () => {
-    // Jan 29th -> 2026-01-29
-    await processImage('strava.PNG', 92, '2026-01-29');
-  });
-});
+    const cases = [
+      {
+        name: "Concept2 RowErg",
+        buffer: fs.readFileSync(path.join(fixtures, "IMG_0212.JPG")),
+        referenceDate: new Date("2026-01-20T17:00:00-05:00"),
+        expected: {
+          activityType: "ERG",
+          date: "2026-01-15",
+          durationSeconds: 1_270,
+          distance: 6,
+          avgHr: null,
+        },
+      },
+      {
+        name: "Concept2 BikeErg 2x30",
+        buffer: convertHeic("IMG_4031.HEIC", converted),
+        referenceDate: new Date("2025-02-05T17:00:00-05:00"),
+        expected: {
+          activityType: "CYCLE",
+          date: "2025-02-03",
+          durationSeconds: 3_600,
+          distance: 32.318,
+          avgHr: 149,
+        },
+      },
+      {
+        name: "Concept2 BikeErg second session",
+        buffer: convertHeic("IMG_4070.HEIC", converted),
+        referenceDate: new Date("2025-02-12T17:00:00-05:00"),
+        expected: {
+          activityType: "CYCLE",
+          date: "2025-02-10",
+          durationSeconds: 3_600,
+          distance: 32.281,
+          avgHr: 136,
+        },
+      },
+      {
+        name: "Concept2 BikeErg 3x30",
+        buffer: convertHeic("IMG_4074.HEIC", converted),
+        referenceDate: new Date("2025-02-12T17:00:00-05:00"),
+        expected: {
+          activityType: "CYCLE",
+          date: "2025-02-11",
+          durationSeconds: 5_400,
+          distance: 47.919,
+          avgHr: 143,
+        },
+      },
+    ] as const;
+
+    for (const fixture of cases) {
+      await t.test(fixture.name, async () => {
+        const result = await withProviderRetry(() =>
+          extractProofWithGemini(fixture.buffer, {
+            referenceDate: fixture.referenceDate,
+          }),
+        );
+        assert.equal(result.activityType, fixture.expected.activityType);
+        assert.equal(result.date, fixture.expected.date);
+        assertClose(result.durationSeconds, fixture.expected.durationSeconds, 1);
+        assertClose(result.distance, fixture.expected.distance, 0.01);
+        assert.equal(result.avgHr, fixture.expected.avgHr);
+        assert.equal(result.isSingleWorkout, true);
+        console.info("provider benchmark", {
+          fixture: fixture.name,
+          durationMs: result.metadata.durationMs,
+          inputTokens: result.metadata.inputTokens,
+          outputTokens: result.metadata.outputTokens,
+          model: result.metadata.model,
+        });
+      });
+    }
+
+    await t.test("Garmin and Strava are consolidated as one workout", async () => {
+      const result = await withProviderRetry(() =>
+        extractProofWithGeminiBatch(
+          [
+            fs.readFileSync(path.join(fixtures, "garmin.PNG")),
+            fs.readFileSync(path.join(fixtures, "strava.PNG")),
+          ],
+          { referenceDate: new Date("2026-02-01T17:00:00-05:00") },
+        ),
+      );
+      assert.equal(result.activityType, "OTHER");
+      assert.equal(result.date, "2026-01-29");
+      assertClose(result.durationSeconds, 5_520, 2);
+      assert.equal(result.minutes, 92);
+      assert.equal(result.distance, null);
+      assert.equal(result.avgHr, 125);
+      assert.equal(result.isSingleWorkout, true);
+      assert.ok(result.sourceTypes.includes("GARMIN"));
+      assert.ok(result.sourceTypes.includes("STRAVA"));
+      console.info("provider benchmark", {
+        fixture: "Garmin + Strava",
+        durationMs: result.metadata.durationMs,
+        inputTokens: result.metadata.inputTokens,
+        outputTokens: result.metadata.outputTokens,
+        model: result.metadata.model,
+      });
+    });
+  },
+);

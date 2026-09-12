@@ -4,7 +4,11 @@ import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ACTIVITY_TYPE_LABELS, ActivityTypeValues } from "@rowbook/shared";
+import {
+  ACTIVITY_TYPE_LABELS,
+  ActivityTypeValues,
+  formatInTimeZone,
+} from "@rowbook/shared";
 
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { Button } from "@/components/ui/button";
@@ -19,27 +23,37 @@ const optionalNumber = z.preprocess(
   z.coerce.number().int().positive().nullable().optional(),
 );
 
-const schema = z.object({
-  activityType: z.enum(ActivityTypeValues),
-  date: z.string().min(1, "Select a date"),
-  minutes: z.coerce.number().int().min(1, "Enter minutes"),
-  distanceKm: z.coerce
-    .number()
-    .nonnegative()
-    .min(0.001, "Enter distance")
-    .max(
-      500,
-      "Distance looks too large. Enter kilometers (km), not meters (m).",
-    ),
-  avgHr: optionalNumber,
-  notes: z.string().max(1000).nullable().optional(),
-});
+const schema = z
+  .object({
+    activityType: z.enum(ActivityTypeValues),
+    date: z.string().min(1, "Select a date"),
+    minutes: z.coerce.number().int().min(1, "Enter minutes"),
+    distanceKm: z.coerce
+      .number()
+      .nonnegative()
+      .max(
+        500,
+        "Distance looks too large. Enter kilometers (km), not meters (m).",
+      ),
+    avgHr: optionalNumber,
+    notes: z.string().max(1000).nullable().optional(),
+  })
+  .superRefine((values, context) => {
+    if (values.activityType !== "OTHER" && values.distanceKm < 0.001) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["distanceKm"],
+        message: "Enter distance",
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
 type EditWorkoutFormProps = {
   entry: {
     id: string;
+    version: number;
     activityType: (typeof ActivityTypeValues)[number];
     date: Date;
     minutes: number;
@@ -51,22 +65,15 @@ type EditWorkoutFormProps = {
   onCancel: () => void;
 };
 
-const toDateInputValue = (value: Date) => {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const toDateInputValue = (value: Date) => formatInTimeZone(value);
 
-const getTodayString = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const getTodayString = () => formatInTimeZone(new Date());
 
-export function EditWorkoutForm({ entry, onSuccess, onCancel }: EditWorkoutFormProps) {
+export function EditWorkoutForm({
+  entry,
+  onSuccess,
+  onCancel,
+}: EditWorkoutFormProps) {
   const utils = trpc.useUtils();
   const today = getTodayString();
 
@@ -101,6 +108,7 @@ export function EditWorkoutForm({ entry, onSuccess, onCancel }: EditWorkoutFormP
     try {
       await updateEntry({
         id: entry.id,
+        expectedVersion: entry.version,
         activityType: values.activityType,
         date: values.date as unknown as Date,
         minutes: values.minutes,
@@ -158,17 +166,24 @@ export function EditWorkoutForm({ entry, onSuccess, onCancel }: EditWorkoutFormP
         </div>
         <div className="space-y-2">
           <Label htmlFor="edit-minutes">Minutes</Label>
-          <Input id="edit-minutes" type="number" min={1} {...register("minutes")} />
+          <Input
+            id="edit-minutes"
+            type="number"
+            min={1}
+            {...register("minutes")}
+          />
           {errors.minutes ? (
             <p className="text-xs text-rose-500">{errors.minutes.message}</p>
           ) : null}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="edit-distance">Distance (km)</Label>
+          <Label htmlFor="edit-distance">
+            Distance (km){activityType === "OTHER" ? " (optional)" : ""}
+          </Label>
           <Input
             id="edit-distance"
             type="number"
-            min={0.001}
+            min={activityType === "OTHER" ? 0 : 0.001}
             step="0.001"
             max={500}
             {...register("distanceKm")}
@@ -179,7 +194,13 @@ export function EditWorkoutForm({ entry, onSuccess, onCancel }: EditWorkoutFormP
         </div>
         <div className="space-y-2">
           <Label htmlFor="edit-hr">Average HR</Label>
-          <Input id="edit-hr" type="number" min={30} max={220} {...register("avgHr")} />
+          <Input
+            id="edit-hr"
+            type="number"
+            min={30}
+            max={220}
+            {...register("avgHr")}
+          />
           {errors.avgHr ? (
             <p className="text-xs text-rose-500">{errors.avgHr.message}</p>
           ) : null}
@@ -188,7 +209,11 @@ export function EditWorkoutForm({ entry, onSuccess, onCancel }: EditWorkoutFormP
 
       <div className="space-y-2">
         <Label htmlFor="edit-notes">Notes</Label>
-        <Textarea id="edit-notes" placeholder="Optional notes" {...register("notes")} />
+        <Textarea
+          id="edit-notes"
+          placeholder="Optional notes"
+          {...register("notes")}
+        />
       </div>
 
       {errors.root?.message ? (

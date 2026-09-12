@@ -27,6 +27,31 @@ enum ActivityType {
   OTHER
 }
 
+enum ActivityProvider {
+  GARMIN
+  STRAVA
+  POLAR
+}
+
+enum ConnectedAccountStatus {
+  ACTIVE
+  REVOKED
+  ERROR
+}
+
+enum ExternalActivityStatus {
+  SUGGESTED
+  ACCEPTED
+  IGNORED
+  DUPLICATE
+  OUT_OF_WINDOW
+}
+
+enum EntryOrigin {
+  MANUAL_PROOF
+  CONNECTED_PROVIDER
+}
+
 enum ValidationStatus {
   NOT_CHECKED
   PENDING
@@ -54,6 +79,14 @@ enum ProofExtractionStatus {
   FAILED
 }
 
+enum WeeklyRecapDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -75,18 +108,39 @@ model User {
   weeklyRequirementOverrides        AthleteWeeklyRequirementOverride[] @relation("WeeklyRequirementOverrideAthlete")
   weeklyRequirementOverridesCreated AthleteWeeklyRequirementOverride[] @relation("WeeklyRequirementOverrideCreator")
   weeklyAggregates  WeeklyAggregate[] @relation("WeeklyAggregateAthlete")
+  connectedAccounts ConnectedAccount[] @relation("ConnectedAccountAthlete")
+  externalActivities ExternalActivity[] @relation("ExternalActivityAthlete")
+  coachedTeams      CoachTeamMembership[] @relation("CoachTeamMembershipCoach")
+  reviewedEntries  TrainingEntry[] @relation("EntryReviewer")
+  weeklyRecapDeliveries WeeklyRecapDelivery[] @relation("WeeklyRecapRecipient")
+  evidenceExtractionJobs EvidenceExtractionJob[] @relation("EvidenceExtractionAthlete")
 }
 
 model Team {
   id        String   @id @default(cuid())
   name      String
   timezone  String   @default("America/New_York")
+  weeklyRecapEnabled Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   athletes          AthleteProfile[]
   weeklyRequirements WeeklyRequirement[]
   weeklyAggregates  WeeklyAggregate[]
+  coaches            CoachTeamMembership[]
+  weeklyRecapDeliveries WeeklyRecapDelivery[]
+}
+
+model CoachTeamMembership {
+  teamId    String
+  coachId   String
+  createdAt DateTime @default(now())
+
+  team  Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  coach User @relation("CoachTeamMembershipCoach", fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, coachId])
+  @@index([coachId])
 }
 
 model AthleteProfile {
@@ -152,7 +206,15 @@ model AthleteWeeklyRequirementOverride {
 model ProofImage {
   id               String           @id @default(cuid())
   athleteId        String
-  storagePath      String
+  storagePath      String           @unique
+  clientSubmissionId String?
+  originalFileName String?
+  declaredSize     Int?
+  declaredMimeType String?
+  verifiedSize     Int?
+  verifiedMimeType String?
+  contentSha256    String?
+  attachedAt       DateTime?
   uploadedAt       DateTime?
   deleteAfter      DateTime
   deletedAt        DateTime?
@@ -172,11 +234,75 @@ model ProofImage {
   trainingEntryId  String?
 
   @@index([athleteId, deleteAfter])
+  @@index([trainingEntryId])
+  @@index([clientSubmissionId])
+  @@index([athleteId, contentSha256])
+}
+
+model ConnectedAccount {
+  id                    String                 @id @default(cuid())
+  athleteId             String
+  provider              ActivityProvider
+  providerUserId        String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  scope                 String?
+  status                ConnectedAccountStatus @default(ACTIVE)
+  lastSyncAt            DateTime?
+  lastSyncCursor        String?
+  lastError             String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  athlete            User               @relation("ConnectedAccountAthlete", fields: [athleteId], references: [id])
+  externalActivities ExternalActivity[]
+
+  @@unique([athleteId, provider])
+  @@unique([provider, providerUserId])
+  @@index([provider, status])
+}
+
+model ExternalActivity {
+  id                    String                 @id @default(cuid())
+  athleteId             String
+  connectedAccountId    String
+  provider              ActivityProvider
+  providerActivityId    String
+  activityType          ActivityType?
+  trainingDate          DateTime?
+  minutes               Int?
+  distanceKm            Float?
+  avgHr                 Int?
+  providerFieldMask     Json?
+  missingRequiredFields Json?
+  status                ExternalActivityStatus @default(SUGGESTED)
+  sourceFormat          String?
+  sourceChecksum        String?
+  trainingEntryId       String?                @unique
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  athlete             User             @relation("ExternalActivityAthlete", fields: [athleteId], references: [id])
+  connectedAccount    ConnectedAccount @relation(fields: [connectedAccountId], references: [id])
+  trainingEntry       TrainingEntry?   @relation("ExternalActivityAcceptedEntry", fields: [trainingEntryId], references: [id])
+  originTrainingEntry TrainingEntry?   @relation("TrainingEntryExternalOrigin")
+
+  @@unique([provider, providerActivityId])
+  @@index([athleteId, status, trainingDate])
 }
 
 model TrainingEntry {
   id               String           @id @default(cuid())
   athleteId        String
+  clientSubmissionId String?
+  submissionHash   String?
+  evidenceRevision Int?
+  evidenceKey      String?          @unique
+  version          Int              @default(1)
+  origin           EntryOrigin      @default(MANUAL_PROOF)
+  originProvider   ActivityProvider?
+  originExternalActivityId String?  @unique
   activityType     ActivityType
   date             DateTime
   minutes          Int
@@ -191,17 +317,25 @@ model TrainingEntry {
   weekStartAt      DateTime
   lockedAt         DateTime?
   rejectionNote    String?
+  reviewedAt       DateTime?
+  reviewedById     String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
   athlete    User       @relation("EntryAthlete", fields: [athleteId], references: [id])
+  reviewedBy User?      @relation("EntryReviewer", fields: [reviewedById], references: [id])
+  externalActivityOrigin ExternalActivity? @relation("TrainingEntryExternalOrigin", fields: [originExternalActivityId], references: [id])
+  acceptedExternalActivity ExternalActivity? @relation("ExternalActivityAcceptedEntry")
   // Old relation (to be deprecated after migration)
   proofImage ProofImage? @relation("OldProofRelation", fields: [proofImageId], references: [id])
   
   // New relation
   proofImages ProofImage[]
+  evidenceExtractionJob EvidenceExtractionJob?
 
   @@index([athleteId, weekStartAt])
+  @@index([weekStartAt, validationStatus, date])
+  @@unique([athleteId, clientSubmissionId])
 }
 
 model WeeklyAggregate {
@@ -250,6 +384,67 @@ model ProofExtractionJob {
   updatedAt    DateTime              @updatedAt
 
   proofImage ProofImage @relation(fields: [proofImageId], references: [id])
+}
+
+model EvidenceExtractionJob {
+  id                 String                @id @default(cuid())
+  athleteId          String
+  clientSubmissionId String
+  evidenceRevision   Int
+  evidenceKey        String                @unique
+  proofImageIds      String[]
+  entryId            String?               @unique
+  referenceDate      DateTime
+  status             ProofExtractionStatus @default(PENDING)
+  attempts           Int                   @default(0)
+  priority           Int                   @default(10)
+  nextAttemptAt      DateTime              @default(now())
+  leaseExpiresAt     DateTime?
+  claimToken         String?
+  result             Json?
+  resultMeta         Json?
+  provider           String?
+  model              String?
+  promptVersion      String?
+  schemaVersion      String?
+  durationMs         Int?
+  failureCode        String?
+  lastError          String?
+  completedAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  athlete User           @relation("EvidenceExtractionAthlete", fields: [athleteId], references: [id], onDelete: Cascade)
+  entry   TrainingEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@unique([athleteId, clientSubmissionId, evidenceRevision])
+  @@index([status, nextAttemptAt, leaseExpiresAt, priority, createdAt])
+}
+
+model WeeklyRecapDelivery {
+  id                String                    @id @default(cuid())
+  teamId            String
+  weekStartAt       DateTime
+  userId            String
+  status            WeeklyRecapDeliveryStatus @default(PENDING)
+  templateVersion   String
+  attemptCount      Int                       @default(0)
+  nextAttemptAt     DateTime                  @default(now())
+  leaseExpiresAt    DateTime?
+  claimToken        String?
+  provider          String?
+  providerMessageId String?
+  sentAt            DateTime?
+  lastErrorCode     String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  recipient User @relation("WeeklyRecapRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, weekStartAt, userId])
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
 }
 
 model Session {

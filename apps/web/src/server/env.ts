@@ -10,6 +10,8 @@ const EnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   AUTH_SECRET: z.string().min(16),
   CRON_SECRET: z.string().min(1),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_MODEL: z.string().min(1).default("gemini-3.8-flash"),
   EMAIL_FROM: z.string().email().optional(),
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),

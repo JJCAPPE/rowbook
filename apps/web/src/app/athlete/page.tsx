@@ -19,14 +19,23 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card } from "@/components/ui/card";
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { useDisclosure } from "@heroui/react";
-import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
+import {
+  formatFullDate,
+  formatMinutes,
+  formatDistance,
+  formatWeekRange,
+  formatPaceWithUnit,
+  formatWatts,
+} from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { EditWorkoutModal } from "@/components/forms/edit-workout-modal";
+import { getWeekKey } from "@/lib/week-options";
 
 export default function AthleteDashboardPage() {
   const disclosure = useDisclosure();
   const editDisclosure = useDisclosure();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<TrainingEntry | null>(null);
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
@@ -39,7 +48,11 @@ export default function AthleteDashboardPage() {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }, [weekStartParam]);
 
-  const { data: dashboard, isLoading, error } = trpc.athlete.getDashboard.useQuery(
+  const {
+    data: dashboard,
+    isLoading,
+    error,
+  } = trpc.athlete.getDashboard.useQuery(
     weekStartAt ? { weekStartAt } : undefined,
   );
   const { data: history } = trpc.athlete.getHistory.useQuery();
@@ -54,19 +67,27 @@ export default function AthleteDashboardPage() {
           utils.athlete.getLeaderboard.invalidate(),
         ]);
         setDeletingId(null);
+        setDeleteError(null);
+        disclosure.onClose();
       },
     });
 
-  const entries = (dashboard?.entries ?? []) as Array<TrainingEntry & { extractedFields: any }>;
-  const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
+  const entries = (dashboard?.entries ?? []) as Array<
+    TrainingEntry & { extractedFields: any }
+  >;
+  const countedEntries = entries.filter(
+    (entry) => entry.validationStatus !== "REJECTED",
+  );
   const requiredMinutes = dashboard?.requiredMinutes ?? 0;
   const totalMinutes = dashboard?.totalMinutes ?? 0;
-  const totalDistanceKm = countedEntries.reduce((sum, entry) => sum + entry.distance, 0);
+  const totalDistanceKm = countedEntries.reduce(
+    (sum, entry) => sum + entry.distance,
+    0,
+  );
   const sessions = countedEntries.length;
   const avgHr = dashboard?.avgHr ?? null;
   const goalMinutes = requiredMinutes > 0 ? requiredMinutes : 1;
-  const requirementSource =
-    dashboard?.requirementSource ?? "TEAM_DEFAULT";
+  const requirementSource = dashboard?.requirementSource ?? "TEAM_DEFAULT";
   const requirementReason = dashboard?.requirementReason ?? null;
   const remainingMinutes =
     requiredMinutes > totalMinutes ? requiredMinutes - totalMinutes : 0;
@@ -89,9 +110,10 @@ export default function AthleteDashboardPage() {
 
   const handleDelete = (entryId: string) => {
     setDeletingId(entryId);
+    setDeleteError(null);
     disclosure.onOpen();
   };
-  
+
   const handleEdit = (entry: TrainingEntry) => {
     setEditingEntry(entry);
     editDisclosure.onOpen();
@@ -99,7 +121,15 @@ export default function AthleteDashboardPage() {
 
   const confirmDelete = async () => {
     if (!deletingId) return;
-    await deleteEntry({ id: deletingId });
+    try {
+      await deleteEntry({ id: deletingId });
+    } catch (mutationError) {
+      setDeleteError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "This workout could not be removed. Try again.",
+      );
+    }
   };
 
   if (isLoading) {
@@ -114,11 +144,19 @@ export default function AthleteDashboardPage() {
   if (error || !dashboard) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Dashboard" subtitle="We could not load your dashboard." />
-        <Card className="text-sm text-rose-500">Please refresh or try again later.</Card>
+        <PageHeader
+          title="Dashboard"
+          subtitle="We could not load your dashboard."
+        />
+        <Card className="text-sm text-rose-500">
+          Please refresh or try again later.
+        </Card>
       </div>
     );
   }
+
+  const isEditableWeek =
+    getWeekKey(dashboard.weekStartAt) === getWeekKey(new Date());
 
   return (
     <div className="space-y-6">
@@ -130,7 +168,15 @@ export default function AthleteDashboardPage() {
         isLoading={isDeleting}
         confirmLabel="Remove"
       >
-        Are you sure you want to remove this entry? This action cannot be undone.
+        <span>
+          Are you sure you want to remove this entry? This action cannot be
+          undone.
+        </span>
+        {deleteError ? (
+          <span className="mt-3 block text-sm text-rose-600" role="alert">
+            {deleteError}
+          </span>
+        ) : null}
       </ConfirmModal>
       <EditWorkoutModal
         entry={editingEntry}
@@ -156,8 +202,8 @@ export default function AthleteDashboardPage() {
               : requirementSource === "EXEMPT_WEEK"
                 ? "You are exempt for this week."
                 : requiredMinutes
-            ? `Goal: ${requiredMinutes} minutes this week`
-            : "Weekly requirement has not been set yet."
+                  ? `Goal: ${requiredMinutes} minutes this week`
+                  : "Weekly requirement has not been set yet."
         }
         actions={
           <Button as={Link} href="/athlete/log">
@@ -186,20 +232,25 @@ export default function AthleteDashboardPage() {
                 {totalMinutes} / {requiredMinutes} min
               </p>
               <p className="text-sm text-default-500">
-                {requirementSource === "EXEMPT_WEEK" || requirementSource === "EXEMPT_INDEFINITE"
-                  ? requirementReason || "You are exempt from minutes this week."
+                {requirementSource === "EXEMPT_WEEK" ||
+                requirementSource === "EXEMPT_INDEFINITE"
+                  ? requirementReason ||
+                    "You are exempt from minutes this week."
                   : requiredMinutes === 0
-                  ? "Waiting for a weekly requirement."
-                  : remainingMinutes > 0
-                    ? `${remainingMinutes} min remaining`
-                    : "Goal met for the week"}
+                    ? "Waiting for a weekly requirement."
+                    : remainingMinutes > 0
+                      ? `${remainingMinutes} min remaining`
+                      : "Goal met for the week"}
               </p>
             </div>
             <ProgressRing value={totalMinutes} max={goalMinutes} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatTile label="Distance" value={formatDistance(totalDistanceKm)} />
+            <StatTile
+              label="Distance"
+              value={formatDistance(totalDistanceKm)}
+            />
             <StatTile label="Sessions" value={`${sessions}`} />
             <StatTile label="Avg HR" value={avgHr ? `${avgHr} bpm` : "—"} />
           </div>
@@ -215,9 +266,14 @@ export default function AthleteDashboardPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="section-title">Recent entries</p>
-            <p className="text-sm text-default-500">Latest workouts with proof status.</p>
+            <p className="text-sm text-default-500">
+              Latest workouts with proof status.
+            </p>
           </div>
-          <Link className="text-sm font-semibold text-primary" href="/athlete/history">
+          <Link
+            className="text-sm font-semibold text-primary"
+            href="/athlete/history"
+          >
             View all
           </Link>
         </div>
@@ -235,52 +291,65 @@ export default function AthleteDashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {formatMinutes(entry.minutes)} {ACTIVITY_TYPE_LABELS[entry.activityType]}
+                      {formatMinutes(entry.minutes)}{" "}
+                      {ACTIVITY_TYPE_LABELS[entry.activityType]}
                     </p>
-                    <p className="text-xs text-default-500">{formatFullDate(entry.date)}</p>
+                    <p className="text-xs text-default-500">
+                      {formatFullDate(entry.date)}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={entry.validationStatus} />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    isIconOnly
-                    aria-label="Edit entry"
-                    className="h-8 w-8 min-w-0 text-default-500"
-                    disabled={isDeleting}
-                    onClick={() => handleEdit(entry)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    isIconOnly
-                    aria-label="Delete entry"
-                    className="h-8 w-8 min-w-0 text-default-500"
-                    disabled={isDeleting}
-                    onClick={() => handleDelete(entry.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {isEditableWeek ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        isIconOnly
+                        aria-label="Edit entry"
+                        className="h-8 w-8 min-w-0 text-default-500"
+                        disabled={isDeleting}
+                        onClick={() => handleEdit(entry)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        isIconOnly
+                        aria-label="Delete entry"
+                        className="h-8 w-8 min-w-0 text-default-500"
+                        disabled={isDeleting}
+                        onClick={() => handleDelete(entry.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </div>
               {/* Pace and watts info */}
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-default-500">
                 {entry.avgPace != null && (
-                  <span>Pace: {formatPaceWithUnit(entry.activityType, entry.avgPace)}</span>
+                  <span>
+                    Pace:{" "}
+                    {formatPaceWithUnit(entry.activityType, entry.avgPace)}
+                  </span>
                 )}
-                {(entry.activityType === "ERG" || entry.activityType === "CYCLE") && entry.avgWatts != null && (
-                  <span>Watts: {formatWatts(entry.avgWatts)}</span>
-                )}
+                {(entry.activityType === "ERG" ||
+                  entry.activityType === "CYCLE") &&
+                  entry.avgWatts != null && (
+                    <span>Watts: {formatWatts(entry.avgWatts)}</span>
+                  )}
                 {entry.distance > 0 && (
                   <span>Distance: {formatDistance(entry.distance)}</span>
                 )}
               </div>
               {entry.validationStatus === "REJECTED" && entry.rejectionNote && (
                 <div className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
-                  <span className="font-semibold">Rejection reason:</span> {entry.rejectionNote}
+                  <span className="font-semibold">Rejection reason:</span>{" "}
+                  {entry.rejectionNote}
                 </div>
               )}
               {entry.extractedFields && (

@@ -2,9 +2,18 @@ import { env } from "@/server/env";
 import { runWeeklyAggregation } from "@/server/jobs/weekly-aggregation";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const authorize = (req: Request) =>
   req.headers.get("authorization") === `Bearer ${env.CRON_SECRET}`;
+
+const parseWeeks = (value: string | null) => {
+  if (value === null) return 6;
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.min(52, Math.max(1, Math.floor(parsed)))
+    : 6;
+};
 
 const handler = async (req: Request) => {
   if (!authorize(req)) {
@@ -16,38 +25,41 @@ const handler = async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  const weeksParam = url.searchParams.get("weeks");
   const rebuild = url.searchParams.get("rebuild") === "1";
-  const weeks = weeksParam ? Math.max(1, Number(weeksParam)) : 6;
-
-  const normalizedWeeks = Number.isFinite(weeks) ? weeks : 6;
+  const weeks = parseWeeks(url.searchParams.get("weeks"));
 
   console.info("[cron/weekly] starting run", {
-    weeks: normalizedWeeks,
+    weeks,
     sendEmails: !rebuild,
   });
 
   try {
     const result = await runWeeklyAggregation({
-      weeks: normalizedWeeks,
+      weeks,
       sendEmails: !rebuild,
     });
 
     console.info("[cron/weekly] completed run", {
-      weeks: normalizedWeeks,
+      weeks,
       sendEmails: !rebuild,
       emailSummary: result.emailSummary,
+      needsAttention: result.needsAttention,
     });
 
-    return Response.json({ ok: true, result });
+    return Response.json(
+      { ok: !result.needsAttention, result },
+      { status: result.needsAttention ? 503 : 200 },
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     console.error("[cron/weekly] failed run", {
-      weeks: normalizedWeeks,
+      weeks,
       sendEmails: !rebuild,
-      error: message,
+      errorCode: error instanceof Error ? error.name : "UNKNOWN_ERROR",
     });
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return Response.json(
+      { ok: false, error: "weekly-cron-failed" },
+      { status: 500 },
+    );
   }
 };
 

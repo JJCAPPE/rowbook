@@ -1,6 +1,9 @@
 import { env } from "@/server/env";
 import { runProofCleanup } from "@/server/jobs/cleanup-proof-images";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 const authorize = (req: Request) =>
   req.headers.get("authorization") === `Bearer ${env.CRON_SECRET}`;
 
