@@ -2,8 +2,8 @@
 
 Final closeout: 2026-09-12
 Release branch: `codex/season-readiness-2026-09`
-Release commits: `04c369e`, `be1fbf1`, `20d92c1`
-Production: Vercel deployment `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK` at [rowbook.vercel.app](https://rowbook.vercel.app)
+Release commits: `04c369e`, `be1fbf1`, `20d92c1`, `f6f19d5`, `3b71c7c`
+Production: clean-tree Vercel deployment `dpl_7XABbGqd2uc9TiBxU3Nn5gQuwgSC` at [rowbook.vercel.app](https://rowbook.vercel.app)
 
 ## Result
 

@@ -1,6 +1,6 @@
 # Product and architecture decisions
 
-Final production state (2026-09-12): branch `codex/season-readiness-2026-09`, commits `04c369e`, `be1fbf1`, and `20d92c1`, deployed as `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK` at [rowbook.vercel.app](https://rowbook.vercel.app).
+Final production state (2026-09-12): branch `codex/season-readiness-2026-09`, application commits `04c369e`, `be1fbf1`, and `20d92c1`, audit commit `f6f19d5`, and clean-deployment guard `3b71c7c`, deployed as `dpl_7XABbGqd2uc9TiBxU3Nn5gQuwgSC` at [rowbook.vercel.app](https://rowbook.vercel.app).
 
 | Decision | Production rule | Example / impact | State |
 | --- | --- | --- | --- |

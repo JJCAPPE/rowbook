@@ -9,8 +9,8 @@
 | Item | Verified value |
 | --- | --- |
 | Branch | `codex/season-readiness-2026-09` |
-| Commits | `04c369e`, `be1fbf1`, `20d92c1` |
-| Vercel deployment | `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK` |
+| Commits | `04c369e`, `be1fbf1`, `20d92c1`, `f6f19d5`, `3b71c7c` |
+| Vercel deployment | `dpl_7XABbGqd2uc9TiBxU3Nn5gQuwgSC` |
 | Production URL | [rowbook.vercel.app](https://rowbook.vercel.app) |
 | Database migration | Applied transactionally and verified in production |
 
@@ -34,10 +34,12 @@ No credentials, secret values, signed URLs, roster rows, or proof images are rec
 ## Production operational closeout
 
 - Supabase Vault configuration is 5/5, six cron schedules are active, and a production extraction invocation returned HTTP 200.
+- The final Vercel build came from clean commit `3b71c7c`; its 234-file build context did not contain or load a local `.env` file.
 - Cleanup reconciled 904 proof rows and 867 Storage objects. Zero targeted rows or objects remained, while all 591 training entries were preserved.
 - RLS is enabled on every application table, with zero table grants to `anon` or `authenticated`.
 - Five coach-team memberships are active. The ten active staff without a membership receive an explicit no-team account state with retry and logout controls.
 - Weekly recap delivery was exercised twice through Brevo and visually inspected in Apple Mail; exact window and DST behavior is independently test-covered.
+- The post-release PostgreSQL 17 archive restored cleanly with exact production counts across users, teams, entries, proofs, aggregates, memberships, and migrations.
 
 ## Residual limitations and advisories
 

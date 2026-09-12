@@ -9,8 +9,8 @@ This directory retains the 2026-09-11 pre-release workstream snapshots and the 2
 | Item | Verified value |
 | --- | --- |
 | Release branch | `codex/season-readiness-2026-09` |
-| Release commits | `04c369e`, `be1fbf1`, `20d92c1` |
-| Production deployment | `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK`, live at [rowbook.vercel.app](https://rowbook.vercel.app) |
+| Release commits | `04c369e`, `be1fbf1`, `20d92c1`, `f6f19d5`, `3b71c7c` |
+| Production deployment | `dpl_7XABbGqd2uc9TiBxU3Nn5gQuwgSC`, live at [rowbook.vercel.app](https://rowbook.vercel.app) |
 | Vercel project | `rowbook`; root `apps/web`; Hobby plan; Node 24; function region `iad1` |
 | Supabase project | `vobbcgadkxfrzxmzrdch`; Postgres pooler indicates `us-west-2` |
 | Production migration state | Season-readiness migration applied transactionally and verified |
@@ -49,7 +49,7 @@ See [decisions.md](decisions.md) for the complete rule table.
 | V07 | Final production database audit | RLS enabled on all application tables; zero `anon`/`authenticated` grants |
 | V08 | Explicit capped provider benchmark | Five evidence sets passed their assertions; six calls occurred because one attempt failed transiently and was replayed |
 | V09 | Weekly recap delivery and rendering | Two real Brevo deliveries succeeded; HTML was visually checked in Apple Mail; exact window and DST tests passed |
-| V10 | Vercel production inspection | Deployment `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK` is live at `rowbook.vercel.app` |
+| V10 | Vercel production inspection | Clean-tree deployment `dpl_7XABbGqd2uc9TiBxU3Nn5gQuwgSC` is live at `rowbook.vercel.app`; the build context contained no local `.env` file |
 | V11 | `npm run build` for the frozen release | Passed alongside final typecheck and lint |
 | V12 | Browser verification | Six public smoke tests plus authenticated Garmin/Strava E2E passed; Axe/reflow checks were clean at 320, 390, and 1440 px |
 | V13 | Retention reconciliation | 904 proof rows and 867 Storage objects reconciled; zero remained; all 591 entries were preserved |
