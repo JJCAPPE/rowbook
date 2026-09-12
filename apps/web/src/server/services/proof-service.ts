@@ -52,7 +52,7 @@ const toBuffer = async (data: unknown) => {
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 const VIEW_URL_TTL_SECONDS = 15 * 60;
-export const PROOF_CLEANUP_BATCH_SIZE = 500;
+export const PROOF_CLEANUP_BATCH_SIZE = 200;
 const PROOF_CLEANUP_TRANSACTION_TIMEOUT_MS = 30_000;
 
 const sanitizeFileName = (name: string) =>
