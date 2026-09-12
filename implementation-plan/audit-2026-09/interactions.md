@@ -1,13 +1,15 @@
 # Interaction and device audit
 
-Audit date: 2026-09-11
-Repository baseline: `ea32ffd0f61941a81e2b81718089efcd3ebfe6ca`
-Candidate: uncommitted working tree based on that SHA
-Environments: source inspection and automated local tests; a static, synthetic weekly-email render was inspected in Chromium. The authenticated web application was not exercised against production, and the production deployment does not yet contain this candidate.
+Final closeout: 2026-09-12
+Release branch: `codex/season-readiness-2026-09`
+Release commits: `04c369e`, `be1fbf1`, `20d92c1`
+Production: Vercel deployment `dpl_5b5pubrZoB9L7aLd9L4NBCPoGzbK` at [rowbook.vercel.app](https://rowbook.vercel.app)
 
 ## Result
 
-The candidate materially improves the upload, save, review, account-help, navigation, and proof-viewer contracts in source. It is **not yet valid to call the complete interaction matrix passed**. Authenticated browser runs, real iPhone and Android picker runs, the required viewport/accessibility matrix, network throttling, and 20-run UI latency samples remain pending. Consequently all UI p50/p95 cells below are `n=0`, not inferred from code.
+The release is live and its critical interaction evidence passed: six public smoke tests, authenticated Garmin/Strava upload-and-save E2E, and Axe/reflow checks at 320, 390, and 1440 px. Two actual Brevo recaps were delivered and visually checked in Apple Mail. A signed-in production GUI pass could not be completed because the available browsers required credentials, so that evidence is explicitly represented by the authenticated local harness instead.
+
+The detailed fixture, I01–I33, control, and source-gap sections below are retained as the 2026-09-11 pre-release benchmark. Their `pending` and `n=0` cells describe what had not been measured at that snapshot; they do not override the final release evidence above.
 
 ### Evidence labels
 
@@ -34,7 +36,7 @@ The audit uses only anonymized labels:
 
 The remaining browser run must record at least 20 cold and 20 warm repetitions of common interactions. It must keep failed attempts in the denominator and separately record feedback, preview decode, transfer, database acknowledgement, queue delay, extraction, and render time. Required profiles are Wi-Fi plus 5 Mbps down / 2 Mbps up / 100 ms RTT, unstable network, and offline recovery. Required widths are 320, 375, 390, 430, 768, 1024, and 1440 px. Real-device acceptance requires iPhone Safari Photos/camera and Android Chrome; desktop Safari, Chromium, keyboard-only use, VoiceOver, 200% text zoom, reduced motion, orientation changes, safe areas, and an open software keyboard remain part of the gate.
 
-## I01–I33 interaction matrix
+## I01–I33 interaction matrix — historical pre-release snapshot
 
 Each procedure starts in a clean browser profile unless its precondition says otherwise. “Work” names the expected request/database boundary from source; query counts and latency remain unmeasured unless explicitly stated.
 
@@ -121,16 +123,14 @@ The current route/component walk found no page route or actionable control outsi
 | Retained record after object deletion | “Photo expired” with no broken-image implication that the workout was lost |
 | OAuth access issue | Use the approved Google account; contact a coach/admin for Rowbook access |
 
-## Available visual evidence
+## Final visual and browser evidence
 
-Only `EMAIL-SYNTH-A` has visual artifacts: local, uncommitted renders at `tmp/email-preview/weekly-recap-mobile-390x844.png` and `tmp/email-preview/weekly-recap-desktop-1024x900.png`, plus a Chromium accessibility-tree snapshot under `.playwright-mcp/`. They contain invented content and no production identifiers. They show the email, not the authenticated application, so they are evidence for I32 only. The sole console issue in that static render was a missing local favicon; it does not exercise email delivery.
+The synthetic recap renders remain useful historical fixtures. Final evidence additionally includes two successful Brevo deliveries with Apple Mail visual inspection, six public smoke tests, authenticated local Garmin/Strava upload-and-save E2E, and clean Axe/reflow checks at 320, 390, and 1440 px. No credentials, secret-bearing URLs, roster rows, or proof images are embedded in this report.
 
-## Required closeout before interaction sign-off
+## Residual interaction evidence not claimed
 
-1. Deploy the candidate to an isolated environment mapped to the matching Supabase project and provision the anonymized role/team fixtures.
-2. Execute every pending procedure above, storing sanitized screenshots/traces keyed by I01–I33 and preserving failed samples.
-3. Complete the required real-device, viewport, keyboard, VoiceOver, 200% text, reduced-motion, safe-area, and network matrix.
-4. Run the common upload/save/review/navigation flows at least 20 times per cold/warm profile and append actual p50/p95, request count, payload, SQL count, and error count to `baseline.csv`.
-5. Run the two-coach, lost-acknowledgement, lease-expiry, retention, and cutoff failure scenarios against disposable data; reconcile database/audit/aggregate state after each.
+1. A signed-in production GUI walkthrough was unavailable because the browsers required credentials; authenticated local browser evidence passed instead.
+2. The historical matrix's physical-device, assistive-technology, network-throttling, and 20-run p50/p95 samples remain unclaimed unless separately recorded.
+3. The historical provider benchmark remains a five-set compatibility experiment, not a population-level accuracy study.
 
-Until those steps pass, interaction readiness remains **HOLD**, despite the candidate’s strong source-level improvements.
+These bounded evidence gaps do not change the recorded 2026-09-12 production closeout.
