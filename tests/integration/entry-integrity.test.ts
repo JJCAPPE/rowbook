@@ -24,7 +24,7 @@ const prisma = new PrismaClient();
 const { createEntry, deleteEntry, updateEntry } = await import(
   "../../apps/web/src/server/services/entries-service.ts"
 );
-const { getTeamLeaderboard } = await import(
+const { aggregateWeekForAthlete, getTeamLeaderboard } = await import(
   "../../apps/web/src/server/services/weekly-service.ts"
 );
 const {
@@ -169,6 +169,7 @@ const seedSubmission = async () => {
   return {
     athleteId,
     coachId,
+    teamId,
     clientSubmissionId,
     proofImageId,
     input: {
@@ -325,6 +326,18 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       proof.deleteAfter.toISOString(),
       getProofRetentionDeleteAfter(results[0].weekEndAt).toISOString(),
     );
+  });
+
+  await t.test("weekly aggregate rebuild completes through its database lock", async () => {
+    const aggregate = await aggregateWeekForAthlete(
+      seeded.teamId,
+      seeded.athleteId,
+      getWeekStartAt(seeded.input.date),
+    );
+
+    assert.equal(aggregate.athleteId, seeded.athleteId);
+    assert.equal(aggregate.totalMinutes, 30);
+    assert.equal(aggregate.totalDistance, 7.5);
   });
 
   await t.test("the same athlete cannot reuse attached proof bytes", async () => {
