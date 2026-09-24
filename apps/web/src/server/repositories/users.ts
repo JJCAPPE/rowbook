@@ -8,7 +8,7 @@ export const getUserByEmail = (email: string) =>
 
 export const listTeamAthletes = (teamId: string) =>
   prisma.user.findMany({
-    where: { athleteProfile: { teamId } },
+    where: { status: "ACTIVE", athleteProfile: { teamId } },
     include: { athleteProfile: true },
   });
 
