@@ -65,7 +65,7 @@ export const SidebarNav = ({ items, className }: NavigationProps) => {
           color="secondary"
           className="text-[0.6rem]"
         >
-          v1.0
+          v2
         </Chip>
       </div>
       <div className="mt-8 flex flex-1 flex-col gap-2">
