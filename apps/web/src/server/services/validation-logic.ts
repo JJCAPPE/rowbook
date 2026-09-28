@@ -1,6 +1,5 @@
 import {
-  compareAverageHr,
-  compareDistanceKm,
+  getSupportedWorkoutMinutes,
   type ActivityType,
   type EvidenceExtractionResult,
   type ProofExtractedFields,
@@ -39,8 +38,6 @@ export type AutoVerificationResult = {
   reasons: string[];
 };
 
-const distanceIsRequired = (activityType: ActivityType) => activityType !== "OTHER";
-
 /**
  * Evaluates one canonical evidence-set result. Multiple legacy results are only
  * accepted when they agree; they are never summed because two screenshots may
@@ -63,64 +60,46 @@ export const evaluateAutoVerification = (
   }
 
   const canonical = extracted[0];
-  const requiredComplete =
-    Boolean(canonical.date) &&
-    canonical.minutes !== null &&
-    canonical.minutes !== undefined &&
-    (!distanceIsRequired(entry.activityType) ||
-      (canonical.distance !== null && canonical.distance !== undefined));
+  const supportedMinutes = getSupportedWorkoutMinutes(canonical);
+  const requiredComplete = extracted.every(
+    (proof) => Boolean(proof.date) && getSupportedWorkoutMinutes(proof) !== null,
+  );
 
-  if (!requiredComplete) {
+  if (!requiredComplete || supportedMinutes === null) {
     return {
       autoVerified: false,
       validationStatus: "EXTRACTION_INCOMPLETE",
-      reasons: ["The photo did not show every required workout value."],
+      reasons: ["The photo did not show the workout date and active duration."],
     };
   }
 
   const valuesDisagree = extracted.slice(1).some(
     (proof) =>
       proof.date !== canonical.date ||
-      proof.minutes !== canonical.minutes ||
-      (proof.distance ?? null) !== (canonical.distance ?? null),
+      getSupportedWorkoutMinutes(proof) !== supportedMinutes,
   );
 
   const reasons: string[] = [];
   if (valuesDisagree) reasons.push("The photos appear to show different workout totals.");
   if (!isDateMatch(entry.date, canonical.date)) reasons.push("Workout date does not match the photo.");
-  if (canonical.minutes !== entry.minutes) reasons.push("Workout minutes do not match the photo.");
-
-  if (
-    distanceIsRequired(entry.activityType) &&
-    !compareDistanceKm(entry.distance, canonical.distance).matches
-  ) {
-    reasons.push("Workout distance does not match the photo at 0.1 km precision.");
+  if (entry.minutes > supportedMinutes) {
+    reasons.push(`Entered minutes exceed the ${supportedMinutes} whole active minutes supported by the photo.`);
   }
 
-  if (
-    entry.avgHr !== null &&
-    entry.avgHr !== undefined &&
-    canonical.avgHr !== null &&
-    canonical.avgHr !== undefined &&
-    !compareAverageHr(entry.avgHr, canonical.avgHr).matches
-  ) {
-    reasons.push("Average heart rate does not match the photo.");
-  }
-
-  if (canonical.activityType && canonical.activityType !== entry.activityType) {
-    reasons.push("Activity type does not match the photo.");
-  }
-  if (canonical.isSingleWorkout === false) {
+  if (extracted.some((proof) => proof.isSingleWorkout === false)) {
     reasons.push("The photos may contain more than one workout.");
   }
   if (
-    canonical.confidence !== undefined &&
-    canonical.confidence < AUTO_VERIFY_CONFIDENCE
+    extracted.some((proof) =>
+      proof.confidence !== undefined && proof.confidence < AUTO_VERIFY_CONFIDENCE,
+    )
   ) {
     reasons.push("The automatic photo check was not confident enough.");
   }
-  if (canonical.reviewReason && !reasons.includes(canonical.reviewReason)) {
-    reasons.push(canonical.reviewReason);
+  for (const proof of extracted) {
+    if (proof.reviewReason && !reasons.includes(proof.reviewReason)) {
+      reasons.push(proof.reviewReason);
+    }
   }
 
   const autoVerified = reasons.length === 0;

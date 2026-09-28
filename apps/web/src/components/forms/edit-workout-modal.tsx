@@ -6,7 +6,7 @@ import type { TrainingEntry } from "@rowbook/shared";
 import { EditWorkoutForm } from "@/components/forms/edit-workout-form";
 
 type EditWorkoutModalProps = {
-  entry: TrainingEntry | null;
+  entry: (TrainingEntry & { extractedFields?: unknown }) | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 };

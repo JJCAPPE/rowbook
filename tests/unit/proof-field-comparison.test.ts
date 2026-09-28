@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareProofFields } from "../../apps/web/src/lib/proof-field-comparison.ts";
+import {
+  compareProofFields,
+  getExtractedMinutes,
+} from "../../apps/web/src/lib/proof-field-comparison.ts";
 
 const entered = {
   activityType: "ERG" as const,
@@ -42,7 +45,7 @@ test("comparison distinguishes disagreements from missing photo values", () => {
     {
       activityType: "differs",
       date: "differs",
-      minutes: "differs",
+      minutes: "supported",
       distance: "missing",
       avgHr: "missing",
     },
@@ -60,6 +63,20 @@ test("exact duration can stand in for rounded extracted minutes", () => {
   });
 
   assert.equal(comparison.minutes, "matches");
+});
+
+test("underclaimed minutes are supported and overclaimed minutes require review", () => {
+  assert.equal(compareProofFields(entered, { minutes: 30 }).minutes, "supported");
+  assert.equal(compareProofFields(entered, { minutes: 20 }).minutes, "differs");
+  assert.equal(compareProofFields(entered, {}).minutes, "missing");
+});
+
+test("exact active seconds take precedence over rounded extracted minutes", () => {
+  const proof = { minutes: 21, durationSeconds: 1_259 };
+
+  assert.equal(getExtractedMinutes(proof), 20);
+  assert.equal(compareProofFields(entered, proof).minutes, "differs");
+  assert.equal(getExtractedMinutes({ durationSeconds: 59 }), 0);
 });
 
 test("photo heart rate is different when the athlete did not enter one", () => {

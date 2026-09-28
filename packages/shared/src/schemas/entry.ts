@@ -73,6 +73,7 @@ export const TrainingEntrySchema = z.object({
   notes: z.string().max(1000).nullable(),
   // REMOVED: proofImageId
   validationStatus: ValidationStatusSchema,
+  creditPolicyVersion: z.number().int().positive(),
   entryStatus: EntryStatusSchema,
   weekStartAt: z.date(),
   lockedAt: z.date().nullable(),

@@ -282,6 +282,7 @@ export const createEntry = async (
           submissionHash,
           evidenceRevision,
           evidenceKey,
+          creditPolicyVersion: 2,
           activityType: input.activityType,
           date: input.date,
           minutes: input.minutes,
@@ -429,22 +430,22 @@ export const updateEntry = async (
     const avgHr = "avgHr" in input ? (input.avgHr ?? null) : entry.avgHr;
     const avgPace = calculatePaceSeconds(activityType, distance, minutes);
     const avgWatts = calculateWatts(activityType, avgPace);
-    const decisionFieldsChanged =
-      activityType !== entry.activityType ||
+    const requiresRevalidation =
       date.getTime() !== entry.date.getTime() ||
-      minutes !== entry.minutes ||
-      distance !== entry.distance ||
-      avgHr !== entry.avgHr;
+      (minutes !== entry.minutes &&
+        !(entry.validationStatus === "VERIFIED" && minutes < entry.minutes));
 
     let validationStatus = entry.validationStatus;
-    if (decisionFieldsChanged) {
+    if (requiresRevalidation) {
       const evidence = persistedEvidence(entry);
-      validationStatus = evidence.length
-        ? evaluateAutoVerification(
-            { activityType, date, minutes, distance, avgHr },
-            evidence,
-          ).validationStatus
-        : pendingStatusFor(entry.evidenceExtractionJob?.status);
+      validationStatus = entry.rejectionNote
+        ? "PENDING"
+        : evidence.length
+          ? evaluateAutoVerification(
+              { activityType, date, minutes, distance, avgHr },
+              evidence,
+            ).validationStatus
+          : pendingStatusFor(entry.evidenceExtractionJob?.status);
     }
 
     const changed = await tx.trainingEntry.updateMany({
@@ -459,9 +460,11 @@ export const updateEntry = async (
         avgWatts,
         notes: "notes" in input ? (input.notes ?? null) : entry.notes,
         validationStatus,
-        rejectionNote: decisionFieldsChanged ? null : entry.rejectionNote,
-        reviewedAt: decisionFieldsChanged ? null : entry.reviewedAt,
-        reviewedById: decisionFieldsChanged ? null : entry.reviewedById,
+        rejectionNote: entry.rejectionNote,
+        reviewedAt: requiresRevalidation ? null : entry.reviewedAt,
+        // A previous rejection keeps automatic extraction from approving an edit.
+        reviewedById:
+          requiresRevalidation && !entry.rejectionNote ? null : entry.reviewedById,
         version: { increment: 1 },
       },
     });
@@ -469,12 +472,12 @@ export const updateEntry = async (
       throw new Error("Workout changed elsewhere. Reload it and try again.");
     }
 
-    if (decisionFieldsChanged) {
+    if (requiresRevalidation) {
       await tx.proofImage.updateMany({
         where: { trainingEntryId: entry.id },
         data: {
           validationStatus,
-          reviewedById: null,
+          reviewedById: entry.rejectionNote ? entry.reviewedById : null,
         },
       });
     }
@@ -542,13 +545,18 @@ export const listEntriesForActiveWeek = async (athleteId: string) => {
   return listEntriesByAthleteWeek(athleteId, weekStartAt, weekEndAt);
 };
 
-export const getEntryValidationStatus = (athleteId: string, entryId: string) =>
-  prisma.trainingEntry.findFirst({
+export const getEntryValidationStatus = async (athleteId: string, entryId: string) => {
+  const entry = await prisma.trainingEntry.findFirst({
     where: { id: entryId, athleteId, entryStatus: "ACTIVE" },
     select: {
       id: true,
       validationStatus: true,
       rejectionNote: true,
       version: true,
+      evidenceExtractionJob: { select: { status: true } },
     },
   });
+  if (!entry) return null;
+  const { evidenceExtractionJob, ...status } = entry;
+  return { ...status, proofExtractionStatus: evidenceExtractionJob?.status ?? null };
+};

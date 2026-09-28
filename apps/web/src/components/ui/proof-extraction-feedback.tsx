@@ -20,12 +20,14 @@ interface ProofExtractionFeedbackProps {
 
 const statusStyles: Record<ProofComparisonStatus, string> = {
   matches: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
+  supported: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
   differs: "border-rose-200 bg-rose-50/80 text-rose-800",
   missing: "border-amber-200 bg-amber-50/80 text-amber-900",
 };
 
 const statusLabels: Record<ProofComparisonStatus, string> = {
   matches: "Matches",
+  supported: "Supported",
   differs: "Different",
   missing: "Not read",
 };
@@ -114,6 +116,10 @@ export function ProofExtractionFeedback({
           <p className="text-[10px] font-bold uppercase tracking-widest text-default-500">
             Entered vs photo
           </p>
+          <p className="mt-1 text-xs text-default-500">
+            Minutes can be lower than the photo. Distance, heart rate, and activity
+            differences do not require review on their own.
+          </p>
         </div>
         <div className="grid grid-cols-[minmax(5.5rem,0.85fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b border-divider/30 px-3 py-2 text-[9px] font-semibold uppercase tracking-wide text-default-400">
           <span>Field</span>
@@ -123,6 +129,7 @@ export function ProofExtractionFeedback({
         <div className="divide-y divide-divider/30">
           {items.map((item) => {
             const status = statuses[item.key];
+            const isRequired = item.key === "minutes" || item.key === "date";
             return (
               <div
                 key={item.key}
@@ -135,19 +142,27 @@ export function ProofExtractionFeedback({
                   {item.entered}
                 </span>
                 <span
-                  className={`min-w-0 rounded-lg border px-2 py-1.5 font-semibold ${statusStyles[status]}`}
+                  className={`min-w-0 rounded-lg border px-2 py-1.5 font-semibold ${isRequired ? statusStyles[status] : "border-divider/40 bg-content2/50 text-default-600"}`}
                 >
                   <span className="block break-words">
                     {extractedValues[item.key]}
                   </span>
                   <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wide opacity-80">
-                    {statusLabels[status]}
+                    {item.key === "minutes" && status === "differs"
+                      ? "Above supported time"
+                      : statusLabels[status]}
                   </span>
                 </span>
               </div>
             );
           })}
         </div>
+        {extractedMinutes !== null ? (
+          <p className="border-t border-divider/40 px-3 py-2.5 text-xs text-default-500">
+            The photo supports up to {extractedMinutes} whole active minutes.
+            New submissions count toward totals after verification.
+          </p>
+        ) : null}
       </section>
     );
   }
@@ -195,7 +210,11 @@ export function ProofExtractionFeedback({
               {item.label}
             </span>
             {item.missing ? (
-              <span className="text-xs font-semibold text-rose-500">Missing</span>
+              <span
+                className={`text-xs font-semibold ${item.label === "Duration" || item.label === "Date" ? "text-amber-700" : "text-default-500"}`}
+              >
+                Not read
+              </span>
             ) : (
               <span className="text-xs font-semibold text-default-600">
                 {item.value}

@@ -29,7 +29,7 @@ export type ProofConfirm = z.infer<typeof ProofConfirmSchema>;
 
 export const ProofExtractedFieldsSchema = z.object({
   activityType: ActivityTypeSchema.optional().nullable(),
-  minutes: z.number().int().positive().max(24 * 60).optional().nullable(),
+  minutes: z.number().int().nonnegative().max(24 * 60).optional().nullable(),
   durationSeconds: z.number().int().positive().max(24 * 60 * 60).optional().nullable(),
   elapsedSeconds: z.number().int().positive().max(24 * 60 * 60).optional().nullable(),
   distance: DistanceSchema.optional().nullable(),
@@ -40,7 +40,7 @@ export type ProofExtractedFields = z.infer<typeof ProofExtractedFieldsSchema>;
 
 export const EvidenceExtractionResultSchema = ProofExtractedFieldsSchema.extend({
   activityType: ActivityTypeSchema.nullable(),
-  minutes: z.number().int().positive().max(24 * 60).nullable(),
+  minutes: z.number().int().nonnegative().max(24 * 60).nullable(),
   durationSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
   elapsedSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
   distance: DistanceSchema.nullable(),

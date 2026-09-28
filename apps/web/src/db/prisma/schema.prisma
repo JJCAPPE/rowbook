@@ -300,6 +300,7 @@ model TrainingEntry {
   evidenceRevision Int?
   evidenceKey      String?          @unique
   version          Int              @default(1)
+  creditPolicyVersion Int           @default(1)
   origin           EntryOrigin      @default(MANUAL_PROOF)
   originProvider   ActivityProvider?
   originExternalActivityId String?  @unique

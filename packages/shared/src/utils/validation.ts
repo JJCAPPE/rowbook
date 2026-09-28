@@ -1,7 +1,26 @@
+import type { ValidationStatus } from "../enums/validation-status";
+
+export const isWorkoutCredited = (entry: {
+  validationStatus: ValidationStatus;
+  creditPolicyVersion: number;
+}) => entry.creditPolicyVersion === 1
+  ? entry.validationStatus !== "REJECTED"
+  : entry.validationStatus === "VERIFIED";
+
 export type ProofFieldComparison = {
   matches: boolean;
   extractionIncomplete: boolean;
   normalizedProofValue: number | null;
+};
+
+export const getSupportedWorkoutMinutes = (fields: {
+  durationSeconds?: number | null;
+  minutes?: number | null;
+}): number | null => {
+  if (fields.durationSeconds !== null && fields.durationSeconds !== undefined) {
+    return Math.floor(fields.durationSeconds / 60);
+  }
+  return fields.minutes ?? null;
 };
 
 const isMissing = (value: number | null | undefined) => value === null || value === undefined;

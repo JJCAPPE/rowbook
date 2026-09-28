@@ -317,6 +317,12 @@ export default function CoachReviewQueuePage() {
                   </div>
                 </div>
 
+                {entry.rejectionNote ? (
+                  <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                    Previous rejection: {entry.rejectionNote}
+                  </p>
+                ) : null}
+
                 {entry.extractedFields ? (
                   <ProofExtractionFeedback
                     fields={entry.extractedFields}

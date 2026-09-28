@@ -5,6 +5,7 @@ import "dotenv/config";
 
 import { PrismaClient } from "@prisma/client";
 import {
+  type EvidenceExtractionResult,
   getPreviousWeekStartAt,
   getProofRetentionDeleteAfter,
   getWeekEndAt,
@@ -21,16 +22,23 @@ assert.match(
 process.env.ROWBOOK_DISABLE_BACKGROUND_JOBS = "1";
 
 const prisma = new PrismaClient();
-const { createEntry, deleteEntry, updateEntry } = await import(
+const { createEntry, deleteEntry, getEntryValidationStatus, updateEntry } = await import(
   "../../apps/web/src/server/services/entries-service.ts"
 );
-const { aggregateWeekForAthlete, getTeamLeaderboard } = await import(
+const {
+  aggregateWeekForAthlete,
+  getLeaderboardForWeek,
+  getTeamLeaderboard,
+  getTeamStats,
+  getTeamTrend,
+} = await import(
   "../../apps/web/src/server/services/weekly-service.ts"
 );
 const {
   getAthleteDashboard,
   getAthleteHistory,
   getAthleteHistoryWithEntries,
+  getAthleteWeekDetail,
 } = await import("../../apps/web/src/server/services/athlete-service.ts");
 const { getAthleteDetail } = await import(
   "../../apps/web/src/server/services/coach-service.ts"
@@ -40,6 +48,9 @@ const { exportWeeklyCsv, getTeamTrends } = await import(
 );
 const { reviewValidationStatus } = await import(
   "../../apps/web/src/server/services/validation-service.ts"
+);
+const { evaluateAutoVerification } = await import(
+  "../../apps/web/src/server/services/validation-logic.ts"
 );
 const {
   cleanupExpiredProofImageCandidate,
@@ -51,6 +62,7 @@ const { listExpiredProofImages } = await import(
 const {
   claimNextEvidenceExtractionJob,
   finalizeEvidenceExtractionJob,
+  MAX_EVIDENCE_EXTRACTION_ATTEMPTS,
   recordEvidenceExtractionFailure,
 } = await import(
   "../../apps/web/src/server/repositories/evidence-extraction-jobs.ts"
@@ -320,6 +332,7 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       where: { id: seeded.proofImageId },
     });
     assert.equal(entry.validationStatus, "PENDING");
+    assert.equal(entry.creditPolicyVersion, 2);
     assert.equal(proof.trainingEntryId, entry.id);
     assert.ok(proof.attachedAt);
     assert.equal(
@@ -328,7 +341,7 @@ test("entry save, edit, and review preserve integrity under retries and races", 
     );
   });
 
-  await t.test("weekly aggregate rebuild completes through its database lock", async () => {
+  await t.test("weekly aggregate rebuild does not credit pending workouts", async () => {
     const aggregate = await aggregateWeekForAthlete(
       seeded.teamId,
       seeded.athleteId,
@@ -336,8 +349,10 @@ test("entry save, edit, and review preserve integrity under retries and races", 
     );
 
     assert.equal(aggregate.athleteId, seeded.athleteId);
-    assert.equal(aggregate.totalMinutes, 30);
-    assert.equal(aggregate.totalDistance, 7.5);
+    assert.equal(aggregate.totalMinutes, 0);
+    assert.equal(aggregate.totalDistance, 0);
+    assert.deepEqual(aggregate.activityTypes, []);
+    assert.equal(aggregate.hasHrData, false);
   });
 
   await t.test("the same athlete cannot reuse attached proof bytes", async () => {
@@ -477,6 +492,17 @@ test("entry save, edit, and review preserve integrity under retries and races", 
     });
     assert.equal(result.finalized, true);
     assert.equal(result.appliedToEntry, false);
+    const completedJob = await prisma.evidenceExtractionJob.findUniqueOrThrow({
+      where: { id: claimed.id },
+    });
+    assert.deepEqual(completedJob.resultMeta, {
+      modelVersion: "1",
+      inputTokens: 1,
+      outputTokens: 1,
+      cachedInputTokens: null,
+      cacheWriteTokens: null,
+      reasoningTokens: null,
+    });
 
     const entryAfter = await prisma.trainingEntry.findFirstOrThrow();
     assert.equal(entryAfter.validationStatus, entryBefore.validationStatus);
@@ -771,18 +797,24 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       (row) => row.athleteId === mutationSeed.athleteId,
     );
     assert.ok(afterCreate);
-    assert.equal(afterCreate.totalMinutes, 30);
-    assert.equal(afterCreate.totalDistance, 7.5);
-    assert.deepEqual(afterCreate.activityTypes, ["ERG"]);
+    assert.equal(afterCreate.totalMinutes, 0);
+    assert.equal(afterCreate.totalDistance, 0);
+    assert.deepEqual(afterCreate.activityTypes, []);
+    assert.equal(afterCreate.avgHr, null);
+    assert.equal(afterCreate.hasHr, false);
     assert.equal(afterCreate.pendingProof, true);
 
     const dashboard = await getAthleteDashboard(
       mutationSeed.athleteId,
       weekStartAt,
     );
-    assert.equal(dashboard.totalMinutes, 30);
+    assert.equal(dashboard.totalMinutes, 0);
     assert.equal(dashboard.requiredMinutes, 40);
     assert.equal(dashboard.status, "NOT_MET");
+    assert.equal(dashboard.avgHr, null);
+    assert.equal(dashboard.entries[0]?.id, created.entry.id);
+    assert.equal(dashboard.entries[0]?.minutes, 30);
+    assert.equal(dashboard.entries[0]?.validationStatus, "PENDING");
 
     const canonicalHistory = await getAthleteHistory(mutationSeed.athleteId);
     assert.equal(canonicalHistory.length, 32);
@@ -790,8 +822,8 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       (week) => week.weekStartAt.getTime() === weekStartAt.getTime(),
     );
     assert.ok(canonicalHistoryWeek);
-    assert.equal(canonicalHistoryWeek.totalMinutes, 30);
-    assert.equal(canonicalHistoryWeek.totalDistance, 7.5);
+    assert.equal(canonicalHistoryWeek.totalMinutes, 0);
+    assert.equal(canonicalHistoryWeek.totalDistance, 0);
     assert.equal(canonicalHistoryWeek.requiredMinutes, 40);
     assert.equal(canonicalHistoryWeek.status, "NOT_MET");
 
@@ -799,8 +831,10 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       mutationSeed.athleteId,
     );
     assert.equal(detailedHistory.length, 1);
-    assert.equal(detailedHistory[0]?.totalMinutes, 30);
+    assert.equal(detailedHistory[0]?.totalMinutes, 0);
     assert.equal(detailedHistory[0]?.requiredMinutes, 40);
+    assert.equal(detailedHistory[0]?.entries[0]?.id, created.entry.id);
+    assert.equal(detailedHistory[0]?.avgHr, null);
 
     const coachDetail = await getAthleteDetail(
       mutationSeed.coachId,
@@ -808,24 +842,61 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       teamId,
     );
     assert.equal(coachDetail.history.length, 52);
-    assert.equal(coachDetail.history[0]?.totalMinutes, 30);
+    assert.equal(coachDetail.history[0]?.totalMinutes, 0);
     assert.equal(coachDetail.history[0]?.requiredMinutes, 40);
     assert.equal(coachDetail.history[0]?.status, "NOT_MET");
+    assert.deepEqual(coachDetail.activityMix, []);
+    assert.equal(coachDetail.entries[0]?.id, created.entry.id);
 
     const currentTrend = (await getTeamTrends(teamId, 12)).find(
       (week) => week.weekStartAt.getTime() === weekStartAt.getTime(),
     );
     assert.ok(currentTrend);
-    assert.equal(currentTrend.totalMinutes, 30);
+    assert.equal(currentTrend.totalMinutes, 0);
     assert.equal(currentTrend.athleteCount, 1);
 
     const currentCsv = await exportWeeklyCsv(teamId, weekStartAt);
-    assert.match(currentCsv, /"30","NOT_MET"/);
+    assert.match(currentCsv, /"0","NOT_MET"/);
     assert.doesNotMatch(currentCsv, /"999"/);
+
+    const pendingWeekDetail = await getAthleteWeekDetail(mutationSeed.athleteId, weekStartAt);
+    assert.equal(pendingWeekDetail.totalMinutes, 0);
+    assert.equal(pendingWeekDetail.totalDistanceKm, 0);
+    assert.equal(pendingWeekDetail.sessions, 0);
+    assert.equal(pendingWeekDetail.entries[0]?.id, created.entry.id);
+    assert.deepEqual(await getTeamStats(teamId, weekStartAt), {
+      totalMinutes: 0,
+      totalDistance: 0,
+      avgHr: null,
+    });
+    assert.equal((await getLeaderboardForWeek(teamId, weekStartAt))[0]?.totalMinutes, 0);
+    assert.equal((await getTeamTrend(teamId, weekStartAt, 1))[0]?.minutes, 0);
+
+    const verified = await reviewValidationStatus(mutationSeed.coachId, {
+      entryId: created.entry.id,
+      expectedVersion: created.entry.version,
+      decision: "VERIFIED",
+    });
+    const afterVerification = (await getTeamLeaderboard(teamId, weekStartAt))[0];
+    assert.equal(afterVerification?.totalMinutes, 30);
+    assert.equal(afterVerification?.totalDistance, 7.5);
+    assert.equal(afterVerification?.avgHr, 145);
+    assert.deepEqual(afterVerification?.activityTypes, ["ERG"]);
+    assert.equal(afterVerification?.pendingProof, false);
+    assert.equal((await getAthleteDashboard(mutationSeed.athleteId, weekStartAt)).totalMinutes, 30);
+    assert.equal((await getAthleteHistory(mutationSeed.athleteId))[0]?.totalMinutes, 30);
+    assert.equal((await getAthleteWeekDetail(mutationSeed.athleteId, weekStartAt)).sessions, 1);
+    assert.deepEqual(await getTeamStats(teamId, weekStartAt), {
+      totalMinutes: 30,
+      totalDistance: 7.5,
+      avgHr: 145,
+    });
+    assert.equal((await getTeamTrend(teamId, weekStartAt, 1))[0]?.minutes, 30);
+    assert.match(await exportWeeklyCsv(teamId, weekStartAt), /"30","NOT_MET"/);
 
     const updated = await updateEntry(mutationSeed.athleteId, {
       id: created.entry.id,
-      expectedVersion: created.entry.version,
+      expectedVersion: verified.version,
       minutes: 45,
       distance: 10,
     });
@@ -833,11 +904,13 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       (row) => row.athleteId === mutationSeed.athleteId,
     );
     assert.ok(afterEdit);
-    assert.equal(afterEdit.totalMinutes, 45);
-    assert.equal(afterEdit.totalDistance, 10);
+    assert.equal(updated.entry.validationStatus, "PENDING");
+    assert.equal(afterEdit.totalMinutes, 0);
+    assert.equal(afterEdit.totalDistance, 0);
+    assert.equal(afterEdit.pendingProof, true);
     const historyAfterEdit = await getAthleteHistory(mutationSeed.athleteId);
-    assert.equal(historyAfterEdit[0]?.totalMinutes, 45);
-    assert.equal(historyAfterEdit[0]?.status, "MET");
+    assert.equal(historyAfterEdit[0]?.totalMinutes, 0);
+    assert.equal(historyAfterEdit[0]?.status, "NOT_MET");
 
     await deleteEntry(mutationSeed.athleteId, updated.entry.id);
     const afterDelete = (await getTeamLeaderboard(teamId, weekStartAt)).find(
@@ -948,6 +1021,422 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       select: { totalMinutes: true },
     });
     assert.deepEqual(staleCaches.map((row) => row.totalMinutes), [999, 999]);
+  });
+
+  await t.test("historical credit survives unchanged alongside new pending submissions", async () => {
+    const mixedSeed = await seedSubmission();
+    const weekStartAt = getWeekStartAt(mixedSeed.input.date);
+    const historicalIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await prisma.trainingEntry.createMany({
+      data: [
+        { id: historicalIds[0], validationStatus: "PENDING" as const, minutes: 30 },
+        { id: historicalIds[1], validationStatus: "EXTRACTION_INCOMPLETE" as const, minutes: 20 },
+        { id: historicalIds[2], validationStatus: "REJECTED" as const, minutes: 999 },
+      ].map((entry) => ({
+        ...entry,
+        athleteId: mixedSeed.athleteId,
+        activityType: "ERG" as const,
+        date: mixedSeed.input.date,
+        distance: 1,
+        avgHr: 150,
+        weekStartAt,
+      })),
+    });
+    const previousWeekStartAt = getPreviousWeekStartAt(weekStartAt);
+    await prisma.trainingEntry.create({
+      data: {
+        id: historicalIds[3],
+        athleteId: mixedSeed.athleteId,
+        activityType: "ERG",
+        date: previousWeekStartAt,
+        weekStartAt: previousWeekStartAt,
+        minutes: 45,
+        distance: 5,
+        validationStatus: "PENDING",
+        entryStatus: "LOCKED",
+        lockedAt: weekStartAt,
+      },
+    });
+    const historicalBefore = await prisma.trainingEntry.findMany({
+      where: { id: { in: historicalIds } },
+      orderBy: { id: "asc" },
+    });
+    assert.ok(historicalBefore.every((entry) => entry.creditPolicyVersion === 1));
+
+    const created = await createEntry(mixedSeed.athleteId, mixedSeed.input);
+    assert.equal(created.entry.creditPolicyVersion, 2);
+    const dashboard = await getAthleteDashboard(mixedSeed.athleteId, weekStartAt);
+    assert.equal(dashboard.totalMinutes, 50);
+    assert.equal(dashboard.entries.length, 4);
+    assert.equal(dashboard.avgHr, 150);
+    assert.equal((await getAthleteHistory(mixedSeed.athleteId))[0]?.totalMinutes, 50);
+    assert.equal((await getAthleteDashboard(mixedSeed.athleteId, previousWeekStartAt)).totalMinutes, 45);
+    const weekDetail = await getAthleteWeekDetail(mixedSeed.athleteId, weekStartAt);
+    assert.equal(weekDetail.totalMinutes, 50);
+    assert.equal(weekDetail.sessions, 2);
+    const leaderboard = (await getTeamLeaderboard(mixedSeed.teamId, weekStartAt))[0];
+    assert.equal(leaderboard?.totalMinutes, 50);
+    assert.equal(leaderboard?.pendingProof, true);
+    assert.equal(leaderboard?.previousWeekMinutes, 45);
+    assert.deepEqual(await getTeamStats(mixedSeed.teamId, weekStartAt), {
+      totalMinutes: 50,
+      totalDistance: 2,
+      avgHr: 150,
+    });
+    assert.equal((await getTeamTrend(mixedSeed.teamId, weekStartAt, 1))[0]?.minutes, 50);
+    const coachDetail = await getAthleteDetail(mixedSeed.coachId, mixedSeed.athleteId, mixedSeed.teamId);
+    assert.deepEqual(coachDetail.activityMix, [{ type: "ERG", minutes: 95 }]);
+    assert.match(await exportWeeklyCsv(mixedSeed.teamId, weekStartAt), /"50"/);
+    const aggregate = await aggregateWeekForAthlete(mixedSeed.teamId, mixedSeed.athleteId, weekStartAt);
+    assert.equal(aggregate.totalMinutes, 50);
+    assert.deepEqual(await prisma.trainingEntry.findMany({
+      where: { id: { in: historicalIds } },
+      orderBy: { id: "asc" },
+    }), historicalBefore);
+
+    const legacyEntry = historicalBefore.find((entry) => entry.id === historicalIds[0]);
+    assert.ok(legacyEntry);
+    const editedLegacy = await updateEntry(mixedSeed.athleteId, {
+      id: legacyEntry.id,
+      expectedVersion: legacyEntry.version,
+      notes: "Notes corrected after rollout",
+    });
+    assert.equal(editedLegacy.entry.creditPolicyVersion, 1);
+    assert.equal(editedLegacy.entry.validationStatus, "PENDING");
+    const approvedNew = await reviewValidationStatus(mixedSeed.coachId, {
+      entryId: created.entry.id,
+      expectedVersion: created.entry.version,
+      decision: "VERIFIED",
+    });
+    assert.equal((await getAthleteDashboard(mixedSeed.athleteId, weekStartAt)).totalMinutes, 80);
+    const editedNew = await updateEntry(mixedSeed.athleteId, {
+      id: approvedNew.id,
+      expectedVersion: approvedNew.version,
+      minutes: 35,
+    });
+    assert.equal(editedNew.entry.creditPolicyVersion, 2);
+    assert.equal(editedNew.entry.validationStatus, "PENDING");
+    assert.equal((await getAthleteDashboard(mixedSeed.athleteId, weekStartAt)).totalMinutes, 50);
+  });
+
+  await t.test("legacy extraction jobs remain unchanged when claimed, exhausted, or finished", async () => {
+    for (const linkedByEntryId of [true, false]) {
+      const legacySeed = await seedSubmission();
+      const created = await createEntry(legacySeed.athleteId, legacySeed.input);
+      const job = await prisma.evidenceExtractionJob.findUniqueOrThrow({
+        where: { entryId: created.entry.id },
+      });
+      await prisma.trainingEntry.update({
+        where: { id: created.entry.id },
+        data: { creditPolicyVersion: 1 },
+      });
+      if (!linkedByEntryId) {
+        await prisma.evidenceExtractionJob.update({
+          where: { id: job.id },
+          data: { entryId: null },
+        });
+      }
+      const snapshot = () => Promise.all([
+        prisma.evidenceExtractionJob.findUniqueOrThrow({ where: { id: job.id } }),
+        prisma.trainingEntry.findUniqueOrThrow({ where: { id: created.entry.id } }),
+        prisma.proofImage.findUniqueOrThrow({ where: { id: legacySeed.proofImageId } }),
+        prisma.auditLog.findMany({ where: { entityId: created.entry.id }, orderBy: { createdAt: "asc" } }),
+      ]);
+      const pendingBefore = await snapshot();
+      assert.equal(await claimNextEvidenceExtractionJob({ jobId: job.id }), null);
+      assert.deepEqual(await snapshot(), pendingBefore);
+
+      await prisma.evidenceExtractionJob.update({
+        where: { id: job.id },
+        data: { attempts: MAX_EVIDENCE_EXTRACTION_ATTEMPTS },
+      });
+      const exhaustedBefore = await snapshot();
+      assert.equal(await claimNextEvidenceExtractionJob({ jobId: job.id }), null);
+      assert.deepEqual(await snapshot(), exhaustedBefore);
+
+      const claimToken = randomUUID();
+      await prisma.evidenceExtractionJob.update({
+        where: { id: job.id },
+        data: {
+          status: "PROCESSING",
+          attempts: 1,
+          claimToken,
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      const processingBefore = await snapshot();
+      const finalized = await finalizeEvidenceExtractionJob({
+        jobId: job.id,
+        claimToken,
+        evidenceKey: job.evidenceKey,
+        evidenceRevision: job.evidenceRevision,
+        proofImageIds: job.proofImageIds,
+        referenceDate: job.referenceDate,
+        result: {
+          activityType: "ERG",
+          date: nowInZone().toISODate(),
+          minutes: 30,
+          durationSeconds: 1_800,
+          elapsedSeconds: 1_800,
+          distance: 7.5,
+          avgHr: 145,
+          confidence: 0.99,
+          isSingleWorkout: true,
+          reviewReason: null,
+          sourceTypes: ["CONCEPT2"],
+        },
+        metadata: {
+          provider: "test",
+          model: "test-model",
+          modelVersion: "1",
+          promptVersion: "test",
+          schemaVersion: "test",
+          durationMs: 1,
+          inputTokens: 1,
+          outputTokens: 1,
+        },
+        evaluateEntry: () => {
+          assert.fail("Historical workout must not be re-evaluated.");
+        },
+      });
+      assert.deepEqual(finalized, { finalized: false, appliedToEntry: false });
+      assert.deepEqual(await snapshot(), processingBefore);
+
+      for (const retryable of [false, true]) {
+        const failure = await recordEvidenceExtractionFailure({
+          jobId: job.id,
+          claimToken,
+          attempts: 1,
+          retryable,
+          failureCode: "provider-unavailable",
+          message: "Historical extraction must remain unchanged.",
+        });
+        assert.deepEqual(failure, {
+          recorded: false,
+          willRetry: false,
+          nextAttemptAt: null,
+          appliedToEntry: false,
+        });
+        assert.deepEqual(await snapshot(), processingBefore);
+      }
+    }
+  });
+
+  await t.test("correcting an overclaim credits only the supported minutes without coach review", async () => {
+    const correctionSeed = await seedSubmission();
+    const created = await createEntry(correctionSeed.athleteId, {
+      ...correctionSeed.input,
+      minutes: 60,
+    });
+    const weekStartAt = created.entry.weekStartAt;
+    await prisma.weeklyRequirement.create({
+      data: {
+        teamId: correctionSeed.teamId,
+        weekStartAt,
+        weekEndAt: getWeekEndAt(weekStartAt),
+        requiredMinutes: 59,
+      },
+    });
+    assert.equal(
+      (await getEntryValidationStatus(correctionSeed.athleteId, created.entry.id))?.proofExtractionStatus,
+      "PENDING",
+    );
+    const job = await prisma.evidenceExtractionJob.findUniqueOrThrow({
+      where: { entryId: created.entry.id },
+    });
+    const claimed = await claimNextEvidenceExtractionJob({ jobId: job.id });
+    assert.ok(claimed);
+    const evidence: EvidenceExtractionResult = {
+      activityType: "CYCLE",
+      date: nowInZone().toISODate(),
+      minutes: 60,
+      durationSeconds: 3_580,
+      elapsedSeconds: 4_000,
+      distance: null,
+      avgHr: 150,
+      confidence: 0.99,
+      isSingleWorkout: true,
+      reviewReason: null,
+      sourceTypes: ["GARMIN"],
+    };
+    const finalized = await finalizeEvidenceExtractionJob({
+      jobId: claimed.id,
+      claimToken: claimed.claimToken,
+      evidenceKey: claimed.evidenceKey,
+      evidenceRevision: claimed.evidenceRevision,
+      proofImageIds: claimed.proofImageIds,
+      referenceDate: claimed.referenceDate,
+      result: evidence,
+      metadata: {
+        provider: "test",
+        model: "test-model",
+        modelVersion: "1",
+        promptVersion: "test",
+        schemaVersion: "test",
+        durationMs: 1,
+        inputTokens: 400,
+        outputTokens: 125,
+        cachedInputTokens: 100,
+        cacheWriteTokens: 40,
+        reasoningTokens: 25,
+      },
+      evaluateEntry: (entry) => evaluateAutoVerification(entry, [evidence]).validationStatus,
+    });
+    assert.equal(finalized.finalized, true);
+    assert.equal(finalized.appliedToEntry, true);
+    const completedJob = await prisma.evidenceExtractionJob.findUniqueOrThrow({
+      where: { id: claimed.id },
+    });
+    assert.deepEqual(completedJob.resultMeta, {
+      modelVersion: "1",
+      inputTokens: 400,
+      outputTokens: 125,
+      cachedInputTokens: 100,
+      cacheWriteTokens: 40,
+      reasoningTokens: 25,
+    });
+    const overclaim = await prisma.trainingEntry.findUniqueOrThrow({
+      where: { id: created.entry.id },
+    });
+    assert.equal(overclaim.validationStatus, "PENDING");
+    assert.equal(overclaim.minutes, 60);
+    const checkedStatus = await getEntryValidationStatus(correctionSeed.athleteId, overclaim.id);
+    assert.equal(checkedStatus?.validationStatus, "PENDING");
+    assert.equal(checkedStatus?.proofExtractionStatus, "COMPLETED");
+    const pendingAggregate = await aggregateWeekForAthlete(
+      correctionSeed.teamId,
+      correctionSeed.athleteId,
+      weekStartAt,
+    );
+    assert.equal(pendingAggregate.totalMinutes, 0);
+    assert.equal(pendingAggregate.status, "NOT_MET");
+
+    const corrected = await updateEntry(correctionSeed.athleteId, {
+      id: overclaim.id,
+      expectedVersion: overclaim.version,
+      minutes: 59,
+    });
+    assert.equal(corrected.entry.validationStatus, "VERIFIED");
+    assert.equal(corrected.entry.minutes, 59);
+    assert.equal(corrected.entry.reviewedAt, null);
+    assert.equal(corrected.entry.reviewedById, null);
+    const dashboard = await getAthleteDashboard(correctionSeed.athleteId, weekStartAt);
+    assert.equal(dashboard.totalMinutes, 59);
+    assert.equal(dashboard.status, "MET");
+    assert.equal((await getTeamLeaderboard(correctionSeed.teamId, weekStartAt))[0]?.totalMinutes, 59);
+    const verifiedAggregate = await aggregateWeekForAthlete(
+      correctionSeed.teamId,
+      correctionSeed.athleteId,
+      weekStartAt,
+    );
+    assert.equal(verifiedAggregate.totalMinutes, 59);
+    assert.equal(verifiedAggregate.status, "MET");
+
+    const underclaim = await updateEntry(correctionSeed.athleteId, {
+      id: corrected.entry.id,
+      expectedVersion: corrected.entry.version,
+      minutes: 45,
+    });
+    assert.equal(underclaim.entry.validationStatus, "VERIFIED");
+    assert.equal(underclaim.entry.minutes, 45);
+    assert.equal((await getAthleteDashboard(correctionSeed.athleteId, weekStartAt)).totalMinutes, 45);
+
+    const overclaimedAgain = await updateEntry(correctionSeed.athleteId, {
+      id: underclaim.entry.id,
+      expectedVersion: underclaim.entry.version,
+      minutes: 60,
+    });
+    assert.equal(overclaimedAgain.entry.validationStatus, "PENDING");
+    assert.equal((await getAthleteDashboard(correctionSeed.athleteId, weekStartAt)).totalMinutes, 0);
+    const rejected = await reviewValidationStatus(correctionSeed.coachId, {
+      entryId: overclaimedAgain.entry.id,
+      expectedVersion: overclaimedAgain.entry.version,
+      decision: "REJECTED",
+      reason: "More minutes claimed than the workout supports.",
+    });
+    const rejectedAggregate = await aggregateWeekForAthlete(
+      correctionSeed.teamId,
+      correctionSeed.athleteId,
+      weekStartAt,
+    );
+    assert.equal(rejectedAggregate.totalMinutes, 0);
+    assert.equal(rejectedAggregate.status, "NOT_MET");
+
+    const correctedAfterRejection = await updateEntry(correctionSeed.athleteId, {
+      id: rejected.id,
+      expectedVersion: rejected.version,
+      minutes: 59,
+    });
+    assert.equal(correctedAfterRejection.entry.validationStatus, "PENDING");
+    assert.equal(correctedAfterRejection.entry.rejectionNote, rejected.rejectionNote);
+    assert.equal(correctedAfterRejection.entry.reviewedById, correctionSeed.coachId);
+    assert.equal(correctedAfterRejection.entry.reviewedAt, null);
+    assert.equal((await getAthleteDashboard(correctionSeed.athleteId, weekStartAt)).totalMinutes, 0);
+
+    const correctedAgain = await updateEntry(correctionSeed.athleteId, {
+      id: correctedAfterRejection.entry.id,
+      expectedVersion: correctedAfterRejection.entry.version,
+      minutes: 58,
+    });
+    assert.equal(correctedAgain.entry.validationStatus, "PENDING");
+    assert.equal(correctedAgain.entry.rejectionNote, rejected.rejectionNote);
+    assert.equal(correctedAgain.entry.reviewedById, correctionSeed.coachId);
+    assert.equal(correctedAgain.entry.reviewedAt, null);
+    const proofAwaitingReview = await prisma.proofImage.findUniqueOrThrow({
+      where: { id: correctionSeed.proofImageId },
+    });
+    assert.equal(proofAwaitingReview.validationStatus, "PENDING");
+    assert.equal(proofAwaitingReview.reviewedById, correctionSeed.coachId);
+    assert.equal((await getAthleteDashboard(correctionSeed.athleteId, weekStartAt)).totalMinutes, 0);
+
+    const coachApprovedCorrection = await reviewValidationStatus(correctionSeed.coachId, {
+      entryId: correctedAgain.entry.id,
+      expectedVersion: correctedAgain.entry.version,
+      decision: "VERIFIED",
+    });
+    assert.equal(coachApprovedCorrection.validationStatus, "VERIFIED");
+    assert.equal(coachApprovedCorrection.rejectionNote, null);
+    assert.ok(coachApprovedCorrection.reviewedAt);
+    assert.equal((await getAthleteDashboard(correctionSeed.athleteId, weekStartAt)).totalMinutes, 58);
+  });
+
+  await t.test("approved workouts retain review for lower minutes and incidental edits", async () => {
+    for (const nextChange of [
+      { minutes: 31 },
+      { date: nowInZone().minus({ days: 1 }).startOf("day").plus({ hours: 12 }).toJSDate() },
+    ]) {
+      const approvedSeed = await seedSubmission();
+      const created = await createEntry(approvedSeed.athleteId, approvedSeed.input);
+      const reviewed = await reviewValidationStatus(approvedSeed.coachId, {
+        entryId: created.entry.id,
+        expectedVersion: created.entry.version,
+        decision: "VERIFIED",
+      });
+      const corrected = await updateEntry(approvedSeed.athleteId, {
+        id: reviewed.id,
+        expectedVersion: reviewed.version,
+        minutes: 20,
+        distance: 5,
+        avgHr: 130,
+        activityType: "CYCLE",
+        notes: "Corrected workout statistics",
+      });
+      assert.equal(corrected.entry.validationStatus, "VERIFIED");
+      assert.equal(corrected.entry.minutes, 20);
+      assert.equal(corrected.entry.reviewedById, approvedSeed.coachId);
+      assert.deepEqual(corrected.entry.reviewedAt, reviewed.reviewedAt);
+      assert.equal((await getAthleteDashboard(approvedSeed.athleteId, reviewed.weekStartAt)).totalMinutes, 20);
+
+      const needsRecheck = await updateEntry(approvedSeed.athleteId, {
+        id: corrected.entry.id,
+        expectedVersion: corrected.entry.version,
+        ...nextChange,
+      });
+      assert.equal(needsRecheck.entry.validationStatus, "PENDING");
+      assert.equal(needsRecheck.entry.reviewedById, null);
+      assert.equal(needsRecheck.entry.reviewedAt, null);
+      assert.equal((await getAthleteDashboard(approvedSeed.athleteId, reviewed.weekStartAt)).totalMinutes, 0);
+    }
   });
 
   await t.test("cleanup rechecks a stale candidate before removing storage", async () => {
@@ -1285,6 +1774,7 @@ test("entry save, edit, and review preserve integrity under retries and races", 
         minutes: 40,
         distance: 10,
         validationStatus: "EXTRACTION_INCOMPLETE",
+        creditPolicyVersion: 2,
         entryStatus: "ACTIVE",
         weekStartAt,
       },
@@ -1471,12 +1961,12 @@ test("entry save, edit, and review preserve integrity under retries and races", 
       teamId: profileB.teamId,
       limit: 2,
     });
-    assert.ok(ownTrends.some((week) => week.totalMinutes === 40));
+    assert.ok(ownTrends.every((week) => week.totalMinutes === 0));
     const ownCsv = await coachB.reporting.exportCsv({
       teamId: profileB.teamId,
       weekStartAt,
     });
-    assert.match(ownCsv, /"40"/);
+    assert.match(ownCsv, /"0","EXEMPT"/);
     await assertAccessDenied(() =>
       coachA.reporting.getTeamTrends({
         teamId: profileB.teamId,

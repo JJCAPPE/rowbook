@@ -23,6 +23,20 @@ const AUTOMATIC_RESULT_STATUSES: ValidationStatus[] = [
 ];
 type TransactionClient = Prisma.TransactionClient;
 
+const hasHistoricalEntry = Prisma.sql`EXISTS (
+  SELECT 1 FROM "TrainingEntry" AS entry
+  WHERE entry."creditPolicyVersion" = 1
+    AND (entry."id" = job."entryId" OR entry."evidenceKey" = job."evidenceKey")
+)`;
+
+const isHistoricalEvidenceJob = async (tx: TransactionClient, jobId: string) => {
+  const jobs = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT job."id" FROM "EvidenceExtractionJob" AS job
+    WHERE job."id" = ${jobId} AND ${hasHistoricalEntry}
+  `;
+  return jobs.length > 0;
+};
+
 export type ClaimedEvidenceExtractionJob = EvidenceExtractionJob & {
   claimToken: string;
 };
@@ -55,6 +69,9 @@ export type EvidenceExtractionMetadata = {
   durationMs: number;
   inputTokens: number | null;
   outputTokens: number | null;
+  cachedInputTokens?: number | null;
+  cacheWriteTokens?: number | null;
+  reasoningTokens?: number | null;
 };
 
 const compactText = (value: string, maxLength: number) =>
@@ -201,6 +218,9 @@ const sanitizeMetadata = (metadata: EvidenceExtractionMetadata) => ({
     metadata.inputTokens === null ? null : Math.max(0, Math.trunc(metadata.inputTokens)),
   outputTokens:
     metadata.outputTokens === null ? null : Math.max(0, Math.trunc(metadata.outputTokens)),
+  cachedInputTokens: metadata.cachedInputTokens == null ? null : Math.max(0, Math.trunc(metadata.cachedInputTokens)),
+  cacheWriteTokens: metadata.cacheWriteTokens == null ? null : Math.max(0, Math.trunc(metadata.cacheWriteTokens)),
+  reasoningTokens: metadata.reasoningTokens == null ? null : Math.max(0, Math.trunc(metadata.reasoningTokens)),
 });
 
 export const claimNextEvidenceExtractionJob = async (options?: {
@@ -240,6 +260,7 @@ export const claimNextEvidenceExtractionJob = async (options?: {
           "completedAt" = ${nowUtc},
           "updatedAt" = ${nowUtc}
       WHERE "attempts" >= ${MAX_EVIDENCE_EXTRACTION_ATTEMPTS}
+        AND NOT ${hasHistoricalEntry}
         ${jobFilter}
         AND "nextAttemptAt" <= ${nowUtc}
         AND (
@@ -251,9 +272,10 @@ export const claimNextEvidenceExtractionJob = async (options?: {
           )
       RETURNING job.*
     ), candidate AS (
-      SELECT "id"
-      FROM "EvidenceExtractionJob"
+      SELECT job."id"
+      FROM "EvidenceExtractionJob" AS job
       WHERE "attempts" < ${MAX_EVIDENCE_EXTRACTION_ATTEMPTS}
+        AND NOT ${hasHistoricalEntry}
         ${jobFilter}
         AND "nextAttemptAt" <= ${nowUtc}
         AND (
@@ -425,10 +447,17 @@ export const finalizeEvidenceExtractionJob = async (input: {
     modelVersion: metadata.modelVersion,
     inputTokens: metadata.inputTokens,
     outputTokens: metadata.outputTokens,
+    cachedInputTokens: metadata.cachedInputTokens,
+    cacheWriteTokens: metadata.cacheWriteTokens,
+    reasoningTokens: metadata.reasoningTokens,
   } satisfies Prisma.InputJsonObject;
   const completedAt = new Date();
 
   return prisma.$transaction(async (tx) => {
+    if (await isHistoricalEvidenceJob(tx, input.jobId)) {
+      return { finalized: false, appliedToEntry: false } as const;
+    }
+
     const finalized = await tx.evidenceExtractionJob.updateMany({
       where: {
         id: input.jobId,
@@ -611,6 +640,15 @@ export const recordEvidenceExtractionFailure = async (input: {
     : now;
 
   return prisma.$transaction(async (tx) => {
+    if (await isHistoricalEvidenceJob(tx, input.jobId)) {
+      return {
+        recorded: false,
+        willRetry: false,
+        nextAttemptAt: null,
+        appliedToEntry: false,
+      } as const;
+    }
+
     const result = await tx.evidenceExtractionJob.updateMany({
       where: {
         id: input.jobId,

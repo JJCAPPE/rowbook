@@ -15,8 +15,8 @@ Provide a lightweight, mobile-first web application for a rowing team to log wee
 - Coaches/admins can see all training data, all proofs, and full weekly history per athlete.
 - Coaches/admins can exempt an athlete from minutes for a specific week.
 - Week boundary: Sunday at 8:00 PM America/New_York; the week runs from Sunday 8:00 PM to the following Sunday 8:00 PM. The weekly email sends at this cutoff, and entries created after 8:00 PM count toward the following week.
-- Proof validation is strict: inputs must match the proof image; distance is compared at 0.1 km precision with proof values truncated (e.g., 12.591 → 12.5; 12.4/12.6 are mismatches for 12.5).
-- If proof extraction is incomplete, keep the image, accept the manual input, and flag the entry as extraction-incomplete (not an error).
+- Proof validation accepts entered minutes at or below the active workout time supported by the evidence. Underclaims keep the entered amount; distance, heart rate, and activity-category differences alone do not block approval.
+- New submissions contribute to totals, targets, and rankings only after verification. Incomplete or uncertain evidence stays saved and visible for correction or review without earning credit. Existing submissions retain their previous credit rules and saved decisions.
 - Proof images are retained for 7 days after the weekly cutoff, then deleted.
 - Authentication is basic and restricted to a pre-approved email whitelist.
 - Onboarding/offboarding is handled manually in Supabase.
@@ -135,7 +135,7 @@ The application should be mobile-first, fast to load, and usable on desktop.
   - Created/updated timestamps
 
 ### 5) Proof Validation Pipeline
-Purpose: confirm the manual input aligns with proof image data.
+Purpose: confirm a valid workout supports at least the claimed active minutes.
 
 #### 5.1 Proof Upload Handling
 - File upload and storage.
@@ -147,17 +147,21 @@ Purpose: confirm the manual input aligns with proof image data.
 - Store extracted data for comparison.
 
 #### 5.3 Validation Rules
-- Compare extracted values vs. manual entry with strict matching.
-- Distance is compared at 0.1 km precision by truncating the proof value (e.g., 12.591 → 12.5).
-- If proof extraction is incomplete, keep the image, accept the manual entry, and mark the entry as confirmed with an extraction-incomplete flag (not an error).
-- Flag mismatches for coach review.
+- Automatically approve entered minutes at or below supported whole active minutes. Exact active seconds take precedence over extracted minutes and are rounded down, never up; programmed rest does not count.
+- Require a readable, matching workout date and evidence for one completed session. Conflicting dates/durations, low confidence (below 0.92), and validity concerns require review. Never add repeated totals from multiple screenshots.
+- All existing activity categories are eligible. Distance, heart rate, and activity-category differences are informational and do not independently require review.
+- Keep incomplete evidence saved for correction or review. For new submissions, pending, unchecked, incomplete, and rejected workouts earn no credit.
+- Preserve historical processing: existing submissions use credit policy 1 (all non-rejected entries count); new submissions use policy 2 (verified entries only). Editing does not change an entry's policy, and rollout does not reprocess old proof or decisions.
+- Athletes can reduce an overclaim to the supported minutes using the existing edit flow before coach review; saving re-evaluates the evidence.
+- Reducing an approved claim or editing incidental details preserves its approval. Edits to coach-rejected time/date return for coach review and cannot automatically approve the rejected evidence.
+- Block identical proof-image reuse by the same athlete. Different screenshots of the same workout are not yet detected across submissions.
 
 #### 5.4 Manual Review Queue
 - Coach review interface.
 - Override and mark as verified or rejected.
 
 ### 6) Weekly Aggregation & Leaderboard
-- Calculate weekly totals per athlete.
+- Calculate weekly totals per athlete using each entry's credit policy: verified workouts only for new submissions, previous counting rules for existing submissions.
 - Rank athletes by total minutes.
 - Determine status: met / not met / exempt.
 - Aggregate activity icons (unique types done that week).
@@ -238,8 +242,8 @@ Purpose: confirm the manual input aligns with proof image data.
 
 ### Athlete Logs Workout
 1. Athlete enters activity details and uploads proof.
-2. Entry is stored as “pending verification” (or confirmed with an extraction-incomplete flag if proof extraction fails).
-3. Validation pipeline runs with strict matching and flags extraction-incomplete if needed.
+2. Entry is saved as “pending verification” and remains visible without counting toward totals.
+3. Validation approves supported minute claims, flags overclaims or uncertain evidence, and marks unreadable required evidence as extraction-incomplete. Athletes can edit overclaims; only verified entries count.
 4. Entry is assigned to the week based on submission time; edits lock at Sunday 8:00 PM.
 
 ### Coach Reviews Proof
@@ -296,6 +300,14 @@ These should be finalized before implementation:
 - Database: Supabase.
 - ORM: Prisma (type-safe data access).
 - Hosting: Vercel.
+
+### Workout extraction providers
+
+- New extraction requests use OpenAI `gpt-6-luna` by default. Set the server-only `OPENAI_API_KEY` in `apps/web/.env.local` for local Next.js development and in Vercel's environment variables for deployment. The standalone provider benchmark loads the repository-root `.env`.
+- Optional overrides: `OPENAI_MODEL` and `PROOF_EXTRACTION_PROVIDER=openai|gemini`. To explicitly use Gemini, set the provider to `gemini` and supply `GEMINI_API_KEY`; `GEMINI_MODEL` defaults to `gemini-3.8-flash`. There is no automatic provider fallback.
+- The same evidence schema, active-time rules, and deterministic validation apply to both providers. OpenAI requests disable response storage, use low reasoning effort and high-detail image input, and cap output (including reasoning) at 2,000 tokens. Usage metadata is retained with each new extraction.
+- Run `npm run test:provider` for paid, read-only checks of the photos in `tests/test-photos`. It creates no workouts, does not access the database, and reports measured tokens plus a 500-workout cost projection for the default OpenAI model. Original photos are unchanged; HEIC conversion uses temporary files. No automatic retries are made by this benchmark.
+- Provider changes do not reprocess historical workouts. Apply pending Prisma migrations before deploying the corresponding application changes.
 
 ## Milestones (Suggested)
 

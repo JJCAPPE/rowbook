@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ACTIVITY_TYPE_LABELS,
   ActivityTypeValues,
+  ProofExtractedFieldsSchema,
   formatInTimeZone,
 } from "@rowbook/shared";
 
@@ -17,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { getExtractedMinutes } from "@/lib/proof-field-comparison";
 
 const optionalNumber = z.preprocess(
   (value) => (value === "" || value === null ? null : value),
@@ -60,6 +62,7 @@ type EditWorkoutFormProps = {
     distance: number;
     avgHr: number | null;
     notes: string | null;
+    extractedFields?: unknown;
   };
   onSuccess: () => Promise<void> | void;
   onCancel: () => void;
@@ -103,6 +106,11 @@ export function EditWorkoutForm({
 
   const { mutateAsync: updateEntry } = trpc.athlete.updateEntry.useMutation();
   const activityType = watch("activityType");
+  const enteredMinutes = watch("minutes");
+  const parsedProof = ProofExtractedFieldsSchema.safeParse(entry.extractedFields);
+  const supportedMinutes = parsedProof.success
+    ? getExtractedMinutes(parsedProof.data)
+    : null;
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -174,6 +182,30 @@ export function EditWorkoutForm({
           />
           {errors.minutes ? (
             <p className="text-xs text-rose-500">{errors.minutes.message}</p>
+          ) : null}
+          {supportedMinutes !== null ? (
+            <div className="space-y-2 text-xs text-default-500">
+              <p>
+                The photo supports up to {supportedMinutes} whole active minutes.
+                Saving changes checks the workout again.
+              </p>
+              {supportedMinutes > 0 && enteredMinutes > supportedMinutes ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isSubmitting}
+                  onPress={() =>
+                    setValue("minutes", supportedMinutes, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                >
+                  Use {supportedMinutes} minutes
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="space-y-2">

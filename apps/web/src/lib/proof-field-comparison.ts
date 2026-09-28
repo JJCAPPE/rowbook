@@ -2,6 +2,7 @@ import {
   compareAverageHr,
   compareDistanceKm,
   formatInTimeZone,
+  getSupportedWorkoutMinutes,
   type ActivityType,
   type ProofExtractedFields,
 } from "@rowbook/shared";
@@ -14,7 +15,7 @@ export type EnteredWorkoutFields = {
   avgHr: number | null;
 };
 
-export type ProofComparisonStatus = "matches" | "differs" | "missing";
+export type ProofComparisonStatus = "matches" | "supported" | "differs" | "missing";
 
 export type ProofFieldComparisonStatuses = Record<
   "activityType" | "date" | "minutes" | "distance" | "avgHr",
@@ -24,11 +25,8 @@ export type ProofFieldComparisonStatuses = Record<
 const statusFor = (isMissing: boolean, matches: boolean) =>
   isMissing ? "missing" : matches ? "matches" : "differs";
 
-export const getExtractedMinutes = (fields: ProofExtractedFields) => {
-  if (typeof fields.minutes === "number") return fields.minutes;
-  if (typeof fields.durationSeconds !== "number") return null;
-  return Math.max(1, Math.round(fields.durationSeconds / 60));
-};
+export const getExtractedMinutes = (fields: ProofExtractedFields) =>
+  getSupportedWorkoutMinutes(fields);
 
 export const compareProofFields = (
   entered: EnteredWorkoutFields,
@@ -48,10 +46,13 @@ export const compareProofFields = (
       extracted.date != null &&
         formatInTimeZone(extracted.date) === formatInTimeZone(entered.date),
     ),
-    minutes: statusFor(
-      extractedMinutes == null,
-      extractedMinutes === entered.minutes,
-    ),
+    minutes:
+      extractedMinutes != null && entered.minutes < extractedMinutes
+        ? "supported"
+        : statusFor(
+            extractedMinutes == null,
+            extractedMinutes === entered.minutes,
+          ),
     distance: statusFor(
       distance.extractionIncomplete,
       distance.matches && !distance.extractionIncomplete,

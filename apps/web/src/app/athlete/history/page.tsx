@@ -323,6 +323,13 @@ export default function AthleteHistoryPage() {
                             {entry.rejectionNote}
                           </div>
                         )}
+                      {entry.creditPolicyVersion >= 2 &&
+                      entry.validationStatus !== "VERIFIED" &&
+                      entry.validationStatus !== "REJECTED" ? (
+                        <p className="mt-2 text-xs text-amber-700">
+                          Awaiting verification. These minutes do not count toward totals yet.
+                        </p>
+                      ) : null}
                       {(entry as any).extractedFields && (
                         <details className="mt-2 text-[10px] text-default-500">
                           <summary className="cursor-pointer select-none hover:text-foreground">
@@ -330,6 +337,7 @@ export default function AthleteHistoryPage() {
                           </summary>
                           <ProofExtractionFeedback
                             fields={(entry as any).extractedFields}
+                            enteredFields={entry}
                           />
                         </details>
                       )}

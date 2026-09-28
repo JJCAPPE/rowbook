@@ -59,7 +59,7 @@ export const reviewValidationStatus = async (
         message: "This workout changed. Reload it before reviewing.",
       });
     }
-    if (entry.reviewedAt || entry.reviewedById) {
+    if (entry.reviewedAt) {
       throw new TRPCError({
         code: "CONFLICT",
         message: "This workout has already been reviewed.",
@@ -74,7 +74,7 @@ export const reviewValidationStatus = async (
         id: entry.id,
         version: decision.expectedVersion,
         reviewedAt: null,
-        reviewedById: null,
+        reviewedById: entry.reviewedById,
       },
       data: {
         validationStatus: decision.decision,

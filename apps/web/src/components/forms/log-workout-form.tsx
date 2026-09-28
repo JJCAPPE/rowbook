@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   type ChangeEvent,
   useCallback,
@@ -837,7 +838,13 @@ export const LogWorkoutForm = () => {
   useEffect(() => {
     const validationStatus = entryStatus.data?.validationStatus;
     if (!validationStatus || !checkingEntryId) return;
-    if (validationStatus === "NOT_CHECKED" || validationStatus === "PENDING") {
+    const proofExtractionStatus = entryStatus.data?.proofExtractionStatus;
+    if (
+      (validationStatus === "NOT_CHECKED" || validationStatus === "PENDING") &&
+      (proofExtractionStatus === "NOT_CHECKED" ||
+        proofExtractionStatus === "PENDING" ||
+        proofExtractionStatus === "PROCESSING")
+    ) {
       return;
     }
 
@@ -849,7 +856,19 @@ export const LogWorkoutForm = () => {
           ? "rejected"
           : "needs-review",
     );
-  }, [checkingEntryId, entryStatus.data?.validationStatus]);
+    void Promise.allSettled([
+      utils.athlete.getDashboard.invalidate(),
+      utils.athlete.getHistory.invalidate(),
+      utils.athlete.getHistoryWithEntries.invalidate(),
+      utils.athlete.getWeekDetail.invalidate(),
+      utils.athlete.getLeaderboard.invalidate(),
+    ]);
+  }, [
+    checkingEntryId,
+    entryStatus.data?.validationStatus,
+    entryStatus.data?.proofExtractionStatus,
+    utils,
+  ]);
 
   const restoreRetryDetails = useCallback(() => {
     const intent = pendingIntentRef.current;
@@ -1331,22 +1350,27 @@ export const LogWorkoutForm = () => {
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-relaxed text-emerald-800"
           >
             <span className="font-semibold">Workout saved.</span> Checking photo
-            in the background.
+            in the background. Minutes count toward totals after verification.
           </div>
         ) : saveStatus === "saved" ? (
           <div
             role="status"
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
           >
-            Workout saved. Photo verified.
+            Workout saved. Photo verified. Your entered minutes count toward totals.
           </div>
         ) : saveStatus === "needs-review" ? (
           <div
             role="status"
             className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
           >
-            <span className="font-semibold">Workout saved.</span> A coach may need
-            to review the photo.
+            <span className="font-semibold">Workout saved, awaiting verification.</span>{" "}
+            Minutes do not count toward totals yet. View the photo values in{" "}
+            <Link href="/athlete/history" className="font-semibold underline">
+              your history
+            </Link>{" "}
+            and edit the workout if you entered too many minutes. Corrections are
+            checked again; unresolved issues need a coach&apos;s review.
           </div>
         ) : saveStatus === "rejected" ? (
           <div

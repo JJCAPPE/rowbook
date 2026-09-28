@@ -10,7 +10,7 @@ import {
   type ClaimedEvidenceExtractionJob,
 } from "@/server/repositories/evidence-extraction-jobs";
 import {
-  extractProofWithGeminiBatch,
+  extractProofBatch,
   ProofExtractionError,
 } from "@/server/services/proof-extraction-service";
 import { evaluateAutoVerification } from "@/server/services/validation-logic";
@@ -107,7 +107,7 @@ const processEvidenceExtractionJob = async (
 ) => {
   try {
     const imageBuffers = await downloadEvidenceSet(job);
-    const extraction = await extractProofWithGeminiBatch(imageBuffers, {
+    const extraction = await extractProofBatch(imageBuffers, {
       referenceDate: job.referenceDate,
     });
     const parsed = EvidenceExtractionResultSchema.safeParse(extraction);

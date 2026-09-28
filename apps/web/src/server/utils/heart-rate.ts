@@ -1,4 +1,4 @@
-import type { ValidationStatus } from "@rowbook/shared";
+import { isWorkoutCredited, type ValidationStatus } from "@rowbook/shared";
 
 type HeartRateEntry = {
   minutes: number;
@@ -8,6 +8,7 @@ type HeartRateEntry = {
 type WeeklyHeartRateEntry = HeartRateEntry & {
   weekStartAt: Date;
   validationStatus: ValidationStatus;
+  creditPolicyVersion: number;
 };
 
 export const getWeightedAvgHr = (entries: HeartRateEntry[]) => {
@@ -33,7 +34,7 @@ export const getWeightedAvgHrByWeek = (entries: WeeklyHeartRateEntry[]) => {
   const entriesByWeek = new Map<string, HeartRateEntry[]>();
 
   for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") {
+    if (!isWorkoutCredited(entry)) {
       continue;
     }
     const key = entry.weekStartAt.toISOString();

@@ -14,6 +14,7 @@ const athleteEntrySelect = {
   avgWatts: true,
   notes: true,
   validationStatus: true,
+  creditPolicyVersion: true,
   entryStatus: true,
   weekStartAt: true,
   lockedAt: true,
@@ -70,6 +71,7 @@ export const createTrainingEntry = (data: {
       // Set legacy field for backward compatibility if needed (using first image) or leave optional
       proofImageId: data.proofImageIds[0] ?? undefined,
       validationStatus: data.validationStatus,
+      creditPolicyVersion: 2,
       entryStatus: data.entryStatus,
       weekStartAt: data.weekStartAt,
       lockedAt: data.lockedAt,

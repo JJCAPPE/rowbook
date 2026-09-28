@@ -1,4 +1,4 @@
-import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, ValidationStatus, nowInZone } from "@rowbook/shared";
+import { getPreviousWeekStartAt, getWeekEndAt, getWeekRange, isWorkoutCredited, ValidationStatus, nowInZone } from "@rowbook/shared";
 import type { ActivityType, WeeklyStatus } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import { getTeamIdForAthlete } from "@/server/repositories/users";
@@ -37,12 +37,13 @@ const computeTotals = (entries: Array<{
   minutes: number;
   avgHr: number | null;
   validationStatus: ValidationStatus;
+  creditPolicyVersion: number;
 }>) => {
   let totalMinutes = 0;
   let hasHrData = false;
 
   for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") {
+    if (!isWorkoutCredited(entry)) {
       continue;
     }
     totalMinutes += entry.minutes;
@@ -78,7 +79,7 @@ export const getAthleteDashboard = async (
   // Entries are canonical; an aggregate can briefly lag an acknowledged save.
   const totals = computeTotals(entries);
   const avgHr = getWeightedAvgHr(
-    entries.filter((entry) => entry.validationStatus !== "REJECTED"),
+    entries.filter(isWorkoutCredited),
   );
   const requiredMinutes = effectiveTarget.requiredMinutes;
   const status: WeeklyStatus = effectiveTarget.isExempt
@@ -210,7 +211,7 @@ export const getAthleteHistoryWithEntries = async (
       let hasHrData = false;
 
       for (const entry of weekEntries) {
-        if (entry.validationStatus === "REJECTED") {
+        if (!isWorkoutCredited(entry)) {
           continue;
         }
         totalMinutes += entry.minutes;
@@ -250,9 +251,7 @@ export const getAthleteHistoryWithEntries = async (
         totalMinutes,
         totalDistance,
         avgHr: getWeightedAvgHr(
-          weekEntries.filter(
-            (entry) => entry.validationStatus !== "REJECTED",
-          ),
+          weekEntries.filter(isWorkoutCredited),
         ),
         requiredMinutes: effectiveTarget.requiredMinutes,
         status,
@@ -281,14 +280,14 @@ export const getAthleteWeekDetail = async (athleteId: string, weekStartAt: Date)
   );
 
   const totalMinutes = entries.reduce(
-    (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.minutes),
+    (sum, entry) => (isWorkoutCredited(entry) ? sum + entry.minutes : sum),
     0,
   );
   const totalDistanceKm = entries.reduce(
-    (sum, entry) => (entry.validationStatus === "REJECTED" ? sum : sum + entry.distance),
+    (sum, entry) => (isWorkoutCredited(entry) ? sum + entry.distance : sum),
     0,
   );
-  const countedEntries = entries.filter((entry) => entry.validationStatus !== "REJECTED");
+  const countedEntries = entries.filter(isWorkoutCredited);
 
   return {
     weekStartAt: normalizedWeekStart,

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ACTIVITY_TYPE_LABELS } from "@rowbook/shared";
+import { ACTIVITY_TYPE_LABELS, isWorkoutCredited } from "@rowbook/shared";
 import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
 import { Pencil, Trash2 } from "lucide-react";
 
@@ -75,9 +75,7 @@ export default function AthleteDashboardPage() {
   const entries = (dashboard?.entries ?? []) as Array<
     TrainingEntry & { extractedFields: any }
   >;
-  const countedEntries = entries.filter(
-    (entry) => entry.validationStatus !== "REJECTED",
-  );
+  const countedEntries = entries.filter(isWorkoutCredited);
   const requiredMinutes = dashboard?.requiredMinutes ?? 0;
   const totalMinutes = dashboard?.totalMinutes ?? 0;
   const totalDistanceKm = countedEntries.reduce(
@@ -352,12 +350,22 @@ export default function AthleteDashboardPage() {
                   {entry.rejectionNote}
                 </div>
               )}
+              {entry.creditPolicyVersion >= 2 &&
+              entry.validationStatus !== "VERIFIED" &&
+              entry.validationStatus !== "REJECTED" ? (
+                <p className="mt-2 text-xs text-amber-700">
+                  Awaiting verification. These minutes do not count toward totals yet.
+                </p>
+              ) : null}
               {entry.extractedFields && (
                 <details className="mt-2 text-[10px] text-default-500">
                   <summary className="cursor-pointer select-none hover:text-foreground">
                     View details from AI extraction
                   </summary>
-                  <ProofExtractionFeedback fields={entry.extractedFields} />
+                  <ProofExtractionFeedback
+                    fields={entry.extractedFields}
+                    enteredFields={entry}
+                  />
                 </details>
               )}
             </div>

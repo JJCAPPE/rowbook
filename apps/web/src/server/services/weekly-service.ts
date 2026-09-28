@@ -5,6 +5,7 @@ import {
   getPreviousWeekStartAt,
   getWeekStartAt,
   getWeekEndAt,
+  isWorkoutCredited,
 } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import { getWeightedAvgHr } from "@/server/utils/heart-rate";
@@ -50,9 +51,7 @@ const summarizeEntriesByAthlete = (entries: TeamWeekEntry[]) => {
 
   const summaries = new Map<string, WeekEntrySummary>();
   for (const [athleteId, athleteEntries] of entriesByAthlete) {
-    const validEntries = athleteEntries.filter(
-      (entry) => entry.validationStatus !== "REJECTED",
-    );
+    const validEntries = athleteEntries.filter(isWorkoutCredited);
     const activityTypes = new Set<ActivityType>();
     let totalMinutes = 0;
     let totalDistance = 0;
@@ -140,6 +139,7 @@ export const aggregateWeekForAthlete = async (
         distance: true,
         avgHr: true,
         validationStatus: true,
+        creditPolicyVersion: true,
       },
     });
 
@@ -149,7 +149,7 @@ export const aggregateWeekForAthlete = async (
     let hasHrData = false;
 
     for (const entry of entries) {
-      if (entry.validationStatus === "REJECTED") continue;
+      if (!isWorkoutCredited(entry)) continue;
       totalMinutes += entry.minutes;
       totalDistance += entry.distance;
       activityTypes.add(entry.activityType);
@@ -288,7 +288,7 @@ export const getTeamLeaderboard = async (
 export const getTeamStats = async (teamId: string, weekStartAt: Date) => {
   const weekEndAt = getWeekEndAt(weekStartAt);
   const entries = await listEntriesByTeamWeek(teamId, weekStartAt, weekEndAt);
-  const validEntries = entries.filter((e) => e.validationStatus !== "REJECTED");
+  const validEntries = entries.filter(isWorkoutCredited);
 
   const totalMinutes = validEntries.reduce((sum, e) => sum + e.minutes, 0);
   const totalDistance = validEntries.reduce((sum, e) => sum + e.distance, 0);
@@ -315,7 +315,7 @@ export const getTeamTrend = async (
 
   const entries = await listEntriesByTeamSinceWeekStart(teamId, start);
   const validEntries = entries.filter(
-    (e) => e.validationStatus !== "REJECTED" && e.weekStartAt <= endWeekStartAt,
+    (e) => isWorkoutCredited(e) && e.weekStartAt <= endWeekStartAt,
   );
 
   const weeksMap = new Map<

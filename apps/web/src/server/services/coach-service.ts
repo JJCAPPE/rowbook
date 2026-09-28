@@ -4,6 +4,7 @@ import {
   ValidationStatus,
   getWeekStartAt,
   getWeekEndAt,
+  isWorkoutCredited,
 } from "@rowbook/shared";
 import { prisma } from "@/db/client";
 import {
@@ -162,7 +163,7 @@ export const getAthleteDetail = async (
   const activityMixMap = new Map<ActivityType, number>();
 
   for (const entry of entries) {
-    if (entry.validationStatus === "REJECTED") continue;
+    if (!isWorkoutCredited(entry)) continue;
 
     // Group for mix
     activityMixMap.set(
