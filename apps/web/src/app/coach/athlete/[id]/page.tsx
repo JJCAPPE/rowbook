@@ -125,7 +125,8 @@ export default function CoachAthleteDetailPage(
             <Label htmlFor="coachAthleteSelect">Athlete</Label>
             <Select
               id="coachAthleteSelect"
-              value={selectedAthleteId}
+              key={selectedAthleteId}
+              defaultValue={selectedAthleteId}
               onChange={(event) => {
                 const nextAthleteId = event.target.value;
                 if (nextAthleteId && nextAthleteId !== selectedAthleteId) {
