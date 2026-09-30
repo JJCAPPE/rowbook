@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { Chip } from "@heroui/react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { trpc } from "@/lib/trpc";
 
 const callbackMessages: Record<string, string> = {
   oauth_failed: "Google sign-in was cancelled or could not be completed. Please try again.",
@@ -25,7 +27,10 @@ const signInStartError =
   "Google sign-in could not start. Check your connection and try again.";
 
 export default function LoginPage() {
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { data: session, isLoading: isSessionLoading } =
+    trpc.auth.getSession.useQuery(undefined, { retry: false });
   const signInPendingRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,6 +43,18 @@ export default function LoginPage() {
 
     setErrorMessage(callbackMessages[reason] ?? callbackMessages.account_error);
   }, []);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    router.replace(
+      session.user.role === "COACH" || session.user.role === "ADMIN"
+        ? "/coach"
+        : "/athlete",
+    );
+  }, [router, session]);
 
   const handleGoogleSignIn = async () => {
     if (signInPendingRef.current) {
@@ -72,6 +89,16 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  if (isSessionLoading || session) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-background via-content1 to-content2 px-4">
+        <p className="text-sm text-default-500">
+          {session ? "Opening Rowbook…" : "Checking your session…"}
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-dvh bg-gradient-to-br from-background via-content1 to-content2">

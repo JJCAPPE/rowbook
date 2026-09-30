@@ -80,6 +80,42 @@ class PublicSmokeTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_login_restores_an_existing_session(self):
+        context = self.browser.new_context(viewport={"width": 1440, "height": 900})
+        page = context.new_page()
+        page_errors = []
+        page.on("pageerror", lambda error: page_errors.append(str(error)))
+
+        session = {
+            "user": {
+                "id": "athlete-e2e",
+                "email": "athlete@example.test",
+                "name": "E2E Athlete",
+                "role": "ATHLETE",
+                "status": "ACTIVE",
+            },
+            "expiresAt": "2027-09-11T00:00:00.000Z",
+        }
+
+        def handle_session(route):
+            data = {
+                "json": session,
+                "meta": {"values": {"expiresAt": ["Date"]}, "v": 1},
+            }
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps([{"result": {"data": data}}]),
+            )
+
+        page.route("**/api/trpc/auth.getSession**", handle_session)
+        try:
+            page.goto(f"{BASE_URL}/login", wait_until="domcontentloaded")
+            page.wait_for_url(f"{BASE_URL}/athlete")
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
     def test_protected_areas_redirect_anonymous_visitors(self):
         for path in ("/athlete", "/coach"):
             with self.subTest(path=path):
