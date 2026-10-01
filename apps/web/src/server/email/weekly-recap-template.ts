@@ -48,6 +48,7 @@ const wholeNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const distanceFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
 

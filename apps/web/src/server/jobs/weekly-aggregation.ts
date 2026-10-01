@@ -127,7 +127,7 @@ const getTrend = (current: number, previous: number) => {
 const formatDistance = (km: number) => {
   return `${new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 1,
-    maximumFractionDigits: 3,
+    maximumFractionDigits: 1,
   }).format(km)} km`;
 };
 

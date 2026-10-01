@@ -13,8 +13,8 @@ const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: TIME_ZONE,
 });
 const distanceFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 3,
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
 });
 
 export const formatShortDate = (date: Date) => shortDateFormatter.format(date);
