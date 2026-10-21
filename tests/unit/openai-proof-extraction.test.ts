@@ -13,9 +13,7 @@ const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const rawResult = {
   activityType: "ERG",
-  date: "2026-09-27",
-  durationSeconds: 3_580,
-  elapsedSeconds: 3_700,
+  pieces: [{ imageIndices: [1], date: "2026-09-27", durationSeconds: 3_580, elapsedSeconds: 3_700 }],
   distanceKm: null,
   avgHr: null,
   confidence: 0.99,
@@ -93,7 +91,9 @@ test("OpenAI is the default and sends all photos once with strict structured out
     assert.equal(headers.get("content-type"), "application/json");
     assert.ok(init?.signal instanceof AbortSignal);
     requestBody = JSON.parse(String(init?.body));
-    return Response.json(responseBody());
+    return Response.json(responseBody(JSON.stringify({
+      ...rawResult, pieces: [{ ...rawResult.pieces[0], imageIndices: [1, 2] }],
+    })));
   });
 
   const result = await extractProofBatch([jpeg, png], {
@@ -176,7 +176,7 @@ test("OpenAI preserves unreadable active time and never substitutes elapsed time
   configureEnvironment(t);
   t.mock.method(globalThis, "fetch", async () => Response.json(responseBody(JSON.stringify({
     ...rawResult,
-    durationSeconds: null,
+    pieces: [{ ...rawResult.pieces[0], durationSeconds: null }],
     reviewReason: "Active work cannot be separated from rest.",
   }))));
 
@@ -234,7 +234,7 @@ test("incomplete, refused, and malformed OpenAI output cannot validate a workout
     { label: "missing output", body: { ...complete, output: [] } },
     { label: "malformed JSON text", body: responseBody("private-provider-detail") },
     { label: "missing required fields", body: responseBody(JSON.stringify({ durationSeconds: 60 })) },
-    { label: "invalid duration", body: responseBody(JSON.stringify({ ...rawResult, durationSeconds: -1 })) },
+    { label: "invalid duration", body: responseBody(JSON.stringify({ ...rawResult, pieces: [{ ...rawResult.pieces[0], durationSeconds: -1 }] })) },
   ];
   for (const { label, body } of responses) {
     await t.test(label, async (child) => {

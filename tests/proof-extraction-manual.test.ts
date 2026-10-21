@@ -252,7 +252,7 @@ test(
       assert.equal(result.elapsedSeconds, 5_519);
       assert.equal(result.durationSeconds, null);
       assert.equal(result.minutes, null);
-      assert.equal(result.isSingleWorkout, true);
+      assert.equal(result.isSingleWorkout, false);
       assert.ok(result.reviewReason);
       assert.notEqual(decision.validationStatus, "VERIFIED");
     });
@@ -277,12 +277,12 @@ test(
       assert.ok(result.sourceTypes.includes("STRAVA"));
     });
 
-    await t.test("Different workouts cannot be combined into one approved claim", async () => {
+    await t.test("Different-date workouts cannot be combined into one approved claim", async () => {
       const result = await extractProofBatch(
         [cases[1].buffer, cases[2].buffer],
         { referenceDate: new Date("2025-02-12T17:00:00-05:00") },
       );
-      recordCost("Different-workout negative control", result);
+      recordCost("Different-date negative control", result);
       const decision = evaluateAutoVerification({
         activityType: "CYCLE",
         date: new Date("2025-02-03T12:00:00-05:00"),

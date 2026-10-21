@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import {
   EvidenceExtractionResultSchema,
+  MAX_PROOF_FILES,
   nowInZone,
   toZonedDateTime,
   type EvidenceExtractionResult,
@@ -8,17 +11,20 @@ import {
 import { z } from "zod";
 
 export const EXTRACTION_PROVIDER = "openai";
-export const EXTRACTION_PROMPT_VERSION = "workout-proof-v4";
-export const EXTRACTION_SCHEMA_VERSION = "evidence-v3";
+export const EXTRACTION_PROMPT_VERSION = "workout-proof-v5";
+export const EXTRACTION_SCHEMA_VERSION = "evidence-v4";
 export const DEFAULT_EXTRACTION_MODEL = "gpt-6-luna";
 export const DEFAULT_GEMINI_EXTRACTION_MODEL = "gemini-3.8-flash";
 export const EXTRACTION_TIMEOUT_MS = 60_000;
 
 const RawExtractionSchema = z.object({
   activityType: z.enum(["ERG", "RUN", "CYCLE", "SWIM", "OTHER"]).nullable(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-  durationSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
-  elapsedSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
+  pieces: z.array(z.object({
+    imageIndices: z.array(z.number().int().positive()).min(1).max(MAX_PROOF_FILES),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    durationSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
+    elapsedSeconds: z.number().int().positive().max(24 * 60 * 60).nullable(),
+  })).min(1).max(MAX_PROOF_FILES),
   distanceKm: z.number().nonnegative().max(500).nullable(),
   avgHr: z.number().int().min(30).max(240).nullable(),
   confidence: z.number().min(0).max(1),
@@ -38,17 +44,37 @@ const responseJsonSchema = {
       ],
       description: "Normalized Rowbook activity type, or null when unclear.",
     },
-    date: {
-      anyOf: [{ type: "string", format: "date" }, { type: "null" }],
-      description: "Workout date in YYYY-MM-DD form.",
-    },
-    durationSeconds: {
-      anyOf: [{ type: "integer", minimum: 1, maximum: 86400 }, { type: "null" }],
-      description: "Active working duration only, in seconds.",
-    },
-    elapsedSeconds: {
-      anyOf: [{ type: "integer", minimum: 1, maximum: 86400 }, { type: "null" }],
-      description: "Elapsed duration including rests, when separately visible.",
+    pieces: {
+      type: "array",
+      minItems: 1,
+      maxItems: MAX_PROOF_FILES,
+      description: "Distinct completed, non-overlapping pieces; group all duplicate and complementary views of each piece together.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          imageIndices: {
+            type: "array",
+            minItems: 1,
+            maxItems: MAX_PROOF_FILES,
+            items: { type: "integer", minimum: 1 },
+            description: "One-based supplied image numbers supporting this piece. Assign every image to exactly one piece.",
+          },
+          date: {
+            anyOf: [{ type: "string", format: "date" }, { type: "null" }],
+            description: "This piece's workout date in YYYY-MM-DD form, or null when not established.",
+          },
+          durationSeconds: {
+            anyOf: [{ type: "integer", minimum: 1, maximum: 86400 }, { type: "null" }],
+            description: "This piece's active work only, in exact seconds, or null when not established.",
+          },
+          elapsedSeconds: {
+            anyOf: [{ type: "integer", minimum: 1, maximum: 86400 }, { type: "null" }],
+            description: "This piece's elapsed duration including rests, when separately visible.",
+          },
+        },
+        required: ["imageIndices", "date", "durationSeconds", "elapsedSeconds"],
+      },
     },
     distanceKm: {
       anyOf: [{ type: "number", minimum: 0, maximum: 500 }, { type: "null" }],
@@ -62,15 +88,15 @@ const responseJsonSchema = {
       type: "number",
       minimum: 0,
       maximum: 1,
-      description: "Confidence that the evidence supports one completed workout, its date, and its active duration.",
+      description: "Confidence that all pieces support one logged workout's date and active duration without double-counting.",
     },
     isSingleWorkout: {
       type: "boolean",
-      description: "Whether all images can safely be treated as evidence for one workout.",
+      description: "Whether all images safely support one logged workout, including distinct non-overlapping completed pieces on the same date.",
     },
     reviewReason: {
       anyOf: [{ type: "string", minLength: 1, maxLength: 500 }, { type: "null" }],
-      description: "Uncertainty about a completed workout, its date, active duration, or single-session validity; otherwise null.",
+      description: "Uncertainty about completed pieces, their date, active duration, or overlap; otherwise null.",
     },
     sourceTypes: {
       type: "array",
@@ -80,9 +106,7 @@ const responseJsonSchema = {
   },
   required: [
     "activityType",
-    "date",
-    "durationSeconds",
-    "elapsedSeconds",
+    "pieces",
     "distanceKm",
     "avgHr",
     "confidence",
@@ -199,17 +223,19 @@ Treat every supplied image as one evidence set for one claimed workout. Consolid
 
 Rules:
 - Evidence must show a completed workout, not a planned workout or a timer setup. All listed activity categories are eligible.
+- pieces: return one item per distinct completed piece of exercise. One logged workout may include multiple completed pieces on the same date: separate 20-minute and 25-minute results support 45 minutes even when no screen displays 45. Read each piece's seconds separately; the application will sum them. Images are numbered from 1 in supplied order. Assign every image to exactly one piece via imageIndices. Group duplicate photos, Garmin/Strava views of the same activity, and complementary screens into the same piece. A full-session summary and its intervals/splits/subtotals overlap: group them together and count the full session once. Different durations alone do not prove distinct pieces. Distinct result identifiers, start times, completed-result metrics, or interval structure must establish separate work. Equal-duration results can be distinct when their other metrics clearly differ; different crops or views of the same result are not distinct. If overlap or distinctness cannot be resolved, set isSingleWorkout false and provide a reviewReason. Do not discard unclear images to make the remaining evidence pass.
 - date: the workout date, YYYY-MM-DD. Preserve an explicitly displayed year. Resolve today/yesterday against ${dateContext}. Only when the year is omitted, choose the most recent non-future occurrence of the displayed month and day; applying this rule alone does not require review or lower confidence. Use null and a reviewReason if the workout date cannot be established.
+- Establish each piece's date from its workout evidence; a tablet/phone status bar alone is not a workout date. Complementary views of the same piece may establish its date, but never copy a date from a different piece. All pieces must have the same workout date.
 - durationSeconds: ACTIVE WORK only, in exact seconds; never round up. On a completed single-session summary, a plain workout Time, Duration, or Total Time is the recorded workout duration unless the evidence separately identifies rest or paused time. Do not invent rests merely because a separate moving-time field is absent. A value explicitly labeled Elapsed Time is not by itself evidence of active duration. On Concept2 PM5 interval summaries, use the main work row or sum work intervals and exclude programmed rest. For example, 2×30:00/1:00r is 3600 active seconds even when Total Time is 1:02:00; 3×30:00/1:00r is 5400 seconds even when Total Time is 1:33:00. Use null and a reviewReason if active duration cannot be established, including when work cannot be separated from rest.
 - Read each time as one value, preserving its separators and displayed units: H:MM:SS is 3600×H + 60×MM + SS, and M:SS is 60×M + SS. Drop fractional seconds rather than rounding up. Never combine digits from different fields or images.
 - For images confidently showing the same session, otherwise reliable duration readings differing by at most one second can reflect display rounding. Use the smaller value and do not require review solely for that difference. If an independently supported active duration exceeds that session's displayed elapsed duration by at most one second, conservatively cap active duration at the elapsed value. This does not make elapsed-only evidence sufficient; larger contradictions require review.
 - elapsedSeconds: the separate total/elapsed value including rests when visible; otherwise null.
-- distanceKm: the main workout distance converted from meters/miles to kilometers. Do not sum split rows below a total row.
-- avgHr: only a clearly labeled average heart rate. Prefer a Garmin/Strava average HR over PM5 cadence, stroke rate, rpm, max HR, or recovery values.
-- activityType: Concept2 RowErg is ERG; Concept2 BikeErg/cycling is CYCLE. If a Concept2 PM5 screen has an rpm column, return CYCLE, not ERG. An s/m column means strokes per minute, not rpm. Do not assume every Concept2 PM5 screen is rowing. Normalize other visible activities to RUN, SWIM, or OTHER; use null if the category alone is unclear.
-- isSingleWorkout: false if the images plausibly show separate sessions rather than the same/complementary session.
-- reviewReason: one plain-language sentence only when completed-workout validity, date, active duration, or single-session validity requires review; otherwise null. Conflicting dates or active durations require review, except for the conservative same-session one-second rounding rule above. Missing, uncertain, or differing distance, average heart rate, or activity category alone must not require review or lower confidence; use null for an incidental field that cannot be resolved. Still flag evidence that suggests separate sessions.
-- confidence: confidence that the evidence supports one completed workout, its date, and its active duration, not image authenticity or the incidental distance, average heart rate, and activity category values.
+- distanceKm: the main workout distance converted from meters/miles to kilometers. Sum only distinct pieces whose distances are all readable; otherwise null. Do not sum split rows below a total row.
+- avgHr: only a clearly labeled average heart rate. Prefer a Garmin/Strava average HR over PM5 cadence, stroke rate, rpm, max HR, or recovery values. For multiple pieces, use their duration-weighted average only when every piece's average HR is known; otherwise null.
+- activityType: Concept2 RowErg is ERG; Concept2 BikeErg/cycling is CYCLE. If a Concept2 PM5 screen has an rpm column, return CYCLE, not ERG. An s/m column means strokes per minute, not rpm. Do not assume every Concept2 PM5 screen is rowing. Normalize other visible activities to RUN, SWIM, or OTHER; use null if the category alone is unclear or pieces mix activity categories.
+- isSingleWorkout: true when the evidence safely supports one logged workout, including multiple distinct non-overlapping completed pieces on the same date. False when completion, date, or overlap is unresolved; separate completed pieces alone are not a reason to reject.
+- reviewReason: one plain-language sentence only when completed-workout validity, date, active duration, or piece overlap requires review; otherwise null. Conflicting dates or active durations within the same piece require review, except for the conservative same-session one-second rounding rule above. Different active durations across clearly distinct pieces are expected. Missing, uncertain, or differing distance, average heart rate, or activity category alone must not require review or lower confidence; use null for an incidental field that cannot be resolved.
+- confidence: confidence that the evidence supports completed non-overlapping pieces, their shared date, and their active durations, not image authenticity or the incidental distance, average heart rate, and activity category values.
 
 Return only the requested JSON object.`;
 };
@@ -262,7 +288,7 @@ const getImageMimeTypes = (imageBuffers: Buffer[]) => {
   return imageBuffers.map(detectImageMimeType);
 };
 
-const parseExtractionResult = (text: string): EvidenceExtractionResult => {
+const parseExtractionResult = (text: string, imageBuffers: Buffer[]): EvidenceExtractionResult => {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -283,20 +309,72 @@ const parseExtractionResult = (text: string): EvidenceExtractionResult => {
     );
   }
 
+  const { pieces } = parsed.data;
+  const imageIndices = pieces.flatMap((piece) => piece.imageIndices);
+  if (
+    imageIndices.length !== imageBuffers.length ||
+    new Set(imageIndices).size !== imageBuffers.length ||
+    imageIndices.some((index) => index > imageBuffers.length)
+  ) {
+    throw new ProofExtractionError(
+      "invalid-response",
+      "The photo check could not associate every image with one workout piece and needs manual review.",
+      false,
+    );
+  }
+
+  let reviewReason: string | null = null;
+  const imageOwners = new Map<string, number>();
+  pieces.forEach((piece, pieceIndex) => {
+    for (const imageIndex of piece.imageIndices) {
+      const hash = createHash("sha256").update(imageBuffers[imageIndex - 1]).digest("hex");
+      if (imageOwners.has(hash) && imageOwners.get(hash) !== pieceIndex) {
+        reviewReason = "The same photo was counted as more than one workout piece.";
+      }
+      imageOwners.set(hash, pieceIndex);
+    }
+  });
+
+  const date = pieces.every((piece) =>
+    piece.date !== null && toZonedDateTime(piece.date).toISODate() === piece.date && piece.date === pieces[0].date,
+  ) ? pieces[0].date : null;
+  if (date === null) reviewReason ??= "The photos do not establish the same workout date for every piece.";
+
+  let durationSeconds: number | null = 0;
+  let elapsedSeconds: number | null = 0;
+  for (const piece of pieces) {
+    if (
+      piece.durationSeconds === null ||
+      (piece.elapsedSeconds !== null && piece.durationSeconds > piece.elapsedSeconds + 1)
+    ) {
+      durationSeconds = null;
+      reviewReason ??= "The photos do not establish active work time for every piece.";
+    } else if (durationSeconds !== null) {
+      durationSeconds += piece.elapsedSeconds === null
+        ? piece.durationSeconds
+        : Math.min(piece.durationSeconds, piece.elapsedSeconds);
+    }
+    elapsedSeconds = elapsedSeconds === null || piece.elapsedSeconds === null
+      ? null
+      : elapsedSeconds + piece.elapsedSeconds;
+  }
+  if (durationSeconds !== null && durationSeconds > 24 * 60 * 60) {
+    reviewReason ??= "The workout pieces exceed the active time possible in one day.";
+  }
+  if (reviewReason !== null) durationSeconds = null;
+  if (elapsedSeconds !== null && elapsedSeconds > 24 * 60 * 60) elapsedSeconds = null;
+
   return EvidenceExtractionResultSchema.parse({
     activityType: parsed.data.activityType,
-    date: parsed.data.date,
-    durationSeconds: parsed.data.durationSeconds,
-    elapsedSeconds: parsed.data.elapsedSeconds,
-    minutes:
-      parsed.data.durationSeconds === null
-        ? null
-        : Math.floor(parsed.data.durationSeconds / 60),
+    date,
+    durationSeconds,
+    elapsedSeconds,
+    minutes: durationSeconds === null ? null : Math.floor(durationSeconds / 60),
     distance: parsed.data.distanceKm,
     avgHr: parsed.data.avgHr,
     confidence: parsed.data.confidence,
-    isSingleWorkout: parsed.data.isSingleWorkout,
-    reviewReason: parsed.data.reviewReason,
+    isSingleWorkout: parsed.data.isSingleWorkout && reviewReason === null,
+    reviewReason: parsed.data.reviewReason ?? reviewReason,
     sourceTypes: [...new Set(parsed.data.sourceTypes)],
   });
 };
@@ -428,7 +506,7 @@ export const extractProofBatch = async (
     .join("");
 
   return {
-    ...parseExtractionResult(text),
+    ...parseExtractionResult(text, imageBuffers),
     metadata: {
       provider: "openai",
       model,
@@ -481,7 +559,7 @@ export const extractProofWithGeminiBatch = async (
         httpOptions: { timeout: EXTRACTION_TIMEOUT_MS },
         responseMimeType: "application/json",
         responseJsonSchema,
-        maxOutputTokens: 700,
+        maxOutputTokens: 2000,
         temperature: 0,
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
@@ -491,7 +569,7 @@ export const extractProofWithGeminiBatch = async (
   }
 
   return {
-    ...parseExtractionResult(response.text ?? ""),
+    ...parseExtractionResult(response.text ?? "", imageBuffers),
     metadata: {
       provider: "gemini",
       model,
