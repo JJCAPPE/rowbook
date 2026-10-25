@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { NavItem } from "@/components/layout/navigation";
 import { Button } from "@/components/ui/button";
+import { WeeklyRevealGate } from "@/components/weekly-reveal/weekly-reveal-gate";
 import { trpc } from "@/lib/trpc";
 import {
   buildWeekOptions,
@@ -316,35 +317,37 @@ export default function CoachLayoutClient({
   ];
 
   return (
-    <AppShell
-      title="Coach"
-      userName={userName}
-      navItems={navItems}
-      weekOptions={supportsWeekSelection ? weekOptions : undefined}
-      activeWeekKey={activeWeekKey}
-      onWeekChange={
-        supportsWeekSelection
-          ? (nextWeekKey) => {
-              if (!canDiscardUnsavedSettings()) return;
-              const params = new URLSearchParams(searchParams.toString());
-              params.set("weekStartAt", nextWeekKey);
-              router.push(`${pathname}?${params.toString()}`);
-            }
-          : undefined
-      }
-      teamOptions={teams}
-      activeTeamId={activeTeamId}
-      onTeamChange={(nextTeamId) => {
-        if (!canDiscardUnsavedSettings()) return;
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("teamId", nextTeamId);
-        const nextPath = pathname.startsWith("/coach/athlete/")
-          ? "/coach"
-          : pathname;
-        router.push(`${nextPath}?${params.toString()}`);
-      }}
-    >
-      {children}
-    </AppShell>
+    <WeeklyRevealGate userId={session.user.id} teamId={activeTeamId}>
+      <AppShell
+        title="Coach"
+        userName={userName}
+        navItems={navItems}
+        weekOptions={supportsWeekSelection ? weekOptions : undefined}
+        activeWeekKey={activeWeekKey}
+        onWeekChange={
+          supportsWeekSelection
+            ? (nextWeekKey) => {
+                if (!canDiscardUnsavedSettings()) return;
+                const params = new URLSearchParams(searchParams.toString());
+                params.set("weekStartAt", nextWeekKey);
+                router.push(`${pathname}?${params.toString()}`);
+              }
+            : undefined
+        }
+        teamOptions={teams}
+        activeTeamId={activeTeamId}
+        onTeamChange={(nextTeamId) => {
+          if (!canDiscardUnsavedSettings()) return;
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("teamId", nextTeamId);
+          const nextPath = pathname.startsWith("/coach/athlete/")
+            ? "/coach"
+            : pathname;
+          router.push(`${nextPath}?${params.toString()}`);
+        }}
+      >
+        {children}
+      </AppShell>
+    </WeeklyRevealGate>
   );
 }

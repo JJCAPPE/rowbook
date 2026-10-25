@@ -112,13 +112,13 @@ class LocalPostgres:
               AND table_name IN (
                 'User', 'Team', 'AthleteProfile', 'CoachTeamMembership',
                 'TrainingEntry', 'ProofImage', 'EvidenceExtractionJob',
-                'AthleteWeeklyRequirementOverride', 'AuditLog'
+                'AthleteWeeklyRequirementOverride', 'AuditLog', 'WeeklyRevealSeen'
               )
             GROUP BY current_database();
             """
         )
         require(
-            rows == [[EXPECTED_DATABASE, "9"]],
+            rows == [[EXPECTED_DATABASE, "10"]],
             "The local test database is missing required migrated tables.",
         )
 
@@ -374,6 +374,16 @@ def open_authenticated_page(
         # Supabase refresh and the Next.js development channel can stay open.
         pass
     require(response is not None and response.status < 500, "An authenticated page failed to load.")
+    try:
+        awards = page.get_by_role("dialog", name="Weekly team awards")
+        ready_main = page.locator("main:not([inert] *)")
+        expect(awards.or_(ready_main).first).to_be_visible(timeout=20_000)
+        if awards.is_visible():
+            awards.get_by_role("button", name="Let’s get to work", exact=True).click(timeout=60_000)
+            expect(awards).not_to_be_visible(timeout=20_000)
+    except Exception:
+        context.close()
+        raise HarnessError("The first-open weekly awards did not complete and save.") from None
     return context, page, page_errors
 
 

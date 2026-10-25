@@ -1,0 +1,173 @@
+.modalWrapper { padding: 0; z-index: 100; }
+.modal { margin: 0; padding: 0; max-width: none; max-height: none; width: 100%; height: 100dvh; border-radius: 0; }
+.experience { --ink: #fff9ed; --paper: #1646dc; display: flex; flex-direction: column; position: relative; height: 100%; overflow-y: auto; background: var(--paper); color: var(--ink); font-family: var(--font-sans), sans-serif; transition: background-color .4s, color .4s; isolation: isolate; }
+.experience[data-theme="rank3"] { --paper: #f5ab75; --ink: #422014; }
+.experience[data-theme="rank2"] { --paper: #a6d9f7; --ink: #132a4b; }
+.experience[data-theme="rank1"] { --paper: #ffe25a; --ink: #302809; }
+.experience[data-theme="growth"] { --paper: #cbef76; --ink: #22350b; }
+.experience[data-theme="added"] { --paper: #bcb3fa; --ink: #28204f; }
+.experience[data-theme="missed"] { --paper: #ffc2c7; --ink: #541c2d; }
+.experience[data-theme="zero"] { --paper: #252132; --ink: #fff9ed; }
+.header, .footer { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: relative; z-index: 2; gap: 12px; padding: 20px 24px; }
+.header { padding-top: max(20px, env(safe-area-inset-top)); }
+.brand { font-family: var(--font-display), sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -1.2px; }
+.brand span { display: block; font-family: var(--font-sans), sans-serif; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; margin-top: 2px; }
+.week { text-align: right; margin-left: auto; font-size: 11px; line-height: 1.6; max-width: 40%; overflow-wrap: anywhere; }
+.week strong, .week span { display: block; }
+.pause { color: var(--ink) !important; border: 1px solid currentColor; background: transparent !important; min-width: 44px; width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+.pause span { display: none; }
+.pause:focus-visible, .continue:focus-visible { outline: 3px solid currentColor; outline-offset: 4px; }
+.stage { flex: 1 0 auto; display: grid; position: relative; }
+.scene { width: 100%; max-width: 1200px; padding: 24px; margin: auto; text-align: center; position: relative; }
+.kicker { margin: 0 0 20px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.4px; }
+.introTitle, .title, .athleteName, .awardName, .countTitle { font-family: var(--font-display), sans-serif; font-weight: 800; line-height: 1.08; letter-spacing: -.05em; overflow-wrap: anywhere; }
+.introTitle { font-size: clamp(40px, 9vw, 112px); margin: 0; text-align: left; }
+.introTitle em { color: #ffe25a; font-style: normal; }
+.subtitle { font-size: 14px; margin: 28px 0 0; line-height: 1.6; text-align: left; max-width: 420px; }
+.introRanks { display: flex; gap: 12px; margin-top: 36px; justify-content: flex-end; }
+.introRanks span { width: 56px; height: 64px; display: grid; place-items: center; color: #132a4b; background: #a6d9f7; font-size: 36px; font-family: var(--font-display), sans-serif; font-weight: 800; transform: rotate(-8deg); }
+.introRanks span:first-child { background: #f5ab75; transform: rotate(-16deg); }
+.introRanks span:last-child { background: #ffe25a; transform: rotate(5deg); }
+.winner { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.rankStamp { border: 3px solid currentColor; border-radius: 50%; width: 104px; height: 104px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; font-family: var(--font-display), sans-serif; font-size: 66px; font-weight: 800; line-height: 1; transform: rotate(-10deg); box-shadow: 5px 5px 0 currentColor; }
+.rankStamp span { align-self: flex-start; padding-top: 26px; font-size: 18px; }
+.winnerDetails { min-width: 0; width: 100%; }
+.athleteName { margin: 0; font-size: clamp(30px, 6vw, 76px); }
+.score { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 22px; line-height: 1; }
+.score strong { font-family: var(--font-display), sans-serif; font-size: clamp(60px, 12vw, 144px); font-weight: 800; letter-spacing: -.07em; }
+.score > span { font-size: 16px; font-weight: 700; }
+.athleteStats { width: 100%; }
+.metrics { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 28px; }
+.metrics > div { display: flex; flex-direction: column; gap: 5px; }
+.metrics strong { font-size: clamp(16px, 2vw, 24px); font-weight: 800; }
+.metrics span { font-size: 11px; }
+.badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 22px 0 0; }
+.badges > span { display: inline-flex; align-items: center; gap: 6px; border: 1px solid currentColor; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+.title { font-size: clamp(32px, 5vw, 66px); margin: 0; }
+.podium { display: flex; justify-content: center; align-items: flex-end; width: 100%; margin: 36px auto 0; max-width: 820px; gap: 7px; }
+.podiumLane { flex: 1; min-width: 0; max-width: 300px; --medal: #a6d9f7; --height: 120px; }
+.podiumLane[data-rank="1"] { --medal: #ffe25a; --height: 170px; }
+.podiumLane[data-rank="3"] { --medal: #f5ab75; --height: 85px; }
+.podiumName { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 3px 14px; overflow-wrap: anywhere; }
+.podiumName strong { font-size: 12px; line-height: 1.35; }
+.podiumName > span { font-size: 11px; }
+.podiumName svg { color: #ffe25a; }
+.podiumBlock { height: var(--height); border-radius: 8px 8px 0 0; color: #132a4b; background: var(--medal); border-bottom: 9px solid #0002; display: grid; place-items: center; font-size: 62px; font-family: var(--font-display), sans-serif; font-weight: 800; }
+.awardNumber { margin: 24px 0 12px; font-family: var(--font-display), sans-serif; font-size: clamp(54px, 12vw, 140px); font-weight: 800; letter-spacing: -.07em; line-height: 1; overflow-wrap: anywhere; }
+.awardNumber > span:last-child { font-size: .55em; letter-spacing: -.03em; }
+.awardName { font-size: clamp(26px, 4vw, 50px); margin: 12px 0; }
+.comparison { font-size: 15px; font-weight: 700; margin: 0 0 24px; }
+.rule { font-size: 11px; line-height: 1.5; max-width: 440px; margin: 24px auto 0; }
+.empty { font-size: 18px; line-height: 1.8; margin: 48px 0; }
+.emoji { display: block; font-size: clamp(70px, 11vw, 120px); line-height: 1.2; margin-bottom: 20px; }
+.countTitle { font-size: clamp(30px, 5vw, 60px); margin: 0; }
+.teamCount { font-family: var(--font-display), sans-serif; font-size: clamp(110px, 23vw, 230px); font-weight: 800; line-height: 1.1; letter-spacing: -.07em; }
+.countDescription { font-size: clamp(15px, 2.5vw, 22px); margin: 8px auto; max-width: 440px; }
+.finishActions { margin: 28px auto 0; max-width: 440px; }
+.continue { background: #ffe25a !important; color: #302809 !important; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 15px; border-radius: 8px; padding: 14px 24px; height: auto; min-height: 50px; }
+.error { font-size: 13px; margin-top: 12px; }
+.footer { font-size: 10px; line-height: 1.4; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.progress { position: absolute; bottom: 0; left: 0; right: 0; height: 5px; background: #ffffff30; }
+.progress span { display: block; height: 100%; background: currentColor; transition: width .1s linear; }
+.confetti { position: absolute; inset: -60px 0 0; overflow: hidden; pointer-events: none; z-index: -1; }
+.confetti i { position: absolute; top: -20px; width: 9px; height: 18px; animation: confettiFall 3.8s ease-in both; }
+.experience[data-paused="true"] .confetti i { animation-play-state: paused; }
+@keyframes confettiFall { to { top: 110%; rotate: 420deg; translate: 25px 0; } }
+@media (min-width: 640px) {
+  .header, .footer { padding-left: 40px; padding-right: 40px; }
+  .week { font-size: 13px; }
+  .scene { padding: 36px 48px; }
+  .winner { gap: 30px; }
+  .rankStamp { width: 130px; height: 130px; font-size: 84px; }
+  .rankStamp span { padding-top: 34px; font-size: 22px; }
+  .podium { gap: 14px; }
+  .podiumLane { --height: 170px; }
+  .podiumLane[data-rank="1"] { --height: 230px; }
+  .podiumLane[data-rank="3"] { --height: 125px; }
+  .podiumName strong { font-size: 20px; }
+  .podiumName > span { font-size: 16px; }
+  .podiumBlock { font-size: 90px; }
+  .footer { font-size: 12px; }
+}
+@media (min-width: 1000px) {
+  .header, .footer { padding: 28px 48px; }
+  .brand { font-size: 28px; }
+  .brand span { font-size: 11px; }
+  .pause { width: auto; border-radius: 24px; padding: 0 16px; gap: 8px; }
+  .pause span { display: inline; font-size: 12px; }
+  .introRanks { position: absolute; right: 100px; bottom: 80px; }
+  .introRanks span { width: 96px; height: 120px; font-size: 62px; }
+  .subtitle { font-size: 17px; }
+  .winner { flex-direction: row; gap: 64px; padding: 30px 0; }
+  .rankStamp { width: 250px; height: 250px; font-size: 168px; border-width: 5px; box-shadow: 9px 9px 0 currentColor; }
+  .rankStamp span { padding-top: 70px; font-size: 38px; }
+  .winnerDetails { text-align: left; }
+  .winnerDetails .score, .winnerDetails .metrics, .winnerDetails .badges { justify-content: flex-start; }
+  .kicker { margin-bottom: 30px; font-size: 14px; }
+  .metrics span, .badges > span, .rule { font-size: 13px; }
+}
+@media (max-height: 650px) {
+  .header, .footer { padding-top: 12px; padding-bottom: 12px; }
+  .scene { padding-top: 16px; padding-bottom: 16px; }
+  .winner { gap: 12px; }
+  .rankStamp { width: 72px; height: 72px; font-size: 46px; }
+  .rankStamp span { font-size: 14px; padding-top: 17px; }
+  .kicker { margin-bottom: 12px; }
+  .score { margin: 8px 0 14px; }
+  .score strong { font-size: 66px; }
+  .badges, .rule { margin-top: 14px; }
+  .emoji { font-size: 66px; margin-bottom: 12px; }
+  .teamCount { font-size: 110px; }
+  .podium { margin-top: 22px; }
+  .podiumLane { --height: 70px; }
+  .podiumLane[data-rank="1"] { --height: 100px; }
+  .podiumLane[data-rank="3"] { --height: 50px; }
+  .podiumBlock { font-size: 42px; }
+}
+@media (max-height: 500px) and (min-width: 640px) {
+  .scene { padding: 12px 32px; }
+  .header, .footer { padding: 10px 24px; }
+  .brand { font-size: 20px; }
+  .brand span { font-size: 9px; }
+  .kicker { font-size: 10px; margin-bottom: 10px; }
+  .winner { flex-direction: row; gap: 32px; max-width: 720px; margin: auto; }
+  .rankStamp { width: 100px; height: 100px; font-size: 64px; }
+  .rankStamp span { padding-top: 24px; font-size: 18px; }
+  .winnerDetails { text-align: left; }
+  .winnerDetails .score, .winnerDetails .metrics, .winnerDetails .badges { justify-content: flex-start; }
+  .athleteName { font-size: 34px; }
+  .score strong { font-size: 56px; }
+  .score { margin: 6px 0 12px; }
+  .metrics strong { font-size: 16px; }
+  .metrics span { font-size: 10px; }
+  .badges { margin-top: 12px; }
+  .introTitle { font-size: 46px; }
+  .subtitle { margin-top: 12px; font-size: 12px; }
+  .introRanks { position: absolute; right: 8%; bottom: 40px; }
+  .title, .countTitle { font-size: 28px; }
+  .awardNumber { font-size: 64px; margin: 8px 0; }
+  .awardName { font-size: 24px; margin: 8px 0; }
+  .comparison { font-size: 12px; margin-bottom: 10px; }
+  .scene:has(.awardNumber) .athleteStats { display: flex; align-items: center; justify-content: center; gap: 24px; }
+  .scene:has(.awardNumber) .badges { margin: 0; }
+  .rule { font-size: 10px; margin-top: 10px; }
+  .scene:has(.teamCount) { padding-left: 28%; }
+  .emoji { position: absolute; left: 13%; top: 50%; transform: translateY(-50%); font-size: 90px; margin: 0; }
+  .teamCount { font-size: 120px; }
+  .countDescription { font-size: 14px; }
+  .podium { max-width: 500px; margin-top: 16px; }
+  .podiumName { gap: 4px; padding-bottom: 8px; }
+  .podiumName strong { font-size: 12px; }
+  .podiumName > span { font-size: 11px; }
+  .podiumName svg { width: 20px; height: 20px; }
+  .podiumLane { --height: 45px; }
+  .podiumLane[data-rank="1"] { --height: 65px; }
+  .podiumLane[data-rank="3"] { --height: 30px; }
+  .podiumBlock { font-size: 28px; border-bottom-width: 5px; }
+  .finishActions { margin-top: 12px; }
+  .continue { min-height: 44px; padding: 10px 20px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .experience, .progress span { transition: none; }
+  .confetti { display: none; }
+}

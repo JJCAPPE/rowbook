@@ -113,6 +113,7 @@ model User {
   coachedTeams      CoachTeamMembership[] @relation("CoachTeamMembershipCoach")
   reviewedEntries  TrainingEntry[] @relation("EntryReviewer")
   weeklyRecapDeliveries WeeklyRecapDelivery[] @relation("WeeklyRecapRecipient")
+  weeklyRevealSeen WeeklyRevealSeen[]
   evidenceExtractionJobs EvidenceExtractionJob[] @relation("EvidenceExtractionAthlete")
 }
 
@@ -129,6 +130,7 @@ model Team {
   weeklyAggregates  WeeklyAggregate[]
   coaches            CoachTeamMembership[]
   weeklyRecapDeliveries WeeklyRecapDelivery[]
+  weeklyRevealSeen WeeklyRevealSeen[]
 }
 
 model CoachTeamMembership {
@@ -446,6 +448,19 @@ model WeeklyRecapDelivery {
   @@unique([teamId, weekStartAt, userId])
   @@index([status, nextAttemptAt])
   @@index([status, leaseExpiresAt])
+}
+
+model WeeklyRevealSeen {
+  userId      String
+  teamId      String
+  weekStartAt DateTime
+  completedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([userId, teamId, weekStartAt])
+  @@index([teamId, weekStartAt])
 }
 
 model Session {

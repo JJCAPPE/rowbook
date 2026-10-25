@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { NavItem } from "@/components/layout/navigation";
 import { Button } from "@/components/ui/button";
+import { WeeklyRevealGate } from "@/components/weekly-reveal/weekly-reveal-gate";
 import { trpc } from "@/lib/trpc";
 import {
   buildWeekOptions,
@@ -170,28 +171,30 @@ export default function AthleteLayoutClient({
   ];
 
   return (
-    <AppShell
-      title="Athlete"
-      userName={userName}
-      navItems={navItems}
-      weekOptions={supportsWeekSelection ? weekOptions : undefined}
-      activeWeekKey={activeWeekKey}
-      onWeekChange={
-        supportsWeekSelection
-          ? (nextWeekKey) => {
-              if (pathname.startsWith("/athlete/week/")) {
-                router.push(`/athlete/week/${encodeURIComponent(nextWeekKey)}`);
-                return;
-              }
+    <WeeklyRevealGate userId={session.user.id}>
+      <AppShell
+        title="Athlete"
+        userName={userName}
+        navItems={navItems}
+        weekOptions={supportsWeekSelection ? weekOptions : undefined}
+        activeWeekKey={activeWeekKey}
+        onWeekChange={
+          supportsWeekSelection
+            ? (nextWeekKey) => {
+                if (pathname.startsWith("/athlete/week/")) {
+                  router.push(`/athlete/week/${encodeURIComponent(nextWeekKey)}`);
+                  return;
+                }
 
-              const params = new URLSearchParams(searchParams.toString());
-              params.set("weekStartAt", nextWeekKey);
-              router.push(`${pathname}?${params.toString()}`);
-            }
-          : undefined
-      }
-    >
-      {children}
-    </AppShell>
+                const params = new URLSearchParams(searchParams.toString());
+                params.set("weekStartAt", nextWeekKey);
+                router.push(`${pathname}?${params.toString()}`);
+              }
+            : undefined
+        }
+      >
+        {children}
+      </AppShell>
+    </WeeklyRevealGate>
   );
 }

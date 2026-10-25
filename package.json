@@ -16,8 +16,9 @@
         "postinstall": "npm --workspace apps/web run prisma:generate",
         "test": "npm run test:unit",
         "test:unit": "tsx --tsconfig apps/web/tsconfig.json --test tests/unit/*.test.ts",
-        "test:integration": "tsx --tsconfig apps/web/tsconfig.json --test tests/integration/*.test.ts",
+        "test:integration": "tsx --tsconfig apps/web/tsconfig.json --test --test-concurrency=1 tests/integration/*.test.ts",
         "test:e2e": "python3 tests/e2e/smoke.py",
+        "test:e2e:weekly-reveal": "python3 tests/e2e/weekly_reveal.py",
         "test:e2e:authenticated": "python3 tests/e2e/authenticated.py",
         "test:release": "npm run test:unit && npm run test:integration && npm run typecheck && npm run lint && npm run build",
         "test:provider": "tsx --test tests/proof-extraction-manual.test.ts"
