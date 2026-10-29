@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma, type ProofExtractionStatus } from "@prisma/client";
+import { TRPCError } from "@trpc/server";
 import {
   EvidenceExtractionResultSchema,
   MAX_PROOF_FILES,
@@ -88,12 +89,18 @@ const buildEvidenceKey = (
 const assertWorkoutDateAllowed = (date: Date) => {
   const now = nowInZone();
   if (isDateInFuture(date, now)) {
-    throw new Error("Workout date cannot be in the future.");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Workout date cannot be in the future.",
+    });
   }
 
   const oldestAllowed = now.minus({ days: 7 }).startOf("day").toMillis();
   if (date.getTime() < oldestAllowed) {
-    throw new Error("Workout date must be within the last 7 days.");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Workout date must be within the last 7 days.",
+    });
   }
 };
 
@@ -148,14 +155,23 @@ export const createEntry = async (
   input: CreateEntryInput,
 ) => {
   if (input.proofImageIds.length === 0) {
-    throw new Error("At least one proof image is required.");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "At least one proof image is required.",
+    });
   }
   if (input.proofImageIds.length > MAX_PROOF_FILES) {
-    throw new Error(`A workout can include at most ${MAX_PROOF_FILES} proof images.`);
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `A workout can include at most ${MAX_PROOF_FILES} proof images.`,
+    });
   }
   const uniqueProofImageIds = [...new Set(input.proofImageIds)].sort();
   if (uniqueProofImageIds.length !== input.proofImageIds.length) {
-    throw new Error("Duplicate proof images are not allowed.");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Duplicate proof images are not allowed.",
+    });
   }
 
   const submissionHash = hashSubmission(
@@ -176,7 +192,10 @@ export const createEntry = async (
   });
   if (existing) {
     if (existing.submissionHash !== submissionHash) {
-      throw new Error("This submission was already saved with different values.");
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "This submission was already saved with different values.",
+      });
     }
     const { evidenceExtractionJob, ...existingEntry } = existing;
     if (
@@ -247,13 +266,17 @@ export const createEntry = async (
             proof.deleteAfter.getTime() <= attachedAt.getTime(),
         )
       ) {
-        throw new Error("One or more proof images expired. Upload them again.");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "One or more proof images expired. Upload them again.",
+        });
       }
 
       if (!exactProofSet || legacyReferences > 0) {
-        throw new Error(
-          "One or more proof images are missing, unconfirmed, or already used.",
-        );
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "One or more proof images are missing, unconfirmed, or already used.",
+        });
       }
 
       const contentHashes = proofImages.flatMap((proof) =>
@@ -272,7 +295,10 @@ export const createEntry = async (
             select: { id: true },
           });
       if (duplicateInSubmission || previouslyAttached) {
-        throw new Error("This proof image was already used for a workout.");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This proof image was already used for a workout.",
+        });
       }
 
       const entry = await tx.trainingEntry.create({
@@ -316,7 +342,10 @@ export const createEntry = async (
         },
       });
       if (attached.count !== uniqueProofImageIds.length) {
-        throw new Error("Workout proof was used by another submission.");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Workout proof was used by another submission.",
+        });
       }
       await tx.proofImage.updateMany({
         where: {
@@ -384,13 +413,19 @@ export const createEntry = async (
       };
     }
     if (raced) {
-      throw new Error("This submission was already saved with different values.");
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "This submission was already saved with different values.",
+      });
     }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      throw new Error("This proof image was already used for a workout.");
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "This proof image was already used for a workout.",
+      });
     }
     throw error;
   }

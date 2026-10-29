@@ -12,10 +12,14 @@ import {
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { TRPCClientError } from "@trpc/client";
 import {
   ACTIVITY_TYPE_LABELS,
   ActivityTypeValues,
+  HeartRateSchema,
+  TrainingEntryInputSchema,
   formatInTimeZone,
+  nowInZone,
 } from "@rowbook/shared";
 
 import { ProofUploadItem } from "@/components/forms/proof-upload-item";
@@ -44,8 +48,15 @@ const UUID_PATTERN =
 
 const optionalNumber = z.preprocess(
   (value) =>
-    value === "" || value === null || value === undefined ? undefined : value,
-  z.coerce.number().positive().optional(),
+    value === "" || value === null || value === undefined ? null : value,
+  z.coerce
+    .number()
+    .refine(
+      (value) => HeartRateSchema.safeParse(value).success,
+      "Enter a positive heart rate",
+    )
+    .nullable()
+    .optional(),
 );
 
 const getTodayString = () => formatInTimeZone(new Date());
@@ -64,7 +75,7 @@ const schema = z
         (value) => value <= getTodayString(),
         "Date cannot be in the future",
       ),
-    minutes: z.coerce.number().min(1, "Enter minutes"),
+    minutes: z.coerce.number().int("Enter whole minutes").min(1, "Enter minutes"),
     distanceKm: z.coerce
       .number()
       .nonnegative()
@@ -99,6 +110,18 @@ type SubmissionIntent = {
   values: DraftValues;
   proofImageIds: string[];
 };
+
+const toEntryInput = (clientSubmissionId: string, intent: SubmissionIntent) => ({
+  clientSubmissionId,
+  activityType: intent.values.activityType,
+  date: intent.values.date as unknown as Date,
+  minutes: intent.values.minutes,
+  distance: intent.values.distanceKm,
+  avgHr: intent.values.avgHr ?? null,
+  notes: intent.values.notes?.trim() || undefined,
+  proofImageIds: intent.proofImageIds,
+  proofOcr: null,
+});
 
 type StoredReadyProof = {
   name: string;
@@ -143,7 +166,7 @@ const defaultValues: FormValues = {
   date: getTodayString(),
   minutes: 0,
   distanceKm: 0,
-  avgHr: undefined,
+  avgHr: null,
   notes: "",
   proofImageIds: [],
 };
@@ -339,6 +362,7 @@ export const LogWorkoutForm = () => {
     setValue,
     reset,
     getValues,
+    setError,
     formState: { errors, isSubmitting, submitCount },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -439,11 +463,20 @@ export const LogWorkoutForm = () => {
     const stored = readPersistedDraft(athleteId);
     if (stored) {
       clientSubmissionIdRef.current = stored.clientSubmissionId;
-      pendingIntentRef.current = stored.pendingIntent;
-      setHasPendingIntent(Boolean(stored.pendingIntent));
+      // Invalid API input cannot have reached the save, including older decimal-minute drafts.
+      const pendingIntent =
+        stored.pendingIntent &&
+        TrainingEntryInputSchema.safeParse(
+          toEntryInput(stored.clientSubmissionId, stored.pendingIntent),
+        ).success
+          ? stored.pendingIntent
+          : null;
+      pendingIntentRef.current = pendingIntent;
+      setHasPendingIntent(Boolean(pendingIntent));
       reset({
         ...defaultValues,
         ...stored.values,
+        avgHr: stored.values.avgHr ?? null,
         proofImageIds: stored.readyProofs.map((proof) => proof.proofImageId),
       });
 
@@ -470,11 +503,13 @@ export const LogWorkoutForm = () => {
         stored.unfinishedFileCount > 0
       ) {
         setDraftNotice(
-          stored.pendingIntent
-            ? "An earlier save was interrupted. Retry it to confirm the workout without creating a duplicate."
-            : stored.unfinishedFileCount > 0
-              ? "Draft restored. Finished uploads are ready; reselect any photo that had not finished."
-              : "Draft restored with your previously uploaded proof.",
+          stored.pendingIntent && !pendingIntent
+            ? "Your earlier save had invalid details and was not saved. Correct the workout details and save again."
+            : pendingIntent
+              ? "An earlier save was interrupted. Retry it to confirm the workout without creating a duplicate."
+              : stored.unfinishedFileCount > 0
+                ? "Draft restored. Finished uploads are ready; reselect any photo that had not finished."
+                : "Draft restored with your previously uploaded proof.",
         );
       }
     } else {
@@ -876,6 +911,7 @@ export const LogWorkoutForm = () => {
     reset({
       ...defaultValues,
       ...intent.values,
+      avgHr: intent.values.avgHr ?? null,
       proofImageIds: intent.proofImageIds,
     });
     setSubmitError(
@@ -930,6 +966,15 @@ export const LogWorkoutForm = () => {
       ),
     };
     const pendingIntent = pendingIntentRef.current;
+    if (
+      !pendingIntent &&
+      values.date < formatInTimeZone(nowInZone().minus({ days: 7 }))
+    ) {
+      setError("date", {
+        message: "Workout date must be within the last 7 days.",
+      });
+      return;
+    }
     if (pendingIntent && !sameSubmissionIntent(pendingIntent, currentIntent)) {
       setSubmitError(
         "These details changed after an interrupted save. Restore the original details before retrying so Rowbook cannot create a duplicate.",
@@ -946,19 +991,44 @@ export const LogWorkoutForm = () => {
     setDraftNotice(null);
     setSaveStatus("saving");
 
+    let canCorrectRejectedSave = !pendingIntent;
     try {
-      const result = await createEntry({
-        clientSubmissionId: ensureClientSubmissionId(),
-        activityType: intent.values.activityType,
-        date: intent.values.date as unknown as Date,
-        minutes: intent.values.minutes,
-        distance: intent.values.distanceKm,
-        avgHr: intent.values.avgHr ?? null,
-        notes: intent.values.notes?.trim() || undefined,
-        proofImageIds: intent.proofImageIds,
-        proofOcr: null,
-      });
+      const input = toEntryInput(ensureClientSubmissionId(), intent);
+      let result: Awaited<ReturnType<typeof createEntry>>;
+      for (let attempt = 0; ; attempt += 1) {
+        if (!mountedRef.current) return;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          result = await Promise.race([
+            createEntry(input),
+            new Promise<never>((_resolve, reject) => {
+              timeout = setTimeout(
+                () => reject(
+                  new DOMException("Save request timed out.", "TimeoutError"),
+                ),
+                20_000,
+              );
+            }),
+          ]);
+          break;
+        } catch (error) {
+          if (!mountedRef.current) throw error;
+          if (
+            !(error instanceof DOMException && error.name === "TimeoutError") &&
+            (!(error instanceof TRPCClientError) ||
+              (error.data && error.data.httpStatus < 500))
+          ) {
+            throw error;
+          }
+          canCorrectRejectedSave = false;
+          if (attempt === 2) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
 
+      if (!mountedRef.current) return;
       resetAfterAcknowledgedSave();
       if (
         result.entry.validationStatus === "PENDING" ||
@@ -984,11 +1054,46 @@ export const LogWorkoutForm = () => {
         utils.athlete.getWeekDetail.invalidate(),
         utils.athlete.getLeaderboard.invalidate(),
       ]);
-    } catch {
+    } catch (error) {
+      if (!mountedRef.current) return;
       setSaveStatus("idle");
-      setSubmitError(
-        "Rowbook could not confirm whether the save finished. Retry this exact workout; the same submission ID prevents a duplicate.",
-      );
+      const code =
+        error instanceof TRPCClientError ? error.data?.code : undefined;
+      if (code === "BAD_REQUEST" && canCorrectRejectedSave) {
+        pendingIntentRef.current = null;
+        setHasPendingIntent(false);
+        let message =
+          error instanceof Error
+            ? error.message
+            : "Check the workout details and try again.";
+        try {
+          const issues: unknown = JSON.parse(message);
+          if (Array.isArray(issues)) {
+            message = issues.flatMap((issue) =>
+              isRecord(issue) &&
+              Array.isArray(issue.path) &&
+              typeof issue.message === "string"
+                ? [`${issue.path.join(".")}: ${issue.message}`]
+                : [],
+            ).join(" ") || "Check the workout details and try again.";
+          }
+        } catch {
+          // Business-rule errors already contain a readable message.
+        }
+        setSubmitError(message);
+      } else if (code === "UNAUTHORIZED") {
+        setSubmitError(
+          "Your session expired. Reload this page to sign in again, then retry this workout. Your draft is still saved in this tab.",
+        );
+      } else if (code === "FORBIDDEN" || code === "CONFLICT") {
+        setSubmitError(
+          error instanceof Error ? error.message : "This workout could not be saved.",
+        );
+      } else {
+        setSubmitError(
+          "Rowbook could not confirm whether the save finished. Retry this exact workout; your saved retry details prevent a duplicate.",
+        );
+      }
       persistCurrentDraft();
     } finally {
       submitLockRef.current = false;
@@ -1198,6 +1303,7 @@ export const LogWorkoutForm = () => {
           <Input
             id="date"
             type="date"
+            min={formatInTimeZone(nowInZone().minus({ days: 7 }))}
             max={today}
             disabled={saveIsBusy}
             aria-invalid={Boolean(errors.date)}
