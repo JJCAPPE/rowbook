@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { formatShortDate } from "@/lib/format";
 import { getWeeklyTargetsDraftStorageKey } from "@/lib/session-storage";
 import { getWeekOptionsRefreshDelay } from "@/lib/week-options";
@@ -242,9 +243,7 @@ export function WeeklyTargetsTable({
   };
 
   if (isLoading && weeks.length === 0) {
-    return (
-      <div className="p-4 text-sm text-default-500">Loading schedule...</div>
-    );
+    return <AppLoadingScreen compact />;
   }
 
   if (error && weeks.length === 0) {

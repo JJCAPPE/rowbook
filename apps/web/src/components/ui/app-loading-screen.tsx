@@ -1,12 +1,18 @@
 import styles from "./app-loading-screen.module.css";
 
-export const AppLoadingScreen = ({ overlay = false }: { overlay?: boolean }) => (
+export const AppLoadingScreen = ({
+  overlay = false,
+  compact = false,
+}: {
+  overlay?: boolean;
+  compact?: boolean;
+}) => (
   <div
     role="status"
     aria-label="Loading Rowbook"
-    className={`flex min-h-dvh items-center justify-center bg-background px-6 text-foreground${overlay ? " fixed inset-0 z-[100]" : ""}`}
+    className={`flex items-center justify-center px-6 text-foreground ${compact ? "min-h-24" : "min-h-dvh bg-background"}${overlay ? " fixed inset-0 z-[100]" : ""}`}
   >
-    <span aria-hidden="true" className={styles.wordmark}>
+    <span aria-hidden="true" className={`${styles.wordmark}${compact ? ` ${styles.compact}` : ""}`}>
       {Array.from("#Temple", (letter, index) => (
         <span
           key={index}

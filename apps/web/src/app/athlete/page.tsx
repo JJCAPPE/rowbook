@@ -8,6 +8,7 @@ import type { TrainingEntry, WeeklyAggregate } from "@rowbook/shared";
 import { Pencil, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Button } from "@/components/ui/button";
 import { MiniTrendChart } from "@/components/ui/mini-trend-chart";
 import { ProgressRing } from "@/components/ui/progress-ring";
@@ -131,12 +132,7 @@ export default function AthleteDashboardPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Dashboard" subtitle="Loading your weekly stats..." />
-        <Card className="text-sm text-default-500">Fetching dashboard...</Card>
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   if (error || !dashboard) {

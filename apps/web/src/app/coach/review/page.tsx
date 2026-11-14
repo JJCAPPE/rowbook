@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
@@ -90,14 +91,7 @@ function LazyReviewEvidence({
     );
   }
   if (evidence.isLoading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-11 items-center gap-2 text-sm text-default-500"
-      >
-        <Spinner size="sm" /> Loading secure evidence…
-      </div>
-    );
+    return <AppLoadingScreen compact />;
   }
   if (evidence.error) {
     return (
@@ -221,6 +215,8 @@ export default function CoachReviewQueuePage() {
     [review, utils.coach.getReviewQueue, utils.coach.getTeamOverview],
   );
 
+  if (queue.isLoading && !queue.data) return <AppLoadingScreen />;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -241,14 +237,7 @@ export default function CoachReviewQueuePage() {
       </div>
 
       <Card className="space-y-4 p-3 sm:p-5">
-        {queue.isLoading && !queue.data ? (
-          <div
-            role="status"
-            className="flex items-center gap-2 py-8 text-sm text-default-500"
-          >
-            <Spinner size="sm" /> Loading review queue…
-          </div>
-        ) : queue.error ? (
+        {queue.error ? (
           <div className="space-y-3 py-6" role="alert">
             <p className="text-sm text-rose-600">
               Unable to load the review queue.

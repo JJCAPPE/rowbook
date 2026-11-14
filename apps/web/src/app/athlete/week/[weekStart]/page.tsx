@@ -1,10 +1,10 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
 import Link from "next/link";
 import { use, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
@@ -42,11 +42,7 @@ function AthleteEntryEvidence({
     );
   }
   if (evidence.isLoading) {
-    return (
-      <p role="status" className="flex items-center gap-2 text-sm text-default-500">
-        <Spinner size="sm" /> Loading secure evidence…
-      </p>
-    );
+    return <AppLoadingScreen compact />;
   }
   if (evidence.error) {
     return (
@@ -130,7 +126,7 @@ export default function AthleteWeekDetailPage(props: WeekDetailPageProps) {
         <p className="section-title">Entries</p>
         <div className="grid gap-4">
           {isLoading ? (
-            <p className="text-sm text-default-500">Loading entries...</p>
+            <AppLoadingScreen compact />
           ) : error ? (
             <p className="text-sm text-rose-500">Unable to load entries.</p>
           ) : entries.length ? (

@@ -91,7 +91,7 @@ export default function LoginPage() {
     }
   };
 
-  if (isSessionLoading || session) {
+  if (isSessionLoading || session || isLoading) {
     return <AppLoadingScreen />;
   }
 
@@ -129,21 +129,9 @@ export default function LoginPage() {
               type="button"
               className="min-h-11 w-full"
               onClick={handleGoogleSignIn}
-              disabled={isLoading}
-              aria-describedby={isLoading ? "google-sign-in-status" : undefined}
             >
-              {isLoading ? "Opening Google sign-in…" : "Sign in with Google"}
+              Sign in with Google
             </Button>
-            {isLoading ? (
-              <p
-                id="google-sign-in-status"
-                role="status"
-                aria-live="polite"
-                className="text-center text-xs text-default-500"
-              >
-                Continue in the secure Google page that opens next.
-              </p>
-            ) : null}
           </div>
           <div className="flex flex-col gap-3 border-t border-divider/40 pt-5 text-xs text-default-500 sm:flex-row sm:items-center sm:justify-between">
             <span>Need access? Contact a coach.</span>

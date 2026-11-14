@@ -163,7 +163,7 @@ export default function CoachLayoutClient({
     router.replace(`${pathname}?${params.toString()}`);
   }, [activeTeamId, pathname, requestedTeamId, router, searchParams]);
 
-  if (isSessionLoading) {
+  if (isSessionLoading || (sessionError && isSessionFetching)) {
     return <AppLoadingScreen />;
   }
 
@@ -177,7 +177,7 @@ export default function CoachLayoutClient({
           disabled={isSessionFetching}
           onClick={() => void refetchSession()}
         >
-          {isSessionFetching ? "Checking..." : "Try again"}
+          Try again
         </Button>
       </div>
     );
@@ -191,7 +191,11 @@ export default function CoachLayoutClient({
     return <AppLoadingScreen />;
   }
 
-  if (isTeamsLoading || (activeTeamId && requestedTeamId !== activeTeamId)) {
+  if (
+    isTeamsLoading ||
+    (isTeamsFetching && (teamsError || !teams?.length)) ||
+    (activeTeamId && requestedTeamId !== activeTeamId)
+  ) {
     return <AppLoadingScreen />;
   }
 
@@ -242,7 +246,7 @@ export default function CoachLayoutClient({
                   void refetchTeams();
                 }}
               >
-                {isTeamsFetching ? "Checking…" : loadFailed ? "Try again" : "Check again"}
+                {loadFailed ? "Try again" : "Check again"}
               </Button>
               <Button
                 variant="ghost"

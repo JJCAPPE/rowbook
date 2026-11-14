@@ -128,7 +128,7 @@ export default function AthleteLayoutClient({
     }
   }, [isSessionLoading, router, session, sessionError]);
 
-  if (isSessionLoading) {
+  if (isSessionLoading || (sessionError && isSessionFetching)) {
     return <AppLoadingScreen />;
   }
 
@@ -142,7 +142,7 @@ export default function AthleteLayoutClient({
           disabled={isSessionFetching}
           onClick={() => void refetchSession()}
         >
-          {isSessionFetching ? "Checking..." : "Try again"}
+          Try again
         </Button>
       </div>
     );

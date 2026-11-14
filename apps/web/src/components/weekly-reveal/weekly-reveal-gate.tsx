@@ -27,8 +27,8 @@ const WeeklyRevealSession = ({
   const utils = trpc.useUtils();
   const [recap, setRecap] = useState<WeeklyReveal | null>(null);
   const [checked, setChecked] = useState(false);
-  const [opened, setOpened] = useState(false);
   const loadingQueries = useIsFetching({
+    type: "active",
     predicate: (query) => query.state.status === "loading",
   });
   const completedWeek = useRef<string | null>(null);
@@ -74,15 +74,11 @@ const WeeklyRevealSession = ({
       void pending.refetch();
     },
   });
-  useEffect(() => {
-    if (checked && loadingQueries === 0) setOpened(true);
-  }, [checked, loadingQueries]);
-
-  const blocked = !checked || pending.isError || !opened;
+  const blocked = !checked || pending.isError || loadingQueries > 0;
 
   return (
     <>
-      <div inert={Boolean(recap) || blocked}>
+      <div inert={Boolean(recap) || blocked} className={blocked ? "invisible" : undefined}>
         {children}
       </div>
       {recap ? (
@@ -100,7 +96,7 @@ const WeeklyRevealSession = ({
             complete.mutate({ teamId: recap.teamId, weekStartAt: recap.weekStartAt });
           }}
         />
-      ) : pending.isError ? (
+      ) : pending.isError && !pending.isFetching ? (
         <section
           role="alertdialog"
           aria-modal="true"
@@ -111,7 +107,7 @@ const WeeklyRevealSession = ({
             {"We couldn't load your weekly recap"}
           </h2>
           <Button disabled={pending.isFetching} onClick={() => void pending.refetch()} autoFocus>
-            {pending.isFetching ? "Checking..." : "Try again"}
+            Try again
           </Button>
         </section>
       ) : blocked ? <AppLoadingScreen overlay /> : null}

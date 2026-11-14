@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { cn } from "@/lib/utils";
 
 type ProofImage = {
@@ -309,7 +310,9 @@ export const ProofImageViewer = ({
             <div className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-divider/40 bg-content2/70">
               <div className="h-full w-full overflow-auto overscroll-contain p-4 sm:p-8">
                 <div className="flex min-h-full min-w-full items-center justify-center">
-                  {hasImageError ? (
+                  {isRefreshing ? (
+                    <AppLoadingScreen compact />
+                  ) : hasImageError ? (
                     <div
                       role="status"
                       className="mx-auto max-w-sm space-y-3 rounded-2xl border border-divider/40 bg-content1/90 p-5 text-center"
@@ -334,7 +337,7 @@ export const ProofImageViewer = ({
                           }
                         }}
                       >
-                        {isRefreshing ? "Refreshing…" : "Try again"}
+                        Try again
                       </Button>
                     </div>
                   ) : (

@@ -7,6 +7,7 @@ import type { ActivityType, TrainingEntry } from "@rowbook/shared";
 import { Pencil, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { ActivityIcon } from "@/components/ui/activity-icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -214,8 +215,8 @@ export default function AthleteHistoryPage() {
 
       <div className="grid gap-6">
         {isLoading ? (
-          <Card className="text-sm text-default-500">
-            Loading weekly history...
+          <Card>
+            <AppLoadingScreen compact />
           </Card>
         ) : error ? (
           <Card className="text-sm text-rose-500">Unable to load history.</Card>

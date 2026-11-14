@@ -1,6 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { LeaderboardTable } from "@/components/leaderboard/leaderboard-table";
 import { TeamStats } from "@/components/leaderboard/team-stats";
 import { TeamTrendChart } from "@/components/leaderboard/team-trend-chart";
@@ -47,7 +48,7 @@ export default function AthleteLeaderboardPage() {
 
       <Card>
         {isLoading ? (
-          <p className="text-sm text-default-500">Loading leaderboard...</p>
+          <AppLoadingScreen compact />
         ) : error ? (
           <p className="text-sm text-rose-500">Unable to load leaderboard.</p>
         ) : (
