@@ -42,7 +42,7 @@ export const AppShell = ({
   <div className="min-h-screen bg-background">
     <div className="flex min-h-screen">
       <SidebarNav items={navItems} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col md:pl-[4.5rem]">
         <TopBar
           title={title}
           userName={userName}
