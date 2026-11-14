@@ -2,7 +2,9 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useIsFetching } from "@tanstack/react-query";
 
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Button } from "@/components/ui/button";
 import { WeeklyRevealExperience } from "@/components/weekly-reveal/weekly-reveal-experience";
 import { trpc } from "@/lib/trpc";
@@ -25,6 +27,10 @@ const WeeklyRevealSession = ({
   const utils = trpc.useUtils();
   const [recap, setRecap] = useState<WeeklyReveal | null>(null);
   const [checked, setChecked] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const loadingQueries = useIsFetching({
+    predicate: (query) => query.state.status === "loading",
+  });
   const completedWeek = useRef<string | null>(null);
   const mounted = useRef(true);
   const input = teamId ? { teamId } : undefined;
@@ -68,7 +74,11 @@ const WeeklyRevealSession = ({
       void pending.refetch();
     },
   });
-  const blocked = !checked || pending.isError;
+  useEffect(() => {
+    if (checked && loadingQueries === 0) setOpened(true);
+  }, [checked, loadingQueries]);
+
+  const blocked = !checked || pending.isError || !opened;
 
   return (
     <>
@@ -90,23 +100,21 @@ const WeeklyRevealSession = ({
             complete.mutate({ teamId: recap.teamId, weekStartAt: recap.weekStartAt });
           }}
         />
-      ) : blocked ? (
+      ) : pending.isError ? (
         <section
-          role={pending.isError ? "alertdialog" : "status"}
-          aria-modal={pending.isError ? true : undefined}
+          role="alertdialog"
+          aria-modal="true"
           aria-labelledby="weekly-reveal-status"
           className="fixed inset-0 z-[100] flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center"
         >
           <h2 id="weekly-reveal-status" className="font-display text-xl font-semibold text-foreground">
-            {pending.isError ? "We couldn't load your weekly recap" : "Checking your weekly recap..."}
+            {"We couldn't load your weekly recap"}
           </h2>
-          {pending.isError ? (
-            <Button disabled={pending.isFetching} onClick={() => void pending.refetch()} autoFocus>
-              {pending.isFetching ? "Checking..." : "Try again"}
-            </Button>
-          ) : null}
+          <Button disabled={pending.isFetching} onClick={() => void pending.refetch()} autoFocus>
+            {pending.isFetching ? "Checking..." : "Try again"}
+          </Button>
         </section>
-      ) : null}
+      ) : blocked ? <AppLoadingScreen overlay /> : null}
     </>
   );
 };

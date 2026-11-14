@@ -17,6 +17,7 @@ import {
   listEntriesForReview,
 } from "@/server/repositories/training-entries";
 import { listTeamAthletes, getUserById } from "@/server/repositories/users";
+import { getWeeklyRequirement } from "@/server/repositories/weekly-requirements";
 import { getAthleteHistoryWithEntries } from "@/server/services/athlete-service";
 import { getProofViewUrl } from "@/server/services/proof-service";
 import {
@@ -93,11 +94,11 @@ export const getTeamOverview = async (
     : getWeekStartAt(new Date());
   const weekEndAt = getWeekEndAt(week);
 
-  const [leaderboardResult, entries, targetContext, teamStats, teamTrend] =
+  const [leaderboardResult, entries, requirement, teamStats, teamTrend] =
     await Promise.all([
       getTeamLeaderboard(team.id, week),
       listEntriesByTeamWeek(team.id, week, weekEndAt),
-      getEffectiveWeeklyTargetsForTeamWeek(team.id, week),
+      getWeeklyRequirement(team.id, week, weekEndAt),
       getTeamStats(team.id, week),
       getTeamTrend(team.id, week, 6),
     ]);
@@ -127,7 +128,7 @@ export const getTeamOverview = async (
     teamId: team.id,
     weekStartAt: week,
     weekEndAt,
-    requiredMinutes: targetContext.teamRequiredMinutes,
+    requiredMinutes: requirement?.requiredMinutes ?? 0,
     summary,
     leaderboard,
     pendingProofCount,

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Chip } from "@heroui/react";
 
 import { Button } from "@/components/ui/button";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Card } from "@/components/ui/card";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { trpc } from "@/lib/trpc";
@@ -91,13 +92,7 @@ export default function LoginPage() {
   };
 
   if (isSessionLoading || session) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-background via-content1 to-content2 px-4">
-        <p className="text-sm text-default-500">
-          {session ? "Opening Rowbook…" : "Checking your session…"}
-        </p>
-      </main>
-    );
+    return <AppLoadingScreen />;
   }
 
   return (

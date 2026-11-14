@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { NavItem } from "@/components/layout/navigation";
 import { Button } from "@/components/ui/button";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { WeeklyRevealGate } from "@/components/weekly-reveal/weekly-reveal-gate";
 import { trpc } from "@/lib/trpc";
 import {
@@ -163,7 +164,7 @@ export default function CoachLayoutClient({
   }, [activeTeamId, pathname, requestedTeamId, router, searchParams]);
 
   if (isSessionLoading) {
-    return <div className="min-h-screen bg-background" />;
+    return <AppLoadingScreen />;
   }
 
   if (sessionError) {
@@ -183,23 +184,15 @@ export default function CoachLayoutClient({
   }
 
   if (!session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-sm text-default-500">
-        Redirecting to login...
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   if (!isCoach) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-sm text-default-500">
-        Redirecting to the athlete dashboard...
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
-  if (isTeamsLoading) {
-    return <div className="min-h-screen bg-background" />;
+  if (isTeamsLoading || (activeTeamId && requestedTeamId !== activeTeamId)) {
+    return <AppLoadingScreen />;
   }
 
   if (teamsError || !activeTeamId || !teams?.length) {
