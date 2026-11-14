@@ -15,7 +15,7 @@ import { ProgressRing } from "@/components/ui/progress-ring";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
+import { EntryEvidence } from "@/components/ui/entry-evidence";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card } from "@/components/ui/card";
 import { ActivityIcon } from "@/components/ui/activity-icon";
@@ -74,7 +74,7 @@ export default function AthleteDashboardPage() {
     });
 
   const entries = (dashboard?.entries ?? []) as Array<
-    TrainingEntry & { extractedFields: any }
+    TrainingEntry & { extractedFields: unknown; proofs: Array<{ available: boolean }> }
   >;
   const countedEntries = entries.filter(isWorkoutCredited);
   const requiredMinutes = dashboard?.requiredMinutes ?? 0;
@@ -353,17 +353,7 @@ export default function AthleteDashboardPage() {
                   Awaiting verification. These minutes do not count toward totals yet.
                 </p>
               ) : null}
-              {entry.extractedFields && (
-                <details className="mt-2 text-[10px] text-default-500">
-                  <summary className="cursor-pointer select-none hover:text-foreground">
-                    View details from AI extraction
-                  </summary>
-                  <ProofExtractionFeedback
-                    fields={entry.extractedFields}
-                    enteredFields={entry}
-                  />
-                </details>
-              )}
+              <EntryEvidence entry={entry} />
             </div>
           ))}
         </div>

@@ -35,7 +35,7 @@ class ProofServer(LoadingServer):
                 ])
             elif name == "athlete.getEntryEvidence":
                 results[index] = response({"entryId": "entry-0", "version": 1, "images": [
-                    {"id": photo, "src": f"http://proofs.example.test/{photo}",
+                    {"id": photo, "src": f"http://proofs.example.test/{photo}?request={self.count(name)}",
                      "alt": f"Workout proof {n + 1}"} for n, photo in enumerate(PHOTOS)
                 ]})
         super().fulfill((route, names, results if isinstance(payload, list) else results[0]))
@@ -58,9 +58,10 @@ class ProofDialogTests(unittest.TestCase):
         self.addCleanup(context.close)
         server = ProofServer()
         context.route("**/api/trpc/**", server.intercept)
+        image_failure = {"enabled": False}
 
         def image(route):
-            if fail_images:
+            if image_failure["enabled"]:
                 route.fulfill(status=403, body="Expired fixture URL")
             else:
                 photo = Path(urlparse(route.request.url).path).name
@@ -74,13 +75,16 @@ class ProofDialogTests(unittest.TestCase):
         page.on("pageerror", lambda error: errors.append(str(error)))
         self.addCleanup(lambda: self.assertEqual(errors, []))
         page.goto(BASE_URL + f"/athlete/week/{WEEK_START[:10]}", wait_until="domcontentloaded")
-        page.get_by_role("button", name="Load 2 evidence images", exact=True).first.click()
-        opener = page.get_by_role("button", name="View proofs (2)", exact=True)
+        page.locator("summary").filter(has_text="View evidence").first.click()
+        opener = page.get_by_role("button", name="Zoom proof image", exact=True)
         opener.click()
         dialog = page.get_by_role("dialog")
         expect(dialog).to_be_visible()
         self.assertTrue(dialog.evaluate("el => el.matches(':modal')"))
         expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_focused()
+        if fail_images:
+            image_failure["enabled"] = True
+            dialog.locator("[data-proof-modal-image]").dispatch_event("error")
         return page, dialog, opener, server
 
     def test_keyboard_gallery_and_focus_return(self):

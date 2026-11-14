@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
-import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
+import { EntryEvidence } from "@/components/ui/entry-evidence";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatTile } from "@/components/ui/stat-tile";
 import { formatFullDate, formatMinutes, formatDistance, formatWeekRange, formatPaceWithUnit, formatWatts } from "@/lib/format";
@@ -18,54 +17,6 @@ import type { TrainingEntry } from "@rowbook/shared";
 type WeekDetailPageProps = {
   params: Promise<{ weekStart: string }>;
 };
-
-function AthleteEntryEvidence({
-  entryId,
-  version,
-  count,
-}: {
-  entryId: string;
-  version: number;
-  count: number;
-}) {
-  const [requested, setRequested] = useState(false);
-  const evidence = trpc.athlete.getEntryEvidence.useQuery(
-    { entryId, expectedVersion: version },
-    { enabled: requested, retry: false, staleTime: 10 * 60 * 1000 },
-  );
-
-  if (!requested) {
-    return (
-      <Button size="sm" variant="outline" onClick={() => setRequested(true)}>
-        Load {count === 1 ? "evidence" : `${count} evidence images`}
-      </Button>
-    );
-  }
-  if (evidence.isLoading) {
-    return <AppLoadingScreen compact />;
-  }
-  if (evidence.error) {
-    return (
-      <div className="flex flex-wrap items-center gap-2" role="alert">
-        <span className="text-sm text-rose-600">Evidence could not be loaded.</span>
-        <Button size="sm" variant="outline" onClick={() => void evidence.refetch()}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  if (!evidence.data?.images.length) {
-    return <p className="text-sm text-default-500">Evidence has expired.</p>;
-  }
-
-  return (
-    <ProofImageViewer
-      images={evidence.data.images}
-      alt="Workout evidence"
-      onRefresh={() => evidence.refetch()}
-    />
-  );
-}
 
 export default function AthleteWeekDetailPage(props: WeekDetailPageProps) {
   const params = use(props.params);
@@ -158,25 +109,7 @@ export default function AthleteWeekDetailPage(props: WeekDetailPageProps) {
                     <span className="font-semibold text-rose-600">Rejection reason:</span> {entry.rejectionNote}
                   </div>
                 )}
-                {entry.extractedFields != null && (
-                  <details className="mt-3 text-[10px] text-default-500">
-                    <summary className="cursor-pointer select-none hover:text-foreground">
-                      View details from AI extraction
-                    </summary>
-                    <ProofExtractionFeedback fields={entry.extractedFields} />
-                  </details>
-                )}
-                <div className="mt-3">
-                  {entry.proofs.length ? (
-                    <AthleteEntryEvidence
-                      entryId={entry.id}
-                      version={entry.version}
-                      count={entry.proofs.length}
-                    />
-                  ) : (
-                    <p className="text-xs text-default-500">Evidence has expired.</p>
-                  )}
-                </div>
+                <EntryEvidence entry={entry} />
               </div>
             ))
           ) : (

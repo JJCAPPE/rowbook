@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ProofExtractionFeedback } from "@/components/ui/proof-extraction-feedback";
+import { EntryEvidence } from "@/components/ui/entry-evidence";
 import { WeeklyStatusBadge } from "@/components/ui/weekly-status-badge";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useDisclosure } from "@heroui/react";
@@ -331,17 +331,7 @@ export default function AthleteHistoryPage() {
                           Awaiting verification. These minutes do not count toward totals yet.
                         </p>
                       ) : null}
-                      {(entry as any).extractedFields && (
-                        <details className="mt-2 text-[10px] text-default-500">
-                          <summary className="cursor-pointer select-none hover:text-foreground">
-                            View details from AI extraction
-                          </summary>
-                          <ProofExtractionFeedback
-                            fields={(entry as any).extractedFields}
-                            enteredFields={entry}
-                          />
-                        </details>
-                      )}
+                      <EntryEvidence entry={entry} />
                     </div>
                   ))}
                 </div>

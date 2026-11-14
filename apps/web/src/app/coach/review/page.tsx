@@ -1,9 +1,9 @@
 "use client";
 
-import type { ProofExtractionStatus, ValidationStatus } from "@rowbook/shared";
+import { PENDING_PROOF_STATUSES, type ProofExtractionStatus, type ValidationStatus } from "@rowbook/shared";
 import { Spinner } from "@heroui/react";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -58,67 +58,79 @@ const stateLabels: Record<ReviewState, string> = {
   COMPLETED: "Reviewed",
 };
 
-function LazyReviewEvidence({
+function ReviewEvidence({
   entryId,
   version,
-  count,
 }: {
   entryId: string;
   version: number;
-  count: number;
 }) {
   const [requested, setRequested] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const article = containerRef.current?.closest("article");
+    if (!article) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setRequested(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "800px" },
+    );
+    observer.observe(article);
+    return () => observer.disconnect();
+  }, []);
+
   const evidence = trpc.coach.getReviewEvidence.useQuery(
     { entryId, expectedVersion: version },
     {
       enabled: requested,
       retry: false,
       staleTime: 10 * 60 * 1000,
+      meta: { blocksPageLoading: false },
     },
   );
 
-  if (!requested) {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="min-h-11"
-        onClick={() => setRequested(true)}
-      >
-        Load {count === 1 ? "evidence" : `${count} evidence images`}
-      </Button>
-    );
-  }
-  if (evidence.isLoading) {
-    return <AppLoadingScreen compact />;
-  }
-  if (evidence.error) {
-    return (
-      <div className="flex flex-wrap items-center gap-2" role="alert">
-        <span className="text-sm text-rose-600">
-          Evidence could not be loaded.
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void evidence.refetch()}
-        >
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  if (!evidence.data?.images.length) {
-    return <p className="text-sm text-default-500">Evidence has expired.</p>;
-  }
-
   return (
-    <ProofImageViewer
-      images={evidence.data.images}
-      alt="Workout evidence"
-      onRefresh={() => evidence.refetch()}
-    />
+    <div ref={containerRef} className="min-w-0">
+      {!requested || evidence.isLoading || (evidence.error && evidence.isFetching) ? (
+        <div
+          role="status"
+          className="flex aspect-[4/3] min-h-56 w-full items-center justify-center gap-2 rounded-xl border border-divider/40 bg-content1/70 text-sm text-default-500"
+        >
+          <AppLoadingScreen compact />
+        </div>
+      ) : evidence.error ? (
+        <div
+          className="flex aspect-[4/3] min-h-56 w-full flex-col items-center justify-center gap-3 rounded-xl border border-divider/40 bg-content1/70 p-4 text-center"
+          role="alert"
+        >
+          <p className="text-sm text-rose-600">Evidence could not be loaded.</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-11"
+            disabled={evidence.isFetching}
+            onClick={() => void evidence.refetch()}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : evidence.data?.images.length ? (
+        <ProofImageViewer
+          images={evidence.data.images}
+          alt="Workout evidence"
+          inline
+          onRefresh={() => evidence.refetch()}
+        />
+      ) : (
+        <p className="text-sm text-default-500">Evidence has expired.</p>
+      )}
+    </div>
   );
 }
 
@@ -215,8 +227,6 @@ export default function CoachReviewQueuePage() {
     [review, utils.coach.getReviewQueue, utils.coach.getTeamOverview],
   );
 
-  if (queue.isLoading && !queue.data) return <AppLoadingScreen />;
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -237,7 +247,14 @@ export default function CoachReviewQueuePage() {
       </div>
 
       <Card className="space-y-4 p-3 sm:p-5">
-        {queue.error ? (
+        {queue.isLoading && !queue.data ? (
+          <div
+            role="status"
+            className="flex items-center gap-2 py-8 text-sm text-default-500"
+          >
+            <AppLoadingScreen compact />
+          </div>
+        ) : queue.error ? (
           <div className="space-y-3 py-6" role="alert">
             <p className="text-sm text-rose-600">
               Unable to load the review queue.
@@ -254,91 +271,88 @@ export default function CoachReviewQueuePage() {
             return (
               <article
                 key={entry.id}
-                className="space-y-4 rounded-2xl border border-divider/50 bg-content2/50 p-4"
+                className="grid items-start gap-5 rounded-2xl border border-divider/50 bg-content2/50 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h2 className="font-semibold text-foreground">
-                      {entry.athleteName}
-                    </h2>
-                    <p className="text-sm text-default-500">
-                      {formatFullDate(entry.date)} · {entry.activityType} ·{" "}
-                      {formatMinutes(entry.minutes)}
+                <div className="min-w-0 space-y-3">
+                  <div className="flex flex-col gap-2">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold text-foreground">
+                        {entry.athleteName}
+                      </h2>
+                      <p className="text-sm text-default-500">
+                        {formatFullDate(entry.date)} · {entry.activityType} ·{" "}
+                        {formatMinutes(entry.minutes)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 empty:hidden">
+                      {entry.proofExtractionStatus === "PROCESSING" ||
+                      entry.proofExtractionStatus === "PENDING" ? (
+                        <Badge tone="pending">Photo check running</Badge>
+                      ) : null}
+                      {entry.proofExtractionStatus === "FAILED" ? (
+                        <Badge tone="danger">Photo check needs help</Badge>
+                      ) : null}
+                      {!PENDING_PROOF_STATUSES.has(entry.validationStatus) ? (
+                        <StatusBadge status={entry.validationStatus} />
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 rounded-xl border border-divider/40 bg-content1/70 p-3 text-sm">
+                    <div>
+                      <span className="block text-xs text-default-500">
+                        Distance
+                      </span>
+                      <strong>{formatDistance(entry.distance)}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-default-500">
+                        Average HR
+                      </span>
+                      <strong>{entry.avgHr ?? "Not entered"}</strong>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-default-500">Pace</span>
+                      <strong>
+                        {formatPaceWithUnit(entry.activityType, entry.avgPace) ??
+                          "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-default-500">
+                        Watts
+                      </span>
+                      <strong>{formatWatts(entry.avgWatts) ?? "—"}</strong>
+                    </div>
+                  </div>
+
+                  {entry.notes ? (
+                    <p className="whitespace-pre-wrap break-words text-sm text-default-600">
+                      {entry.notes}
                     </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {entry.proofExtractionStatus === "PROCESSING" ||
-                    entry.proofExtractionStatus === "PENDING" ? (
-                      <Badge tone="pending">Photo check running</Badge>
-                    ) : null}
-                    {entry.proofExtractionStatus === "FAILED" ? (
-                      <Badge tone="danger">Photo check needs help</Badge>
-                    ) : null}
-                    <StatusBadge status={entry.validationStatus} />
-                  </div>
-                </div>
+                  ) : null}
 
-                <div className="grid gap-3 rounded-xl border border-divider/40 bg-content1/70 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <span className="block text-xs text-default-500">
-                      Distance
-                    </span>
-                    <strong>{formatDistance(entry.distance)}</strong>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-default-500">
-                      Average HR
-                    </span>
-                    <strong>{entry.avgHr ?? "Not entered"}</strong>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-default-500">Pace</span>
-                    <strong>
-                      {formatPaceWithUnit(entry.activityType, entry.avgPace) ??
-                        "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-default-500">
-                      Watts
-                    </span>
-                    <strong>{formatWatts(entry.avgWatts) ?? "—"}</strong>
-                  </div>
-                </div>
+                  {entry.rejectionNote ? (
+                    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                      Previous rejection: {entry.rejectionNote}
+                    </p>
+                  ) : null}
 
-                {entry.rejectionNote ? (
-                  <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-                    Previous rejection: {entry.rejectionNote}
-                  </p>
-                ) : null}
-
-                {entry.extractedFields ? (
-                  <ProofExtractionFeedback
-                    fields={entry.extractedFields}
-                    enteredFields={{
-                      activityType: entry.activityType,
-                      date: entry.date,
-                      minutes: entry.minutes,
-                      distance: entry.distance,
-                      avgHr: entry.avgHr,
-                    }}
-                  />
-                ) : (
-                  <p className="text-sm text-default-500">
-                    No reliable values could be read automatically.
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  {entry.proofs.length ? (
-                    <LazyReviewEvidence
-                      entryId={entry.id}
-                      version={entry.version}
-                      count={entry.proofs.length}
+                  {entry.extractedFields ? (
+                    <ProofExtractionFeedback
+                      fields={entry.extractedFields}
+                      compact
+                      enteredFields={{
+                        activityType: entry.activityType,
+                        date: entry.date,
+                        minutes: entry.minutes,
+                        distance: entry.distance,
+                        avgHr: entry.avgHr,
+                      }}
                     />
                   ) : (
                     <p className="text-sm text-default-500">
-                      Evidence has expired.
+                      No reliable values could be read automatically.
                     </p>
                   )}
 
@@ -366,57 +380,65 @@ export default function CoachReviewQueuePage() {
                       </Button>
                     </div>
                   ) : null}
+
+                  {isRejecting ? (
+                    <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+                      <label
+                        htmlFor={`reason-${entry.id}`}
+                        className="text-sm font-semibold text-rose-900"
+                      >
+                        Why is this workout being rejected?
+                      </label>
+                      <textarea
+                        id={`reason-${entry.id}`}
+                        autoFocus
+                        maxLength={500}
+                        rows={3}
+                        value={rejectionReason}
+                        onChange={(event) =>
+                          setRejectionReason(event.target.value)
+                        }
+                        className="w-full rounded-xl border border-rose-200 bg-white p-3 text-base text-foreground outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+                        placeholder="Give the athlete a clear reason and next step."
+                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          disabled={isSaving}
+                          onClick={() => {
+                            setRejectingEntryId(null);
+                            setRejectionReason("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          disabled={isSaving || !rejectionReason.trim()}
+                          onClick={() =>
+                            void handleReview(entry, "REJECTED", rejectionReason)
+                          }
+                        >
+                          {isSaving ? <Spinner size="sm" /> : null}
+                          Confirm rejection
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {rowErrors[entry.id] ? (
+                    <p role="alert" className="text-sm font-medium text-rose-600">
+                      {rowErrors[entry.id]}
+                    </p>
+                  ) : null}
                 </div>
 
-                {isRejecting ? (
-                  <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                    <label
-                      htmlFor={`reason-${entry.id}`}
-                      className="text-sm font-semibold text-rose-900"
-                    >
-                      Why is this workout being rejected?
-                    </label>
-                    <textarea
-                      id={`reason-${entry.id}`}
-                      autoFocus
-                      maxLength={500}
-                      rows={3}
-                      value={rejectionReason}
-                      onChange={(event) =>
-                        setRejectionReason(event.target.value)
-                      }
-                      className="w-full rounded-xl border border-rose-200 bg-white p-3 text-base text-foreground outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
-                      placeholder="Give the athlete a clear reason and next step."
-                    />
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        disabled={isSaving}
-                        onClick={() => {
-                          setRejectingEntryId(null);
-                          setRejectionReason("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        disabled={isSaving || !rejectionReason.trim()}
-                        onClick={() =>
-                          void handleReview(entry, "REJECTED", rejectionReason)
-                        }
-                      >
-                        {isSaving ? <Spinner size="sm" /> : null}
-                        Confirm rejection
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {rowErrors[entry.id] ? (
-                  <p role="alert" className="text-sm font-medium text-rose-600">
-                    {rowErrors[entry.id]}
+                {entry.proofs.some((proof) => proof.available) ? (
+                  <ReviewEvidence entryId={entry.id} version={entry.version} />
+                ) : (
+                  <p className="flex aspect-[4/3] min-h-56 w-full items-center justify-center rounded-xl border border-divider/40 bg-content1/70 p-4 text-sm text-default-500">
+                    Evidence has expired.
                   </p>
-                ) : null}
+                )}
               </article>
             );
           })
