@@ -105,9 +105,9 @@ export const TopBar = ({
   }, [isMenuOpen]);
 
   return (
-    <div
+    <header
       className={cn(
-        "sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 border-b border-divider/40 bg-content1/80 px-4 py-4 backdrop-blur-xl md:px-8",
+        "app-top-bar top-0 z-30 flex flex-wrap items-center justify-between gap-3 border-b border-divider/40 bg-content1/80 px-4 py-4 backdrop-blur-xl md:sticky md:px-8",
         className,
       )}
     >
@@ -119,12 +119,12 @@ export const TopBar = ({
           {weekOptions?.length ? "Week overview" : "Rowbook"}
         </p>
       </div>
-      <div className="ml-auto flex max-w-full items-center gap-3">
+      <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
         {teamOptions?.length ? (
           <label className="min-w-0">
             <span className="sr-only">Team</span>
             <select
-              className="input-field h-10 max-w-[min(14rem,calc(100vw-7rem))] truncate py-0 text-sm"
+              className="input-field max-w-[min(14rem,calc(100vw-7rem))] truncate text-sm"
               value={activeTeamId ?? teamOptions[0].id}
               onChange={(event) => onTeamChange?.(event.target.value)}
             >
@@ -149,7 +149,7 @@ export const TopBar = ({
             ref={menuTriggerRef}
             id={menuTriggerId}
             type="button"
-            className="rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors"
             onClick={() => {
               setIsMenuOpen((open) => !open);
             }}
@@ -206,6 +206,6 @@ export const TopBar = ({
           ) : null}
         </div>
       </div>
-    </div>
+    </header>
   );
 };

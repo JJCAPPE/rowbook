@@ -295,12 +295,12 @@ export function WeeklyTargetsTable({
           </p>
         ) : null}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
+      <div className="overflow-x-auto" role="region" aria-label="Weekly training targets" tabIndex={0}>
+        <table className="w-full text-sm text-left" aria-label="Weekly training targets">
           <thead className="bg-default-50 text-default-500">
             <tr>
-              <th className="px-4 py-3 font-medium">Week</th>
-              <th className="px-4 py-3 font-medium">Target minutes</th>
+              <th scope="col" className="px-4 py-3 font-medium">Week</th>
+              <th scope="col" className="px-4 py-3 font-medium">Target minutes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-divider">

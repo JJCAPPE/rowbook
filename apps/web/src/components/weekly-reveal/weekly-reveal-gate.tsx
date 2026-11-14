@@ -2,13 +2,18 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useIsFetching } from "@tanstack/react-query";
 
 import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Button } from "@/components/ui/button";
-import { WeeklyRevealExperience } from "@/components/weekly-reveal/weekly-reveal-experience";
 import { trpc } from "@/lib/trpc";
 import type { WeeklyReveal } from "@/lib/weekly-reveal";
+
+const WeeklyRevealExperience = dynamic(
+  () => import("@/components/weekly-reveal/weekly-reveal-experience").then((module) => module.WeeklyRevealExperience),
+  { loading: () => <AppLoadingScreen overlay /> },
+);
 
 type WeeklyRevealGateProps = {
   children: ReactNode;

@@ -58,7 +58,7 @@ module.exports = {
               DEFAULT: "#FFFFFF",
               foreground: "#000000",
             },
-            focus: "#000000",
+            focus: "#FFFFFF",
           },
         },
         light: {
@@ -67,7 +67,7 @@ module.exports = {
               DEFAULT: "#000000",
               foreground: "#FFFFFF",
             },
-            focus: "#FFFFFF",
+            focus: "#000000",
           },
         },
       },

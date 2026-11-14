@@ -392,17 +392,17 @@ export default function CoachSettingsPage() {
         {error ? (
           <p className="text-sm text-rose-500">Unable to load settings.</p>
         ) : data ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto" role="region" aria-label="Athlete training targets" tabIndex={0}>
+            <table className="w-full text-left text-sm" aria-label="Athlete training targets">
               <thead className="bg-default-50 text-default-500">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Athlete</th>
-                  <th className="px-3 py-2 font-medium">Team target</th>
-                  <th className="px-3 py-2 font-medium">Custom minutes</th>
-                  <th className="px-3 py-2 font-medium">Exemption</th>
-                  <th className="px-3 py-2 font-medium">Reason</th>
-                  <th className="px-3 py-2 font-medium">Effective target</th>
-                  <th className="px-3 py-2 font-medium text-right">Action</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Athlete</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Team target</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Custom minutes</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Exemption</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Reason</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Effective target</th>
+                  <th scope="col" className="px-3 py-2 font-medium text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-divider">

@@ -40,6 +40,8 @@ def check_desktop(browser, args, role, reduced=False):
             expect(sidebar.get_by_role("link", name=name, exact=True)).to_have_attribute("href", href)
 
         # Tab reveals labels without hover and keeps every focused link outlined.
+        page.keyboard.press("Tab")
+        expect(page.get_by_role("link", name="Skip to content")).to_be_focused()
         for index in range(links.count()):
             page.keyboard.press("Tab")
             expect(links.nth(index)).to_be_focused()

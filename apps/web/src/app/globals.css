@@ -7,8 +7,38 @@
     --radius: 16px;
   }
 
+  html {
+    scroll-padding-block: 7rem calc(7rem + env(safe-area-inset-bottom, 0px));
+    scrollbar-gutter: stable;
+  }
+
+  /* WebKit still scrolls the page beneath a modal despite backdrop overscroll containment. */
+  html:has(dialog[data-proof-viewer]:modal) {
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground antialiased font-sans;
+    overflow-wrap: break-word;
+  }
+
+  :focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  @media (min-width: 768px) {
+    html {
+      scroll-padding-bottom: 2rem;
+    }
   }
 }
 
@@ -30,11 +60,22 @@
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-divider/50 bg-content2/70 px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-default-500;
+    @apply min-h-11 w-full rounded-xl border border-divider/50 bg-content2/70 px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-default-500;
+  }
+
+  /* Native WebKit selects ignore min-height and can leak their internal overflow. */
+  select.input-field {
+    height: 2.75rem;
+    overflow: hidden;
   }
 
   .input-field:focus {
     @apply border-primary/70 ring-2 ring-primary/30;
+  }
+
+  .input-field:not([aria-invalid]):user-invalid,
+  .input-field[aria-invalid="true"] {
+    @apply border-danger;
   }
 
   .input-field[type="date"] {
@@ -55,5 +96,35 @@
   .input-no-spinner[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
+  }
+
+  .app-main {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  .app-top-bar {
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    height: auto;
+  }
+
+  input:not([type="checkbox"], [type="radio"], [type="file"]), select.input-field, textarea[data-slot="input"] {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-fade-in, .animate-drift, .animate-pulse, .animate-spin {
+    animation: none;
   }
 }

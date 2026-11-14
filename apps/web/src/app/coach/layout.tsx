@@ -3,6 +3,10 @@ import { Suspense } from "react";
 import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import CoachLayoutClient from "./layout-client";
 
+export const metadata = {
+  title: { default: "Team overview", template: "%s | Rowbook" },
+};
+
 export default function CoachLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={<AppLoadingScreen />}>

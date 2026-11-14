@@ -118,10 +118,14 @@ export const BottomNav = ({ items, className }: NavigationProps) => {
     <nav
       aria-label="Primary navigation"
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-divider/40 bg-content1/80 px-2 pt-2 backdrop-blur-xl md:hidden",
+        "fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-divider/40 bg-content1/95 pt-2 backdrop-blur-xl md:hidden",
         className,
       )}
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      style={{
+        paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(0.5rem, env(safe-area-inset-left))",
+        paddingRight: "max(0.5rem, env(safe-area-inset-right))",
+      }}
     >
       {items.map((item) => {
         const active = activeHref === item.href;
@@ -132,12 +136,14 @@ export const BottomNav = ({ items, className }: NavigationProps) => {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 px-2 py-1 text-xs font-semibold uppercase tracking-[0.14em]",
-              active ? "text-primary" : "text-default-500",
+              "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-center text-[0.6875rem] font-semibold leading-tight transition-colors",
+              active ? "bg-content3 text-foreground" : "text-default-500",
             )}
           >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {item.label}
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className={cn("max-w-full break-words", active && "underline decoration-2 underline-offset-4")}>
+              {item.label}
+            </span>
           </Link>
         );
       })}

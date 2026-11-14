@@ -23,12 +23,13 @@ class LoadingServer:
         self.role, self.calls, self.held, self.hold = role, [], [], set()
         self.fail_recap = False
         self.fail = set()
+        self.history = []
 
     def intercept(self, route):
         parsed = urlparse(route.request.url)
         names = unquote(parsed.path.split("/api/trpc/")[1]).split(",")
         query = parse_qs(parsed.query)
-        raw = json.loads(query.get("input", ["{}"])[0])
+        raw = route.request.post_data_json if route.request.method == "POST" else json.loads(query.get("input", ["{}"])[0])
         payloads = []
         for index, name in enumerate(names):
             value = raw.get(str(index), {}).get("json")
@@ -41,8 +42,14 @@ class LoadingServer:
                 payload = Server.error(name) if self.fail_recap else response(None)
             elif name == "coach.listTeams":
                 payload = response([{"id": "loading-team", "name": "Loading test team"}])
-            elif name in ("coach.listAthletes", "athlete.getHistoryWithEntries", "coach.getWeeklyRequirementsRange"):
+            elif name in ("coach.listAthletes", "coach.getWeeklyRequirementsRange"):
                 payload = response([])
+            elif name == "athlete.getHistoryWithEntries":
+                dates = [f"{index}.{key}" for index, week in enumerate(self.history)
+                         for key in ("weekStartAt", "weekEndAt", *(f"entries.{n}.date" for n in range(len(week["entries"]))))]
+                payload = response(self.history, dates)
+            elif name == "athlete.deleteEntry":
+                payload = response(None)
             elif name == "athlete.getDashboard":
                 payload = response({"weekStartAt": WEEK_START}, ["weekStartAt"])
             elif name == "coach.getWeeklySettings":
@@ -96,7 +103,9 @@ def check_loader(page, label, reduced=False):
     expect(loader).to_have_text("#Temple")
     assert loader.evaluate("""root => {
         const r = root.getBoundingClientRect();
-        return r.left === 0 && r.top === 0 && Math.abs(r.width-innerWidth) <= 1
+        // A stable scrollbar gutter reserves space outside the root content box.
+        const contentWidth = document.documentElement.getBoundingClientRect().width;
+        return r.left === 0 && r.top === 0 && r.width >= contentWidth - 1 && r.width <= innerWidth
             && Math.abs(r.height-innerHeight) <= 1 && document.documentElement.scrollWidth <= innerWidth
             && root.contains(document.elementFromPoint(innerWidth / 2, innerHeight / 2));
     }"""), label
@@ -242,6 +251,39 @@ def account_retry(browser):
             context.close()
 
 
+def confirm_delete(browser):
+    server = LoadingServer()
+    server.history = [{"weekStartAt": WEEK_START, "weekEndAt": WEEK_END,
+                       "totalMinutes": 30, "status": "MET", "activityTypes": ["RUN"],
+                       "hasHrData": False, "entries": [{"id": "delete-fixture", "version": 1,
+                       "date": WEEK_START, "activityType": "RUN", "minutes": 30,
+                       "distance": 5, "validationStatus": "VERIFIED"}]}]
+    context, page, errors = open_page(browser, server, "/athlete/history", reduced=True)
+    try:
+        page.get_by_role("button", name="Delete entry", exact=True).click()
+        dialog = page.get_by_role("dialog", name="Remove workout entry", exact=True)
+        expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_focused()
+        server.fail = {"athlete.deleteEntry"}
+        server.hold = {"athlete.deleteEntry"}
+        dialog.get_by_role("button", name="Remove", exact=True).click()
+        wait_for_call(page, server, "athlete.deleteEntry")
+        expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_disabled()
+        page.keyboard.press("Escape")
+        page.mouse.click(1, 1)
+        expect(dialog).to_be_visible()
+        server.release("athlete.deleteEntry")
+        expect(dialog.get_by_role("alert")).to_be_visible()
+        server.fail.clear()
+        server.history = []
+        dialog.get_by_role("button", name="Remove", exact=True).click()
+        expect(dialog).to_have_count(0)
+        expect(page.get_by_text("No weekly history yet.", exact=True)).to_be_visible()
+        assert server.count("athlete.deleteEntry") == 2
+        assert not errors, errors
+    finally:
+        context.close()
+
+
 def nested_evidence(browser):
     server = LoadingServer()
     context, page, errors = open_page(browser, server, f"/athlete/week/{WEEK_START[:10]}")
@@ -284,6 +326,7 @@ if __name__ == "__main__":
             recap_error(browser)
             navigate_after_startup(browser)
             account_retry(browser)
+            confirm_delete(browser)
             nested_evidence(browser)
             print("Loading checks passed: responsive animation, startup, background refresh, navigation, week changes, nested queries, retries.")
         finally:

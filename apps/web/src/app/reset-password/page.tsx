@@ -3,6 +3,8 @@ import { Chip } from "@heroui/react";
 
 import { Card } from "@/components/ui/card";
 
+export const metadata = { title: "Sign-in help" };
+
 export default function ResetPasswordPage() {
   return (
     <main className="min-h-dvh bg-gradient-to-br from-background via-content1 to-content2">

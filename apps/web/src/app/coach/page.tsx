@@ -49,7 +49,7 @@ export default function CoachOverviewPage() {
             : "Set a weekly requirement to track compliance."
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge tone="pending">
               {data ? data.pendingProofCount : "—"} pending review
             </Badge>
@@ -60,7 +60,7 @@ export default function CoachOverviewPage() {
         }
       />
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,5rem),1fr))] gap-3">
         <StatTile label="Met goal" value={data ? `${data.summary.met}` : "—"} />
         <StatTile label="Not met" value={data ? `${data.summary.notMet}` : "—"} />
         <StatTile label="Exempt" value={data ? `${data.summary.exempt}` : "—"} />

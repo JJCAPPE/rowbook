@@ -1,12 +1,12 @@
 "use client";
 
+import { useCallback } from "react";
 import {
   Modal,
   ModalContent,
   ModalHeader,
   ModalBody,
   ModalFooter,
-  useDisclosure,
 } from "@heroui/react";
 import { Button } from "./button";
 
@@ -31,8 +31,18 @@ export function ConfirmModal({
   onOpenChange,
   isLoading,
 }: ConfirmModalProps) {
+  const focusCancel = useCallback((button: HTMLButtonElement | null) => button?.focus(), []);
+
   return (
-    <Modal isOpen={isOpen} onOpenChange={onOpenChange} backdrop="blur">
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      backdrop="blur"
+      scrollBehavior="inside"
+      isDismissable={!isLoading}
+      isKeyboardDismissDisabled={isLoading}
+      hideCloseButton={isLoading}
+    >
       <ModalContent>
         {(onClose: () => void) => (
           <>
@@ -41,15 +51,12 @@ export function ConfirmModal({
               <div className="text-sm text-default-500">{children}</div>
             </ModalBody>
             <ModalFooter>
-              <Button variant="ghost" onPress={onClose} disabled={isLoading}>
+              <Button ref={focusCancel} variant="ghost" onPress={onClose} disabled={isLoading}>
                 {cancelLabel}
               </Button>
               <Button
                 variant="primary"
-                onPress={async () => {
-                  await onConfirm();
-                  onClose();
-                }}
+                onPress={onConfirm}
                 isLoading={isLoading}
                 className="bg-danger text-white"
               >

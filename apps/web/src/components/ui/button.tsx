@@ -38,7 +38,7 @@ export const Button = ({
       size={size}
       color={variantMap[variant].color}
       variant={variantMap[variant].variant}
-      className={[needsContrast ? "text-white" : null, className].filter(Boolean).join(" ")}
+      className={["touch-target", needsContrast ? "text-white" : null, className].filter(Boolean).join(" ")}
       {...resolvedProps}
     />
   );
