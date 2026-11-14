@@ -6,6 +6,14 @@
 npm run test:e2e
 ```
 
+The sidebar suite checks desktop hover and keyboard expansion, reduced motion,
+stable content positioning, and mobile navigation for both roles. It intercepts
+application APIs and needs no accounts or database writes:
+
+```sh
+python3 tests/e2e/sidebar.py --base-url http://localhost:3100
+```
+
 The weekly awards browser suite exercises the real UI with intercepted API
 responses and a controlled clock. It needs no accounts or database writes:
 
