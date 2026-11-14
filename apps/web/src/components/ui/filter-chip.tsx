@@ -11,12 +11,13 @@ export const FilterChip = ({ className, isActive, type = "button", ...props }: F
   return (
     <HeroButton
       type={type}
+      aria-pressed={Boolean(isActive)}
       size="sm"
       radius="full"
       variant={isActive ? "solid" : "bordered"}
       color={color}
       className={[
-        "text-xs font-semibold uppercase tracking-[0.2em]",
+        "touch-target h-auto min-h-8 max-w-full whitespace-normal py-1 text-xs font-semibold uppercase tracking-[0.2em] [overflow-wrap:anywhere]",
         isActive ? "text-white" : "text-default-500",
         className,
       ]

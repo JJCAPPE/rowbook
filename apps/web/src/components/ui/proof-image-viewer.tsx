@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Pagination } from "@heroui/react";
 import {
@@ -32,15 +31,6 @@ type ProofImageViewerProps = {
   onRefresh?: () => Promise<unknown> | unknown;
 };
 
-const FOCUSABLE_ELEMENTS = [
-  "a[href]:not([tabindex='-1'])",
-  "button:not([disabled]):not([tabindex='-1'])",
-  "input:not([disabled]):not([tabindex='-1'])",
-  "select:not([disabled]):not([tabindex='-1'])",
-  "textarea:not([disabled]):not([tabindex='-1'])",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
-
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
@@ -56,12 +46,11 @@ export const ProofImageViewer = ({
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [mounted, setMounted] = useState(false);
   const [hasImageError, setHasImageError] = useState(false);
   const [imageRetryKey, setImageRetryKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const pressedOutsideRef = useRef(false);
   const titleId = useId();
   const descriptionId = useId();
   const providedImages = images?.filter((image) => Boolean(image.src)) ?? [];
@@ -84,10 +73,6 @@ export const ProofImageViewer = ({
   }, [resetImageView]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     if (activeIndex >= resolvedImages.length) {
       setActiveIndex(0);
     }
@@ -103,79 +88,10 @@ export const ProofImageViewer = ({
     }
 
     const dialog = dialogRef.current;
-    const previouslyFocused = openerRef.current;
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const focusFrame = window.requestAnimationFrame(() => {
-      const initialFocus = dialog?.querySelector<HTMLElement>(
-        "[data-proof-viewer-initial-focus]",
-      );
-      (initialFocus ?? dialog)?.focus();
-    });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeViewer();
-        return;
-      }
-
-      if (event.key === "ArrowLeft" && resolvedImages.length > 1) {
-        event.preventDefault();
-        setActiveIndex((prev) => (prev - 1 + resolvedImages.length) % resolvedImages.length);
-        resetImageView();
-        return;
-      }
-
-      if (event.key === "ArrowRight" && resolvedImages.length > 1) {
-        event.preventDefault();
-        setActiveIndex((prev) => (prev + 1) % resolvedImages.length);
-        resetImageView();
-        return;
-      }
-
-      if (event.key !== "Tab" || !dialog) {
-        return;
-      }
-
-      const focusableElements = Array.from(
-        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_ELEMENTS),
-      ).filter(
-        (element) =>
-          element.getAttribute("aria-disabled") !== "true"
-          && element.getAttribute("aria-hidden") !== "true",
-      );
-
-      if (focusableElements.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement;
-
-      if (event.shiftKey && (activeElement === firstElement || !dialog.contains(activeElement))) {
-        event.preventDefault();
-        lastElement?.focus();
-      } else if (!event.shiftKey && activeElement === lastElement) {
-        event.preventDefault();
-        firstElement?.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousBodyOverflow;
-      if (previouslyFocused?.isConnected) {
-        window.requestAnimationFrame(() => previouslyFocused.focus());
-      }
-    };
-  }, [closeViewer, isOpen, resetImageView, resolvedImages.length]);
+    dialog?.querySelector("[data-proof-viewer-initial-focus]")?.setAttribute("autofocus", "");
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, [isOpen]);
 
   if (!resolvedImages.length) {
     return null;
@@ -199,10 +115,8 @@ export const ProofImageViewer = ({
         size="sm"
         variant="ghost"
         className="gap-2"
-        onClick={() => {
-          openerRef.current = document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
           setIsOpen(true);
           setActiveIndex(0);
           resetImageView();
@@ -212,27 +126,42 @@ export const ProofImageViewer = ({
         {showCarouselControls ? `View proofs (${resolvedImages.length})` : "View proof"}
       </Button>
 
-      {isOpen && mounted ? createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-overlay/80 p-2 sm:p-6"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeViewer();
-            }
-          }}
-        >
-          <div
+      {isOpen ? (
+          <dialog
             ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
+            data-proof-viewer
+            closedby="any"
             aria-labelledby={titleId}
             aria-describedby={descriptionId}
-            tabIndex={-1}
-            className="relative flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-divider/40 bg-content1/95 p-3 shadow-lg outline-none backdrop-blur sm:h-[min(48rem,calc(100dvh-3rem))] sm:p-4"
+            onClose={closeViewer}
+            onKeyDown={(event) => {
+              if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || !showCarouselControls) return;
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                const direction = event.key === "ArrowLeft" ? -1 : 1;
+                goToIndex((activeIndex + direction + resolvedImages.length) % resolvedImages.length);
+              }
+            }}
+            onPointerDown={(event) => {
+              if ("closedBy" in HTMLDialogElement.prototype) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              pressedOutsideRef.current = event.clientX < rect.left || event.clientX > rect.right
+                || event.clientY < rect.top || event.clientY > rect.bottom;
+            }}
+            onPointerUp={(event) => {
+              if ("closedBy" in HTMLDialogElement.prototype || !pressedOutsideRef.current) return;
+              pressedOutsideRef.current = false;
+              const rect = event.currentTarget.getBoundingClientRect();
+              if (event.clientX < rect.left || event.clientX > rect.right
+                || event.clientY < rect.top || event.clientY > rect.bottom) {
+                event.currentTarget.close();
+              }
+            }}
+            className="fixed inset-0 m-auto h-[calc(100dvh-1rem)] max-h-none w-[calc(100%-1rem)] max-w-4xl flex-col overflow-hidden overscroll-contain rounded-2xl border border-divider/40 bg-content1/95 p-3 text-foreground shadow-lg outline-none backdrop-blur backdrop:overflow-hidden backdrop:overscroll-contain backdrop:bg-overlay/80 open:flex sm:h-[min(48rem,calc(100dvh-3rem))] sm:w-[calc(100%-3rem)] sm:p-4"
           >
             <div className="flex flex-col gap-3 border-b border-divider/40 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-sm font-semibold text-default-600">
+                <h2 id={titleId} className="text-sm font-semibold text-default-600" aria-live="polite" aria-atomic="true">
                 {showCarouselControls
                   ? `Proof image ${activeIndex + 1} of ${resolvedImages.length}`
                   : "Proof image"}
@@ -299,7 +228,7 @@ export const ProofImageViewer = ({
                 <Button
                   type="button"
                   size="sm"
-                  onClick={closeViewer}
+                  onClick={() => dialogRef.current?.close()}
                   data-proof-viewer-initial-focus
                 >
                   Close
@@ -400,9 +329,7 @@ export const ProofImageViewer = ({
                 />
               </div>
             ) : null}
-          </div>
-        </div>,
-        document.body
+          </dialog>
       ) : null}
     </div>
   );

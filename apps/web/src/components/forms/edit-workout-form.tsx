@@ -145,14 +145,20 @@ export function EditWorkoutForm({
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-      <div className="space-y-3">
-        <Label>Activity type</Label>
+      <p className="text-xs text-default-500">
+        Fields are required unless marked optional.
+      </p>
+      <fieldset className="space-y-3" disabled={isSubmitting}>
+        <legend className="text-sm font-medium text-foreground">
+          Activity type
+        </legend>
         <div className="flex flex-wrap gap-2">
           {ActivityTypeValues.map((type) => (
             <Pill
               key={type}
               type="button"
               isActive={activityType === type}
+              aria-pressed={activityType === type}
               onClick={() =>
                 setValue("activityType", type, { shouldValidate: true })
               }
@@ -162,14 +168,25 @@ export function EditWorkoutForm({
             </Pill>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="edit-date">Date</Label>
-          <Input id="edit-date" type="date" max={today} {...register("date")} />
+          <Input
+            id="edit-date"
+            type="date"
+            max={today}
+            required
+            disabled={isSubmitting}
+            aria-invalid={errors.date ? true : undefined}
+            aria-describedby={errors.date ? "edit-date-error" : undefined}
+            {...register("date")}
+          />
           {errors.date ? (
-            <p className="text-xs text-rose-500">{errors.date.message}</p>
+            <p id="edit-date-error" role="alert" className="text-xs text-rose-600">
+              {errors.date.message}
+            </p>
           ) : null}
         </div>
         <div className="space-y-2">
@@ -178,10 +195,17 @@ export function EditWorkoutForm({
             id="edit-minutes"
             type="number"
             min={1}
+            inputMode="numeric"
+            required
+            disabled={isSubmitting}
+            aria-invalid={errors.minutes ? true : undefined}
+            aria-describedby={errors.minutes ? "edit-minutes-error" : undefined}
             {...register("minutes")}
           />
           {errors.minutes ? (
-            <p className="text-xs text-rose-500">{errors.minutes.message}</p>
+            <p id="edit-minutes-error" role="alert" className="text-xs text-rose-600">
+              {errors.minutes.message}
+            </p>
           ) : null}
           {supportedMinutes !== null ? (
             <div className="space-y-2 text-xs text-default-500">
@@ -218,38 +242,68 @@ export function EditWorkoutForm({
             min={activityType === "OTHER" ? 0 : 0.001}
             step="0.001"
             max={500}
+            inputMode="decimal"
+            required={activityType !== "OTHER"}
+            disabled={isSubmitting}
+            aria-invalid={errors.distanceKm ? true : undefined}
+            aria-describedby={errors.distanceKm ? "edit-distance-error" : undefined}
             {...register("distanceKm")}
           />
           {errors.distanceKm ? (
-            <p className="text-xs text-rose-500">{errors.distanceKm.message}</p>
+            <p id="edit-distance-error" role="alert" className="text-xs text-rose-600">
+              {errors.distanceKm.message}
+            </p>
           ) : null}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="edit-hr">Average HR</Label>
+          <Label htmlFor="edit-hr">Average HR (optional)</Label>
           <Input
             id="edit-hr"
             type="number"
             min={30}
             max={220}
+            inputMode="numeric"
+            disabled={isSubmitting}
+            aria-invalid={errors.avgHr ? true : undefined}
+            aria-describedby={errors.avgHr ? "edit-hr-error" : undefined}
             {...register("avgHr")}
           />
           {errors.avgHr ? (
-            <p className="text-xs text-rose-500">{errors.avgHr.message}</p>
+            <p id="edit-hr-error" role="alert" className="text-xs text-rose-600">
+              {errors.avgHr.message}
+            </p>
           ) : null}
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="edit-notes">Notes</Label>
+        <Label htmlFor="edit-notes">Notes (optional)</Label>
         <Textarea
           id="edit-notes"
           placeholder="Optional notes"
+          maxLength={1000}
+          disabled={isSubmitting}
+          aria-invalid={errors.notes ? true : undefined}
+          aria-describedby={
+            errors.notes ? "edit-notes-hint edit-notes-error" : "edit-notes-hint"
+          }
           {...register("notes")}
         />
+        <p id="edit-notes-hint" className="text-xs text-default-500">
+          Up to 1,000 characters.
+        </p>
+        {errors.notes ? (
+          <p id="edit-notes-error" role="alert" className="text-xs text-rose-600">
+            {errors.notes.message}
+          </p>
+        ) : null}
       </div>
 
       {errors.root?.message ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+        >
           {errors.root.message}
         </div>
       ) : null}

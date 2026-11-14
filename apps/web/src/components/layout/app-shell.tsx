@@ -39,8 +39,14 @@ export const AppShell = ({
   onTeamChange,
   children,
 }: AppShellProps) => (
-  <div className="min-h-screen bg-background">
-    <div className="flex min-h-screen">
+  <div className="min-h-dvh bg-background">
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-content1 focus:px-4 focus:py-3 focus:font-semibold focus:text-foreground"
+    >
+      Skip to content
+    </a>
+    <div className="flex min-h-dvh">
       <SidebarNav items={navItems} />
       <div className="flex min-w-0 flex-1 flex-col md:pl-[4.5rem]">
         <TopBar
@@ -54,7 +60,9 @@ export const AppShell = ({
           onTeamChange={onTeamChange}
         />
         <main
-          className={cn("min-w-0 flex-1 px-4 pb-24 pt-8 md:px-10 md:pb-12")}
+          id="main-content"
+          tabIndex={-1}
+          className={cn("app-main min-w-0 flex-1 px-4 pt-8 md:px-10 md:pb-12")}
         >
           {children}
         </main>

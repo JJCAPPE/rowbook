@@ -111,6 +111,9 @@ class WorkoutSaveTests(unittest.TestCase):
         page, server = self.open_form(values={**VALUES, "date": "2026-10-21"})
         page.get_by_role("button", name="Save workout", exact=True).click()
         expect(page.locator("#date-error")).to_contain_text("last 7 days")
+        expect(page.locator("#date")).to_be_focused()
+        expect(page.locator("#date")).to_have_attribute("aria-invalid", "true")
+        expect(page.locator("#date")).to_have_attribute("aria-describedby", "date-error")
         self.assertEqual(server.calls, [])
 
     def test_heart_rate_matches_server_validation_without_changing_retry_values(self):
@@ -207,6 +210,8 @@ class WorkoutSaveTests(unittest.TestCase):
         page.get_by_role("link", name="History", exact=True).first.click()
         expect(page.get_by_role("heading", name="Weekly history", exact=True)).to_be_visible()
         page.get_by_role("link", name="Log", exact=True).first.click()
+        page.mouse.move(700, 300)
+        expect(page.locator("nav").first).to_have_css("width", "72px")
         page.get_by_role("button", name="Retry save", exact=True).click()
         expect(page.get_by_text("Workout saved.", exact=False)).to_be_visible()
         page.locator("#minutes").fill("60")

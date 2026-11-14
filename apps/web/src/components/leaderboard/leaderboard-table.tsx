@@ -75,7 +75,7 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
       {showFilters ? (
         <div className="flex flex-wrap items-center gap-2">
           <FilterChip isActive={showExempt} onClick={() => setShowExempt((prev) => !prev)}>
-            {showExempt ? "Hide exempt" : "Show exempt"}
+            Include exempt
           </FilterChip>
           <FilterChip
             isActive={showPendingReview}
@@ -92,22 +92,27 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
         </div>
       ) : null}
 
-      <div className="grid gap-3">
+      <p role="status" className="text-sm text-default-600">
+        {visibleRows.length === 0
+          ? rows.length === 0 ? "No athletes on this leaderboard yet." : "No athletes match these filters. Try turning a filter off."
+          : `${visibleRows.length} of ${rows.length} athletes shown`}
+      </p>
+      <ol role="list" aria-label="Athlete rankings" className="grid gap-3">
         {visibleRows.map((row, index) => {
           const trend = getTrend(row.totalMinutes, row.previousWeekMinutes);
           return (
-            <div
+            <li
               key={row.id}
               className={cn(
                 "flex flex-wrap items-center justify-between gap-4 rounded-2xl border px-4 py-3",
                 statusStyles[row.status],
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <span className="text-sm font-semibold text-default-500">#{index + 1}</span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{row.name}</p>
-                  <div className="mt-1 flex items-center gap-4 text-xs text-default-500">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold text-foreground">{row.name}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-default-500">
                     <div className="flex items-center gap-1">
                       <span className="font-medium text-foreground">{row.totalMinutes} min</span>
                       {trend.direction !== "neutral" && (
@@ -137,10 +142,10 @@ export const LeaderboardTable = ({ rows, showFilters = true }: LeaderboardTableP
                   </span>
                 ) : null}
               </div>
-            </div>
+            </li>
           )
         })}
-      </div>
+      </ol>
     </div>
   );
 };

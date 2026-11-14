@@ -363,7 +363,7 @@ export const LogWorkoutForm = () => {
     reset,
     getValues,
     setError,
-    formState: { errors, isSubmitting, submitCount },
+    formState: { errors, submitCount },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -970,9 +970,11 @@ export const LogWorkoutForm = () => {
       !pendingIntent &&
       values.date < formatInTimeZone(nowInZone().minus({ days: 7 }))
     ) {
-      setError("date", {
-        message: "Workout date must be within the last 7 days.",
-      });
+      setError(
+        "date",
+        { message: "Workout date must be within the last 7 days." },
+        { shouldFocus: true },
+      );
       return;
     }
     if (pendingIntent && !sameSubmissionIntent(pendingIntent, currentIntent)) {
@@ -1108,7 +1110,7 @@ export const LogWorkoutForm = () => {
   ).length;
   const allRetainedPhotosReady =
     proofItems.length > 0 && readyProofImageIds.length === proofItems.length;
-  const saveIsBusy = saveStatus === "saving" || isSubmitting;
+  const saveIsBusy = saveStatus === "saving";
   const proofActionsDisabled = saveIsBusy || hasPendingIntent;
   const submitDisabled =
     saveIsBusy || (proofItems.length > 0 && !allRetainedPhotosReady);
@@ -1122,6 +1124,9 @@ export const LogWorkoutForm = () => {
 
   return (
     <form className="space-y-7" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <p className="text-xs text-default-500">
+        Fields are required unless marked optional.
+      </p>
       <fieldset className="space-y-3" disabled={saveIsBusy}>
         <legend className="text-sm font-medium text-foreground">
           Activity type
@@ -1305,6 +1310,7 @@ export const LogWorkoutForm = () => {
             type="date"
             min={formatInTimeZone(nowInZone().minus({ days: 7 }))}
             max={today}
+            required
             disabled={saveIsBusy}
             aria-invalid={Boolean(errors.date)}
             aria-describedby={errors.date ? "date-error" : undefined}
@@ -1325,6 +1331,7 @@ export const LogWorkoutForm = () => {
             type="number"
             min={1}
             inputMode="numeric"
+            required
             disabled={saveIsBusy}
             aria-invalid={Boolean(errors.minutes)}
             aria-describedby={errors.minutes ? "minutes-error" : undefined}
@@ -1351,6 +1358,7 @@ export const LogWorkoutForm = () => {
             step="0.001"
             max={500}
             inputMode="decimal"
+            required={activityType !== "OTHER"}
             disabled={saveIsBusy}
             aria-invalid={Boolean(errors.distanceKm)}
             aria-describedby={errors.distanceKm ? "distance-error" : undefined}
@@ -1403,7 +1411,7 @@ export const LogWorkoutForm = () => {
           maxLength={280}
           disabled={saveIsBusy}
           aria-invalid={Boolean(errors.notes)}
-          aria-describedby={errors.notes ? "notes-error" : "notes-hint"}
+          aria-describedby={errors.notes ? "notes-hint notes-error" : "notes-hint"}
           {...register("notes")}
         />
         <p id="notes-hint" className="text-xs text-default-500">

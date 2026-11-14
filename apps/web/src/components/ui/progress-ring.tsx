@@ -13,7 +13,14 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
 
   return (
     <div className="relative flex items-center justify-center">
-      <svg width={size} height={size} className="-rotate-90">
+      <progress
+        className="sr-only"
+        value={progress * 100}
+        max={100}
+        aria-label="Weekly minutes goal"
+        aria-valuetext={`${value} of ${max} minutes`}
+      />
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -34,7 +41,7 @@ export const ProgressRing = ({ value, max, size = 120 }: ProgressRingProps) => {
           strokeDashoffset={offset}
         />
       </svg>
-      <div className="absolute text-center">
+      <div className="absolute text-center" aria-hidden="true">
         <p className="text-2xl font-semibold text-foreground">{Math.round(progress * 100)}%</p>
         <p className="text-xs text-default-500">of goal</p>
       </div>

@@ -43,6 +43,18 @@ Apply migration `20261025120000_add_weekly_reveal_seen` before deploying the new
 UI. It creates the per-user, per-team, per-week completion table. A failed load
 offers retry instead of silently skipping the weekly awards.
 
+The modern web UX suite uses intercepted application APIs and no live writes:
+
+```sh
+python3 tests/e2e/modern_web.py
+python3 tests/e2e/proof_dialog.py
+```
+
+These checks cover keyboard navigation, mobile reflow at 200% text, chart and
+coach table access, reduced motion, and native proof-dialog focus, dismissal,
+and background scroll containment. Use `E2E_BASE_URL` to select a local app
+(default `http://localhost:3100`).
+
 `authenticated.py` is deliberately opt-in. It creates disposable Supabase Auth
 users and uploads the Garmin and Strava fixtures through the real application,
 while all application data is constrained to a local PostgreSQL database named

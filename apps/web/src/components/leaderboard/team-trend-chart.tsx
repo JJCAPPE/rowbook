@@ -26,11 +26,13 @@ export function TeamTrendChart({ data }: TeamTrendChartProps) {
     }));
 
     return (
-        <div className="h-[300px] w-full">
+        <div className="w-full">
+            <div className="h-[300px]" role="group" aria-label="Weekly team minutes and average heart rate">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                     data={chartData}
                     margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    accessibilityLayer
                 >
                     <defs>
                         <linearGradient id="colorMinutes" x1="0" y1="0" x2="0" y2="1">
@@ -114,6 +116,7 @@ export function TeamTrendChart({ data }: TeamTrendChartProps) {
                         fill="url(#colorMinutes)"
                         strokeWidth={3}
                         activeDot={{ r: 6, strokeWidth: 0 }}
+                        isAnimationActive={false}
                     />
                     <Area
                         type="monotone"
@@ -123,11 +126,29 @@ export function TeamTrendChart({ data }: TeamTrendChartProps) {
                         fillOpacity={1}
                         fill="url(#colorAvgHr)"
                         strokeWidth={3}
-                        connectNulls
+                        dot={{ r: 3 }}
                         activeDot={{ r: 6, strokeWidth: 0 }}
+                        isAnimationActive={false}
                     />
                 </AreaChart>
             </ResponsiveContainer>
+            </div>
+            <details className="mt-2 text-xs text-default-600">
+                <summary className="min-h-11 w-fit cursor-pointer rounded py-3">View weekly data</summary>
+                <div tabIndex={0} role="region" aria-label="Weekly training data" className="overflow-x-auto rounded">
+                    <table className="w-full min-w-[24rem] whitespace-nowrap text-right tabular-nums">
+                        <caption className="sr-only">Weekly team minutes and average heart rate</caption>
+                        <thead><tr><th scope="col" className="py-2 pr-4 text-left">Week of</th><th scope="col" className="px-3">Team minutes</th><th scope="col" className="pl-3">Average HR</th></tr></thead>
+                        <tbody>{chartData.map((point) => (
+                            <tr key={new Date(point.weekStartAt).toISOString()} className="border-t border-divider/40">
+                                <th scope="row" className="sticky left-0 bg-content1 py-2 pr-4 text-left font-medium">{point.formattedDate}</th>
+                                <td className="px-3">{point.minutes.toLocaleString()}</td>
+                                <td className="pl-3">{point.avgHr == null ? "No HR data" : `${point.avgHr} bpm`}</td>
+                            </tr>
+                        ))}</tbody>
+                    </table>
+                </div>
+            </details>
         </div>
     );
 }

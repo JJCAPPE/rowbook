@@ -16,7 +16,7 @@ export const Providers = ({ children }: ProvidersProps) => {
   const [trpcClient] = useState(() => createTrpcClient());
 
   return (
-    <HeroUIProvider>
+    <HeroUIProvider reducedMotion="user">
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </trpc.Provider>
