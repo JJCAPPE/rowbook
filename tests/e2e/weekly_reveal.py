@@ -333,7 +333,7 @@ def verify(browser, args):
     context, page, errors = open_page(browser, server, args)
     try:
         pump(page, lambda: page.get_by_role("alertdialog").count() == 1)
-        assert page.get_by_role("heading", name="Weekly history").evaluate("el => Boolean(el.closest('[inert]'))"), "Failed recap lookup must keep the app inert behind the blocking message"
+        assert page.get_by_role("heading", name="Weekly history", include_hidden=True).evaluate("el => Boolean(el.closest('[inert]'))"), "Failed recap lookup must keep the app inert behind the blocking message"
         page.get_by_role("button", name="Try again", exact=True).click()
         pump(page, lambda: page.locator("[data-scene]").count() == 1)
         walk_scenes(page, server, prefix="retry")

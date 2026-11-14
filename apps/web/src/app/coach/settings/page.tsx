@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { WeeklyTargetsTable } from "@/components/coach/weekly-targets-table";
 import { Input } from "@/components/ui/input";
 import { FilterChip } from "@/components/ui/filter-chip";
@@ -300,6 +301,8 @@ export default function CoachSettingsPage() {
     });
   })();
 
+  if (isLoading) return <AppLoadingScreen />;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -386,9 +389,7 @@ export default function CoachSettingsPage() {
           </div>
         ) : null}
 
-        {isLoading ? (
-          <p className="text-sm text-default-500">Loading weekly settings...</p>
-        ) : error ? (
+        {error ? (
           <p className="text-sm text-rose-500">Unable to load settings.</p>
         ) : data ? (
           <div className="overflow-x-auto">

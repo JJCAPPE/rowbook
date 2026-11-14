@@ -7,6 +7,7 @@ import { TeamTrendChart } from "@/components/leaderboard/team-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat-tile";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { trpc } from "@/lib/trpc";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
@@ -36,14 +37,14 @@ export default function CoachOverviewPage() {
   const { data, isLoading, error } =
     trpc.coach.getTeamOverview.useQuery(overviewInput);
 
+  if (isLoading) return <AppLoadingScreen />;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Team overview"
         subtitle={
-          isLoading
-            ? "Loading weekly requirement…"
-            : data?.requiredMinutes
+          data?.requiredMinutes
             ? `Weekly requirement: ${data.requiredMinutes} minutes`
             : "Set a weekly requirement to track compliance."
         }
@@ -80,9 +81,7 @@ export default function CoachOverviewPage() {
       )}
 
       <Card>
-        {isLoading ? (
-          <p className="text-sm text-default-500">Loading leaderboard...</p>
-        ) : error ? (
+        {error ? (
           <p className="text-sm text-rose-500">Unable to load team overview.</p>
         ) : (
           <LeaderboardTable rows={data?.leaderboard ?? []} />

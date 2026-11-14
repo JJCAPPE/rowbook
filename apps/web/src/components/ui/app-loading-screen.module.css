@@ -1,0 +1,27 @@
+.wordmark {
+  display: flex;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(3rem, 13vw, 6rem);
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 1.2;
+  perspective: 600px;
+}
+
+.letter {
+  display: inline-block;
+  animation: flip 2.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.compact {
+  font-size: 1.5rem;
+}
+
+@keyframes flip {
+  0%, 8% { transform: rotateX(0); }
+  32%, 100% { transform: rotateX(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .letter { animation: none; }
+}

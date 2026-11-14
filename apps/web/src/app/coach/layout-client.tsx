@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { NavItem } from "@/components/layout/navigation";
 import { Button } from "@/components/ui/button";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { WeeklyRevealGate } from "@/components/weekly-reveal/weekly-reveal-gate";
 import { trpc } from "@/lib/trpc";
 import {
@@ -162,8 +163,8 @@ export default function CoachLayoutClient({
     router.replace(`${pathname}?${params.toString()}`);
   }, [activeTeamId, pathname, requestedTeamId, router, searchParams]);
 
-  if (isSessionLoading) {
-    return <div className="min-h-screen bg-background" />;
+  if (isSessionLoading || (sessionError && isSessionFetching)) {
+    return <AppLoadingScreen />;
   }
 
   if (sessionError) {
@@ -176,30 +177,26 @@ export default function CoachLayoutClient({
           disabled={isSessionFetching}
           onClick={() => void refetchSession()}
         >
-          {isSessionFetching ? "Checking..." : "Try again"}
+          Try again
         </Button>
       </div>
     );
   }
 
   if (!session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-sm text-default-500">
-        Redirecting to login...
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   if (!isCoach) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-sm text-default-500">
-        Redirecting to the athlete dashboard...
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
-  if (isTeamsLoading) {
-    return <div className="min-h-screen bg-background" />;
+  if (
+    isTeamsLoading ||
+    (isTeamsFetching && (teamsError || !teams?.length)) ||
+    (activeTeamId && requestedTeamId !== activeTeamId)
+  ) {
+    return <AppLoadingScreen />;
   }
 
   if (teamsError || !activeTeamId || !teams?.length) {
@@ -249,7 +246,7 @@ export default function CoachLayoutClient({
                   void refetchTeams();
                 }}
               >
-                {isTeamsFetching ? "Checking…" : loadFailed ? "Try again" : "Check again"}
+                {loadFailed ? "Try again" : "Check again"}
               </Button>
               <Button
                 variant="ghost"

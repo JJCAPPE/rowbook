@@ -1,12 +1,12 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
 import { use, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ActivityMixChart } from "@/components/charts/activity-mix-chart";
 import { WeeklyTrendChart } from "@/components/charts/weekly-trend-chart";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
+import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
@@ -47,11 +47,7 @@ function CoachEntryEvidence({
     );
   }
   if (evidence.isLoading) {
-    return (
-      <p role="status" className="flex items-center gap-2 text-sm text-default-500">
-        <Spinner size="sm" /> Loading secure evidence…
-      </p>
-    );
+    return <AppLoadingScreen compact />;
   }
   if (evidence.error) {
     return (
@@ -87,7 +83,7 @@ export default function CoachAthleteDetailPage(
     athleteId: params.id,
     ...(teamId ? { teamId } : {}),
   });
-  const { data: roster } = trpc.coach.listAthletes.useQuery(
+  const { data: roster, isLoading: isRosterLoading } = trpc.coach.listAthletes.useQuery(
     teamId ? { teamId } : undefined,
   );
   const entries: any[] = data?.entries ?? [];
@@ -115,6 +111,8 @@ export default function CoachAthleteDetailPage(
   athleteOptions.sort((a, b) => a.name.localeCompare(b.name));
   const selectedAthleteId = data?.athlete?.id ?? params.id;
 
+  if (isLoading) return <AppLoadingScreen />;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -123,32 +121,36 @@ export default function CoachAthleteDetailPage(
         actions={
           <div className="min-w-[220px] space-y-2">
             <Label htmlFor="coachAthleteSelect">Athlete</Label>
-            <Select
-              id="coachAthleteSelect"
-              key={selectedAthleteId}
-              defaultValue={selectedAthleteId}
-              onChange={(event) => {
-                const nextAthleteId = event.target.value;
-                if (nextAthleteId && nextAthleteId !== selectedAthleteId) {
-                  const query = searchParams.toString();
-                  router.push(
-                    `/coach/athlete/${nextAthleteId}${query ? `?${query}` : ""}`,
-                  );
-                }
-              }}
-              className="w-full"
-              disabled={!athleteOptions.length}
-            >
-              {athleteOptions.length ? (
-                athleteOptions.map((athlete) => (
-                  <option key={athlete.id} value={athlete.id}>
-                    {athlete.name}
-                  </option>
-                ))
-              ) : (
-                <option value={selectedAthleteId}>Loading athletes...</option>
-              )}
-            </Select>
+            {isRosterLoading && !athleteOptions.length ? (
+              <AppLoadingScreen compact />
+            ) : (
+              <Select
+                id="coachAthleteSelect"
+                key={selectedAthleteId}
+                defaultValue={selectedAthleteId}
+                onChange={(event) => {
+                  const nextAthleteId = event.target.value;
+                  if (nextAthleteId && nextAthleteId !== selectedAthleteId) {
+                    const query = searchParams.toString();
+                    router.push(
+                      `/coach/athlete/${nextAthleteId}${query ? `?${query}` : ""}`,
+                    );
+                  }
+                }}
+                className="w-full"
+                disabled={!athleteOptions.length}
+              >
+                {athleteOptions.length ? (
+                  athleteOptions.map((athlete) => (
+                    <option key={athlete.id} value={athlete.id}>
+                      {athlete.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value={selectedAthleteId}>No athletes available</option>
+                )}
+              </Select>
+            )}
           </div>
         }
       />
@@ -172,11 +174,7 @@ export default function CoachAthleteDetailPage(
           </span>
         </div>
         <div className="grid gap-4">
-          {isLoading ? (
-            <p className="text-sm text-default-500">
-              Loading athlete entries...
-            </p>
-          ) : error ? (
+          {error ? (
             <p className="text-sm text-rose-500">
               Unable to load athlete detail.
             </p>
