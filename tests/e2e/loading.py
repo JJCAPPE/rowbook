@@ -257,7 +257,7 @@ def confirm_delete(browser):
                        "totalMinutes": 30, "status": "MET", "activityTypes": ["RUN"],
                        "hasHrData": False, "entries": [{"id": "delete-fixture", "version": 1,
                        "date": WEEK_START, "activityType": "RUN", "minutes": 30,
-                       "distance": 5, "validationStatus": "VERIFIED"}]}]
+                       "distance": 5, "validationStatus": "VERIFIED", "proofs": [], "extractedFields": None}]}]
     context, page, errors = open_page(browser, server, "/athlete/history", reduced=True)
     try:
         page.get_by_role("button", name="Delete entry", exact=True).click()
@@ -288,28 +288,29 @@ def nested_evidence(browser):
     server = LoadingServer()
     context, page, errors = open_page(browser, server, f"/athlete/week/{WEEK_START[:10]}")
     try:
-        expect(page.get_by_role("button", name="Load evidence", exact=True)).to_be_visible()
+        summary = page.locator("summary").filter(has_text="View evidence")
+        expect(summary).to_be_visible()
+        evidence = summary.locator("..")
         server.hold = {"athlete.getEntryEvidence"}
-        page.get_by_role("button", name="Load evidence", exact=True).click()
+        summary.click()
         wait_for_call(page, server, "athlete.getEntryEvidence")
-        check_loader(page, "nested-evidence")
+        expect(evidence.get_by_role("status", name="Loading Rowbook")).to_have_text("#Temple")
+        expect(evidence.get_by_role("status", name="Loading Rowbook")).to_be_visible()
+        expect(page.get_by_role("heading", name="Week detail")).to_be_visible()
+        expect(page.locator("[inert]")).to_have_count(0)
         server.release("athlete.getEntryEvidence")
         expect(loading(page)).to_have_count(0)
-        page.get_by_role("button", name="View proof", exact=True).click()
-        dialog = page.get_by_role("dialog", name="Proof image", exact=True)
-        expect(dialog.get_by_text("Proof image unavailable", exact=True)).to_be_visible()
+        expect(evidence.get_by_text("Proof image unavailable", exact=True)).to_be_visible()
         server.hold = {"athlete.getEntryEvidence"}
-        dialog.get_by_role("button", name="Try again", exact=True).click()
+        evidence.get_by_role("button", name="Try again", exact=True).click()
         wait_for_call(page, server, "athlete.getEntryEvidence", 2)
-        expect(dialog.get_by_role("status", name="Loading Rowbook")).to_have_text("#Temple")
-        expect(dialog.get_by_role("status", name="Loading Rowbook")).to_be_visible()
+        expect(evidence.get_by_role("status", name="Loading Rowbook")).to_have_text("#Temple")
+        expect(evidence.get_by_role("status", name="Loading Rowbook")).to_be_visible()
         expect(page.locator("[inert]")).to_have_count(0)
         page.screenshot(path=str(OUTPUT / "proof-image-retry.png"))
         server.release("athlete.getEntryEvidence")
         expect(loading(page)).to_have_count(0)
-        expect(dialog.get_by_text("Proof image unavailable", exact=True)).to_be_visible()
-        dialog.get_by_role("button", name="Close", exact=True).click()
-        expect(dialog).to_have_count(0)
+        expect(evidence.get_by_text("Proof image unavailable", exact=True)).to_be_visible()
         assert not errors, errors
     finally:
         context.close()

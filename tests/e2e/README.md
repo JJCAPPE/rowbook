@@ -6,6 +6,16 @@
 npm run test:e2e
 ```
 
+The evidence suite checks automatic review loading, the compact thumbnail rail,
+image zoom and retries, and evidence opened from athlete and coach workout views.
+It uses intercepted APIs and existing photo fixtures, with no database writes:
+
+```sh
+E2E_BASE_URL=http://localhost:3100 python3 tests/e2e/review_evidence.py
+```
+
+Desktop and mobile screenshots are saved to `tmp/review-evidence`.
+
 The sidebar suite checks desktop hover and keyboard expansion, reduced motion,
 stable content positioning, and mobile navigation for both roles. It intercepts
 application APIs and needs no accounts or database writes:

@@ -34,7 +34,7 @@ const WeeklyRevealSession = ({
   const [checked, setChecked] = useState(false);
   const loadingQueries = useIsFetching({
     type: "active",
-    predicate: (query) => query.state.status === "loading",
+    predicate: (query) => query.state.status === "loading" && query.meta?.blocksPageLoading !== false,
   });
   const completedWeek = useRef<string | null>(null);
   const mounted = useRef(true);

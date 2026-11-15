@@ -6,6 +6,7 @@ import {
   parseDateStringAsNewYorkNoon,
 } from "@rowbook/shared";
 import { formatFullDate, formatMinutes, formatDistance } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   compareProofFields,
   getExtractedMinutes,
@@ -16,6 +17,7 @@ import {
 interface ProofExtractionFeedbackProps {
   fields: unknown;
   enteredFields?: EnteredWorkoutFields;
+  compact?: boolean;
 }
 
 const statusStyles: Record<ProofComparisonStatus, string> = {
@@ -47,6 +49,7 @@ const formatDurationSeconds = (seconds: number) => {
 export function ProofExtractionFeedback({
   fields,
   enteredFields,
+  compact = false,
 }: ProofExtractionFeedbackProps) {
   const parsed = ProofExtractedFieldsSchema.safeParse(fields);
   if (!parsed.success) return null;
@@ -75,6 +78,9 @@ export function ProofExtractionFeedback({
   };
 
   if (enteredFields) {
+    const columns = compact
+      ? "grid-cols-[minmax(3.5rem,0.8fr)_minmax(3rem,0.8fr)_minmax(0,1.6fr)]"
+      : "grid-cols-[minmax(5.5rem,0.85fr)_minmax(0,1fr)_minmax(0,1fr)]";
     const statuses = compareProofFields(enteredFields, data);
     const items = [
       {
@@ -89,7 +95,7 @@ export function ProofExtractionFeedback({
       },
       {
         key: "minutes" as const,
-        label: "Minutes / duration",
+        label: compact ? "Duration" : "Minutes / duration",
         entered: formatMinutes(enteredFields.minutes),
       },
       {
@@ -112,16 +118,18 @@ export function ProofExtractionFeedback({
         className="mt-2 overflow-hidden rounded-xl border border-divider/40 bg-content1/70"
         aria-label="Entered and photo values"
       >
-        <div className="border-b border-divider/40 px-3 py-2.5">
+        <div className={cn("border-b border-divider/40 px-3", compact ? "py-2" : "py-2.5")}>
           <p className="text-[10px] font-bold uppercase tracking-widest text-default-500">
             Entered vs photo
           </p>
-          <p className="mt-1 text-xs text-default-500">
-            Minutes can be lower than the photo. Distance, heart rate, and activity
-            differences do not require review on their own.
-          </p>
+          {!compact ? (
+            <p className="mt-1 text-xs text-default-500">
+              Minutes can be lower than the photo. Distance, heart rate, and activity
+              differences do not require review on their own.
+            </p>
+          ) : null}
         </div>
-        <div className="grid grid-cols-[minmax(5.5rem,0.85fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b border-divider/30 px-3 py-2 text-[9px] font-semibold uppercase tracking-wide text-default-400">
+        <div className={cn("grid border-b border-divider/30 py-2 text-[9px] font-semibold uppercase tracking-wide text-default-400", columns, compact ? "gap-1 px-2" : "gap-2 px-3")}>
           <span>Field</span>
           <span>Entered</span>
           <span>Photo</span>
@@ -133,21 +141,25 @@ export function ProofExtractionFeedback({
             return (
               <div
                 key={item.key}
-                className="grid grid-cols-[minmax(5.5rem,0.85fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 px-3 py-2.5 text-xs"
+                className={cn("grid items-center text-xs", columns, compact ? "gap-1 px-2 py-1.5" : "gap-2 px-3 py-2.5")}
               >
-                <span className="font-medium text-default-500">
+                <span className="min-w-0 break-words font-medium text-default-500">
                   {item.label}
                 </span>
-                <span className="min-w-0 font-semibold text-foreground">
+                <span className="min-w-0 break-words font-semibold text-foreground">
                   {item.entered}
                 </span>
                 <span
-                  className={`min-w-0 rounded-lg border px-2 py-1.5 font-semibold ${isRequired ? statusStyles[status] : "border-divider/40 bg-content2/50 text-default-600"}`}
+                  className={cn(
+                    "min-w-0 rounded-lg border font-semibold",
+                    compact ? "flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 py-1" : "px-2 py-1.5",
+                    isRequired ? statusStyles[status] : "border-divider/40 bg-content2/50 text-default-600",
+                  )}
                 >
-                  <span className="block break-words">
+                  <span className="block min-w-0 break-words">
                     {extractedValues[item.key]}
                   </span>
-                  <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wide opacity-80">
+                  <span className={cn("min-w-0 text-[9px] font-bold uppercase tracking-wide opacity-80", compact ? "break-words" : "mt-0.5 block")}>
                     {item.key === "minutes" && status === "differs"
                       ? "Above supported time"
                       : statusLabels[status]}
@@ -157,7 +169,7 @@ export function ProofExtractionFeedback({
             );
           })}
         </div>
-        {extractedMinutes !== null ? (
+        {!compact && extractedMinutes !== null ? (
           <p className="border-t border-divider/40 px-3 py-2.5 text-xs text-default-500">
             The photo supports up to {extractedMinutes} whole active minutes.
             New submissions count toward totals after verification.

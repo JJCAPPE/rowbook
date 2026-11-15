@@ -1,15 +1,14 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ActivityMixChart } from "@/components/charts/activity-mix-chart";
 import { WeeklyTrendChart } from "@/components/charts/weekly-trend-chart";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { AppLoadingScreen } from "@/components/ui/app-loading-screen";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ProofImageViewer } from "@/components/ui/proof-image-viewer";
+import { EntryEvidence } from "@/components/ui/entry-evidence";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -23,54 +22,6 @@ import { trpc } from "@/lib/trpc";
 type CoachAthleteDetailPageProps = {
   params: Promise<{ id: string }>;
 };
-
-function CoachEntryEvidence({
-  entryId,
-  version,
-  count,
-}: {
-  entryId: string;
-  version: number;
-  count: number;
-}) {
-  const [requested, setRequested] = useState(false);
-  const evidence = trpc.coach.getReviewEvidence.useQuery(
-    { entryId, expectedVersion: version },
-    { enabled: requested, retry: false, staleTime: 10 * 60 * 1000 },
-  );
-
-  if (!requested) {
-    return (
-      <Button size="sm" variant="outline" onClick={() => setRequested(true)}>
-        Load {count === 1 ? "evidence" : `${count} evidence images`}
-      </Button>
-    );
-  }
-  if (evidence.isLoading) {
-    return <AppLoadingScreen compact />;
-  }
-  if (evidence.error) {
-    return (
-      <div className="flex flex-wrap items-center gap-2" role="alert">
-        <span className="text-sm text-rose-600">Evidence could not be loaded.</span>
-        <Button size="sm" variant="outline" onClick={() => void evidence.refetch()}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  if (!evidence.data?.images.length) {
-    return <p className="text-sm text-default-500">Evidence has expired.</p>;
-  }
-
-  return (
-    <ProofImageViewer
-      images={evidence.data.images}
-      alt="Workout evidence"
-      onRefresh={() => evidence.refetch()}
-    />
-  );
-}
 
 export default function CoachAthleteDetailPage(
   props: CoachAthleteDetailPageProps,
@@ -200,19 +151,7 @@ export default function CoachAthleteDetailPage(
                   <span>Avg HR: {entry.avgHr ?? "—"}</span>
                   <span>Notes: {entry.notes ?? "—"}</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {entry.proofs?.length ? (
-                    <CoachEntryEvidence
-                      entryId={entry.id}
-                      version={entry.version}
-                      count={entry.proofs.length}
-                    />
-                  ) : (
-                    <p className="text-xs text-default-500">
-                      Evidence has expired.
-                    </p>
-                  )}
-                </div>
+                <EntryEvidence entry={entry} coach />
               </div>
             ))
           ) : (
